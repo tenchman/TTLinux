@@ -1,0 +1,27 @@
+#!/bin/sh
+
+bold="\\033[1m"
+normal="\\033[0;39m"
+
+LINUX=linux-2.6.26.2
+
+rm -rf  ${LINUX}
+echo -e "${bold}unpacking ${LINUX}${normal}"
+tar -xf  ${LINUX}.tar.bz2
+
+#echo -e "${bold}unpacking ixp400lib-2.4.tar.gz${normal}"
+#tar -C ${LINUX} -xf ixp400lib-2.4.tar.gz
+
+
+echo -e "${bold}copying files-2.6.26/ to ${LINUX}${normal}"
+cp -a files-2.6.26/* linux-2.6.26.2
+
+pushd ${LINUX}
+for i in ../patches/*.*[^~]
+do
+  echo -e "${bold}${i}${normal}"
+  suffix=`basename $i .patch`
+  patch -b -z .$suffix -p1 < $i || exit
+done
+popd
+cp .config ${LINUX}

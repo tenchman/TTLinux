@@ -1,0 +1,43 @@
+--- maildrop-2.0.1/Makefile.am.install	2006-09-19 22:44:47.000000000 +0200
++++ maildrop-2.0.1/Makefile.am	2006-09-19 22:46:45.000000000 +0200
+@@ -119,15 +119,14 @@
+ 
+ install-maildrop:
+ 	$(mkinstalldirs) $(DESTDIR)$(bindir)
+-	for f in maildrop mailbot reformail ; do \
++	for f in mailbot reformail ; do \
+ 		$(INSTALL_PROGRAM) maildrop/$$f $(DESTDIR)$(bindir)/$$f ; \
+ 	done
+-	$(INSTALL_PROGRAM) liblock/lockmail $(DESTDIR)$(bindir)/lockmail
++	$(INSTALL_PROGRAM) -o root -g mail -m 755 maildrop/maildrop $(DESTDIR)$(bindir)/maildrop
++	$(INSTALL_PROGRAM) -o root -g mail -m 755 liblock/lockmail $(DESTDIR)$(bindir)/lockmail
+ 	$(INSTALL_PROGRAM) maildir/maildirmake $(DESTDIR)$(bindir)/maildirmake
+ 	$(INSTALL_PROGRAM) rfc2045/reformime $(DESTDIR)$(bindir)/reformime
+ 	$(INSTALL_PROGRAM) rfc2045/makemime $(DESTDIR)$(bindir)/makemime
+-	. maildrop/uidgid ; test -z "$$gid" && exit 0; test -w /etc || exit 0; cd $(DESTDIR)$(bindir) && chgrp $$gid maildrop lockmail
+-	. maildrop/uidgid ; test -z "$$uid" && exit 0; test -w /etc || exit 0; cd $(DESTDIR)$(bindir) && chown $$uid maildrop lockmail && chmod 755 maildrop lockmail
+ 
+ uninstall-maildrop:
+ 	for f in maildrop mailbot maildirmake reformail lockmail makemime reformime ; do \
+--- maildrop-2.0.1/Makefile.in.install	2006-09-19 22:44:47.000000000 +0200
++++ maildrop-2.0.1/Makefile.in	2006-09-19 22:48:49.000000000 +0200
+@@ -1080,15 +1080,15 @@
+ 
+ install-maildrop:
+ 	$(mkinstalldirs) $(DESTDIR)$(bindir)
+-	for f in maildrop mailbot reformail ; do \
++
++	for f in mailbot reformail ; do \
+ 		$(INSTALL_PROGRAM) maildrop/$$f $(DESTDIR)$(bindir)/$$f ; \
+ 	done
+-	$(INSTALL_PROGRAM) liblock/lockmail $(DESTDIR)$(bindir)/lockmail
++	$(INSTALL_PROGRAM) -o root -g mail -m 755 maildrop/maildrop $(DESTDIR)$(bindir)/maildrop
++	$(INSTALL_PROGRAM) -o root -g mail -m 755 liblock/lockmail $(DESTDIR)$(bindir)/lockmail
+ 	$(INSTALL_PROGRAM) maildir/maildirmake $(DESTDIR)$(bindir)/maildirmake
+ 	$(INSTALL_PROGRAM) rfc2045/reformime $(DESTDIR)$(bindir)/reformime
+ 	$(INSTALL_PROGRAM) rfc2045/makemime $(DESTDIR)$(bindir)/makemime
+-	. maildrop/uidgid ; test -z "$$gid" && exit 0; test -w /etc || exit 0; cd $(DESTDIR)$(bindir) && chgrp $$gid maildrop lockmail
+-	. maildrop/uidgid ; test -z "$$uid" && exit 0; test -w /etc || exit 0; cd $(DESTDIR)$(bindir) && chown $$uid maildrop lockmail && chmod 755 maildrop lockmail
+ 
+ uninstall-maildrop:
+ 	for f in maildrop mailbot maildirmake reformail lockmail makemime reformime ; do \

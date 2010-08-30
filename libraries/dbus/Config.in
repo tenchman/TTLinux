@@ -1,0 +1,9 @@
+config CONFIG_DBUS
+  bool "D-BUS message bus"
+  default n
+  help
+    D-BUS is a system for sending messages between applications. It is
+    used both for the systemwide message bus service, and as a
+    per-user-login-session messaging facility.
+
+    http://www.freedesktop.org/software/dbus/

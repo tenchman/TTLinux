@@ -1,0 +1,109 @@
+--- capi4k-utils/Makefile.ttlinux	2002-11-20 14:45:14.000000000 +0100
++++ capi4k-utils/Makefile	2007-01-02 08:34:32.000000000 +0100
+@@ -15,6 +15,7 @@
+ 
+ # Following line is important for lib and isdnlog (sl).
+ export ROOTDIR=$(shell pwd)
++export PPPVERSIONS=2.4.4
+ 
+ ifeq (.config,$(wildcard .config))
+ include .config
+@@ -57,21 +58,24 @@
+ 
+ rootperm:
+ 	@echo 'main(int argc,char**argv){unlink(argv[0]);return(getuid()==0);}'>g
+-	@if gcc -x c -o G g && rm -f g && ./G ; then \
++	@if $(CC) -x c -o G g && rm -f g && ./G ; then \
+ 		echo -e "\n\n      Need root permission for (de)installation!\n\n"; \
+ 		exit 1; \
+ 	fi
+ 
+-install: rootperm
+-	set -e; for i in `echo $(SUBDIRS)`; do $(MAKE) -C $$i install; done
+-	@if [ -c $(DESTDIR)/dev/isdnctrl0 ] && ls -l $(DESTDIR)/dev/isdnctrl0 | egrep "[[:space:]]45,[[:space:]]+64[[:space:]]" > /dev/null; \
+-	then \
+-		echo -e '(some) ISDN devices already exist, not creating them.\nUse scripts/makedev.sh manually if necessary.'; \
+-	else \
+-		sh scripts/makedev.sh $(DESTDIR) ; \
+-	fi
++install:
++	set -e; for i in `echo $(SUBDIRS)`; do \
++			echo "make install in $$i"; \
++			$(MAKE) -C $$i install; \
++		done
++#	@if [ -c $(DESTDIR)/dev/isdnctrl0 ] && ls -l $(DESTDIR)/dev/isdnctrl0 | egrep "[[:space:]]45,[[:space:]]+64[[:space:]]" > /dev/null; \
++#	then \
++#		echo -e '(some) ISDN devices already exist, not creating them.\nUse scripts/makedev.sh manually if necessary.'; \
++#	else \
++#		sh scripts/makedev.sh $(DESTDIR) ; \
++#	fi
+ 
+-uninstall: rootperm
++uninstall:
+ 	set -e; for i in `echo $(SUBDIRS)`; do $(MAKE) -C $$i uninstall; done
+ 
+ #
+--- capi4k-utils/pppdcapiplugin/ppp-2.4.3/pppd/patchlevel.h.ttlinux	2004-12-13 23:05:15.000000000 +0100
++++ capi4k-utils/pppdcapiplugin/ppp-2.4.3/pppd/patchlevel.h	2007-01-02 08:35:04.000000000 +0100
+@@ -1,4 +1,4 @@
+ /* $Id: patchlevel.h,v 1.1 2004/12/13 22:05:15 keil Exp $ */
+ 
+-#define VERSION		"2.4.3"
++#define VERSION		"2.4.4"
+ #define DATE		"13 November 2004"
+--- capi4k-utils/pppdcapiplugin/Rules.make.ttlinux	2001-05-01 14:43:49.000000000 +0200
++++ capi4k-utils/pppdcapiplugin/Rules.make	2007-01-02 08:34:12.000000000 +0100
+@@ -10,7 +10,7 @@
+ 
+ vpath %.c $(TOPDIR)
+ 
+-CC	= gcc
++# CC	= gcc
+ INC     = -I$(TOPDIR) -I$(CAPIINC) -Ipppd
+ DEFS    = -DPPPVER=$(shell $(TOPDIR)/pversion $(PPPVERSION))
+ CFLAGS	= -O2 -Wall -fPIC $(DEFS) $(INC) -L$(CAPILIB)
+--- capi4k-utils/capi20/capidyn.c.ttlinux	2004-01-16 16:27:11.000000000 +0100
++++ capi4k-utils/capi20/capidyn.c	2007-01-02 08:34:12.000000000 +0100
+@@ -20,7 +20,9 @@
+ 
+ #include <sys/types.h>
+ #define _LINUX_LIST_H
++#include <linux/compiler.h>
+ #include <linux/capi.h>
++#include <stdio.h>
+ #include <string.h>
+ #include "capi20.h"
+ #include <dlfcn.h>
+--- capi4k-utils/capi20/capi20.c.ttlinux	2005-05-09 10:21:57.000000000 +0200
++++ capi4k-utils/capi20/capi20.c	2007-01-02 08:34:12.000000000 +0100
+@@ -113,6 +113,7 @@
+ #include <stdio.h>
+ #include <assert.h>
+ #define _LINUX_LIST_H
++#include <linux/compiler.h>
+ #include <linux/capi.h>
+ #include "capi20.h"
+ 
+--- capi4k-utils/.config.ttlinux	2005-07-18 11:35:20.000000000 +0200
++++ capi4k-utils/.config	2007-01-02 08:34:12.000000000 +0100
+@@ -5,7 +5,7 @@
+ CONFIG_BINDIR='/usr/bin'
+ CONFIG_SBINDIR='/sbin'
+ CONFIG_MANDIR='/usr/man'
+-CONFIG_AVMCAPICTRL=y
+-CONFIG_CAPIFAX=y
++#CONFIG_AVMCAPICTRL is not set
++#CONFIG_CAPIFAX is not set
+ CONFIG_RCAPID=y
+-# CONFIG_PPPDCAPIPLUGIN is not set
++CONFIG_PPPDCAPIPLUGIN=y
+--- capi4k-utils/capiinfo/capiinfo.c.ttlinux	2005-03-04 11:55:52.000000000 +0100
++++ capi4k-utils/capiinfo/capiinfo.c	2007-01-02 08:34:12.000000000 +0100
+@@ -61,6 +61,7 @@
+ #include <string.h>
+ #include <errno.h>
+ #define _LINUX_LIST_H
++#include <linux/compiler.h>
+ #include <capi20.h>
+ #include <linux/capi.h>
+ 

@@ -1,0 +1,5 @@
+httptunnel is a small application for tunnelling an arbitrary TCP socket
+connection over HTTP. It can be used, for example, to tunnel traffic out
+from behind a restrictive firewall that only allows outgoing HTTP web
+connections.
+

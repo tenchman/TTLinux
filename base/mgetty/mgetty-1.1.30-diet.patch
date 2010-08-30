@@ -1,0 +1,225 @@
+--- mgetty-1.1.30/doc/Makefile.diet	1997-11-27 21:33:26.000000000 +0100
++++ mgetty-1.1.30/doc/Makefile	2003-09-25 16:24:06.000000000 +0200
+@@ -65,7 +65,7 @@
+ 	      *.man *.[1-9] mgetty.texi
+ 
+ install: $(MANSRC) mgetty.info
+-	-mkdir `dirname $(MAN1DIR)` $(MAN1DIR) $(MAN4DIR) $(MAN5DIR) $(MAN8DIR) 2>/dev/null
++	-mkdir -p `dirname $(MAN1DIR)` $(MAN1DIR) $(MAN4DIR) $(MAN5DIR) $(MAN8DIR) 2>/dev/null
+ 	for i in $(MAN1PAGES) ; do \
+ 		$(INSTALL) -m 644 $$i $(MAN1DIR) ; \
+ 	done
+@@ -79,7 +79,7 @@
+ 		$(INSTALL) -m 644 $$i $(MAN8DIR) ; \
+ 	done
+ 	if [ -f mgetty.info ] ; then\
+-	    test -d $(INFODIR) || mkdir $(INFODIR) 2>/dev/null ; \
++	    test -d $(INFODIR) || mkdir -p $(INFODIR) 2>/dev/null ; \
+ 	    for i in mgetty.info* ; do \
+ 		$(INSTALL) -m 644 $$i $(INFODIR) ; \
+ 	    done ; \
+--- mgetty-1.1.30/Makefile.diet	2002-12-16 14:08:23.000000000 +0100
++++ mgetty-1.1.30/Makefile	2003-09-25 16:26:52.000000000 +0200
+@@ -169,7 +169,8 @@
+ #
+ # if your systems doesn't have one, use the shell script that I provide
+ # in "inst.sh" (taken from X11R5). Needed on IRIX5.2
+-INSTALL=install -c -o bin -g bin
++INSTALL=install -c
++#INSTALL=install -c -o bin -g bin
+ #INSTALL=install -c -o root -g wheel		# NeXT/BSD
+ #INSTALL=/usr/ucb/install -c -o bin -g bin	# AIX, Solaris 2.x
+ #INSTALL=installbsd -c -o bin -g bin		# OSF/1, AIX 4.1, 4.2
+@@ -178,37 +179,43 @@
+ # prefix, where most (all?) of the stuff lives, usually /usr/local or /usr
+ #
+ prefix=/usr/local
++sysconfdir=/etc
++mandir=/usr/share/man
++infodir=/usr/share/info
++spool=/var/spool
++
+ #
+ # prefix for all the spool directories (usually /usr/spool or /var/spool)
+ #
+-spool=/var/spool
++SPOOL=$(DESTDIR)$(spool)
+ #
+ # where the mgetty + sendfax binaries live (used for "make install")
+ #
+-SBINDIR=$(prefix)/sbin
++ROOT_SBINDIR=$(DESTDIR)/sbin
++SBINDIR=$(DESTDIR)$(prefix)/sbin
+ #
+ # where the user executable binaries live
+ #
+-BINDIR=$(prefix)/bin
++BINDIR=$(DESTDIR)$(prefix)/bin
+ #
+ # where the font+coverpage files go
+ #
+-LIBDIR=$(prefix)/lib/mgetty+sendfax
++LIBDIR=$(DESTDIR)$(prefix)/lib/mgetty+sendfax
+ #
+ # where the configuration files (*.config, aliases, fax.allow/deny) go to
+ #
+-CONFDIR=$(prefix)/etc/mgetty+sendfax
++CONFDIR=$(DESTDIR)$(sysconfdir)/etc/mgetty+sendfax
+ #CONFDIR=/etc/default/
+ #
+ #
+ # where mgetty PID files (mgetty.pid) go to
+ # (the faxrunqd PID file lives in FAX_SPOOL_OUT/ due to permission reasons)
+ #
+-VARRUNDIR=/var/run
++VARRUNDIR=$(DESTDIR)/var/run
+ #
+ # the fax spool directory
+ #
+-FAX_SPOOL=$(spool)/fax
++FAX_SPOOL=$(SPOOL)/fax
+ FAX_SPOOL_IN=$(FAX_SPOOL)/incoming
+ FAX_SPOOL_OUT=$(FAX_SPOOL)/outgoing
+ #
+@@ -224,20 +231,20 @@
+ #
+ #
+ # Where section 1 manual pages should be placed
+-MAN1DIR=$(prefix)/man/man1
++MAN1DIR=$(DESTDIR)$(mandir)/man/man1
+ #
+ # Where section 4 manual pages (mgettydefs.4) should be placed
+-MAN4DIR=$(prefix)/man/man4
++MAN4DIR=$(DESTDIR)$(mandir)/man/man4
+ #
+ # Section 5 man pages (faxqueue.5)
+-MAN5DIR=$(prefix)/man/man5
++MAN5DIR=$(DESTDIR)$(mandir)/man/man5
+ #
+ # Section 8 man pages (sendfax.8)
+-MAN8DIR=$(prefix)/man/man8
++MAN8DIR=$(DESTDIR)$(mandir)/man/man8
+ #
+ # Where the GNU Info-Files are located
+ #
+-INFODIR=$(prefix)/info
++INFODIR=$(DESTDIR)$(infodir)/info
+ #
+ #
+ # A shell that understands bourne-shell syntax
+@@ -474,7 +481,7 @@
+ mgetty$(DIFFR)-$(MR).$(SR).diff.gz: \
+ 	mgetty$(DIFFR).tar.gz mgetty$(MR).$(SR).tar.gz
+ 	-rm -rf /tmp/mgd
+-	mkdir /tmp/mgd
++	mkdir -p /tmp/mgd
+ 	gtar xvCfz /tmp/mgd mgetty$(DIFFR).tar.gz
+ 	gtar xvCfz /tmp/mgd mgetty$(MR).$(SR).tar.gz
+ 	( cd /tmp/mgd ; \
+@@ -568,11 +575,11 @@
+ # internal: use this to create a "clean" mgetty+sendfax tree
+ bindist: all doc-all sedscript
+ 	-rm -rf bindist
+-	./mkidirs bindist$(prefix) bindist$(spool)
++	./mkidirs bindist$(prefix) bindist$(SPOOL)
+ 	bd=`pwd`/bindist; PATH=`pwd`:"$$PATH" $(MAKE) prefix=$$bd$(prefix) \
+ 		BINDIR=$$bd$(BINDIR) SBINDIR=$$bd$(SBINDIR) \
+ 		LIBDIR=$$bd$(LIBDIR) CONFDIR=$$bd$(CONFDIR) \
+-		spool=$$bd$(spool) FAX_SPOOL=$$bd$(FAX_SPOOL) \
++		SPOOL=$$bd$(SPOOL) FAX_SPOOL=$$bd$(FAX_SPOOL) \
+ 		FAX_SPOOL_IN=$$bd$(FAX_SPOOL_IN) \
+ 		FAX_SPOOL_OUT=$$bd$(FAX_SPOOL_OUT) \
+ 		MAN1DIR=$$bd$(MAN1DIR) MAN4DIR=$$bd$(MAN4DIR) \
+@@ -592,9 +599,10 @@
+ 	$(INSTALL) -m 755 newslock $(BINDIR)
+ 
+ 	-test -d $(SBINDIR) || ( ./mkidirs $(SBINDIR) ; chmod 755 $(SBINDIR) )
+-	-mv -f $(SBINDIR)/mgetty $(SBINDIR)/mgetty.old
++	-test -d $(ROOT_SBINDIR) || ( ./mkidirs $(ROOT_SBINDIR) ; chmod 755 $(ROOT_SBINDIR) )
++	-mv -f $(ROOT_SBINDIR)/mgetty $(ROOT_SBINDIR)/mgetty.old
+ 	-mv -f $(SBINDIR)/sendfax $(SBINDIR)/sendfax.old
+-	$(INSTALL) -s -m 700 mgetty $(SBINDIR)
++	$(INSTALL) -s -m 700 mgetty $(ROOT_SBINDIR)
+ 	$(INSTALL) -s -m 755 sendfax $(SBINDIR)
+ #
+ # data files + directories
+@@ -604,15 +612,15 @@
+ 	test -d $(CONFDIR) || \
+ 		( ./mkidirs $(CONFDIR); chmod 755 $(CONFDIR))
+ 	test -f $(CONFDIR)/login.config || \
+-		$(INSTALL) -o root -m 600 login.config $(CONFDIR)/
++		$(INSTALL) -m 600 login.config $(CONFDIR)/
+ 	test -f $(CONFDIR)/mgetty.config || \
+-		$(INSTALL) -o root -m 600 mgetty.config $(CONFDIR)/
++		$(INSTALL) -m 600 mgetty.config $(CONFDIR)/
+ 	test -f $(CONFDIR)/sendfax.config || \
+-		$(INSTALL) -o root -m 644 sendfax.config $(CONFDIR)/
++		$(INSTALL) -m 644 sendfax.config $(CONFDIR)/
+ 	test -f $(CONFDIR)/dialin.config || \
+-		$(INSTALL) -o root -m 600 dialin.config $(CONFDIR)/
++		$(INSTALL) -m 600 dialin.config $(CONFDIR)/
+ 	test -f $(CONFDIR)/faxrunq.config || \
+-		$(INSTALL) -o root -m 644 faxrunq.config $(CONFDIR)/
++		$(INSTALL) -m 644 faxrunq.config $(CONFDIR)/
+ #
+ # test for outdated stuff
+ #
+@@ -626,16 +634,16 @@
+ #
+ # fax spool directories
+ #
+-	test -d $(spool) || \
+-		( mkdir $(spool) ; chmod 755 $(spool) )
++	test -d $(SPOOL) || \
++		( mkdir -p $(SPOOL) ; chmod 755 $(SPOOL) )
+ 	test -d $(FAX_SPOOL) || \
+-		( mkdir $(FAX_SPOOL) ; \
++		( mkdir -p $(FAX_SPOOL) ; \
+ 		  chown $(FAX_OUT_USER) $(FAX_SPOOL) ; \
+ 		  chmod 755 $(FAX_SPOOL) )
+ 	test -d $(FAX_SPOOL_IN) || \
+-		( mkdir $(FAX_SPOOL_IN) ; chmod 755 $(FAX_SPOOL_IN) )
++		( mkdir -p $(FAX_SPOOL_IN) ; chmod 755 $(FAX_SPOOL_IN) )
+ 	test -d $(FAX_SPOOL_OUT) || \
+-		( mkdir $(FAX_SPOOL_OUT) ; \
++		( mkdir -p $(FAX_SPOOL_OUT) ; \
+ 		  chown $(FAX_OUT_USER) $(FAX_SPOOL_OUT) ; \
+ 		  chmod 755 $(FAX_SPOOL_OUT) )
+ #
+--- mgetty-1.1.30/utmp.c.diet	2001-12-17 23:43:25.000000000 +0100
++++ mgetty-1.1.30/utmp.c	2003-09-25 16:24:06.000000000 +0200
+@@ -155,11 +155,11 @@
+ 	    updwtmpx(WTMPX_FILE, utmp);
+ #else
+ # if defined(__GLIBC__) && __GLIBC__ >= 2
+-	    updwtmp(WTMP_FILE, utmp);
++	    updwtmp(_PATH_WTMP, utmp);
+ # else
+-	    if (stat(WTMP_FILE, &st) && errno == ENOENT)
++	    if (stat(_PATH_WTMP, &st) && errno == ENOENT)
+ 		    break;
+-	    if ((fp = fopen(WTMP_FILE, "a")) != (FILE *) NULL)
++	    if ((fp = fopen(_PATH_WTMP, "a")) != (FILE *) NULL)
+ 	    {
+ 		(void) fseek(fp, 0L, SEEK_END);
+ 		(void) fwrite((char *)utmp,sizeof(*utmp),1,fp);
+--- mgetty-1.1.30/mg_m_init.c.diet	2000-10-03 16:25:38.000000000 +0200
++++ mgetty-1.1.30/mg_m_init.c	2003-09-25 16:24:06.000000000 +0200
+@@ -17,7 +17,7 @@
+ #include <sys/ioctl.h>
+ #endif
+ 
+-#ifdef linux
++#if defined(linux) && !defined(__dietlibc__)
+ # include <sys/types.h>
+ typedef u_int32_t __u32;
+ # include <linux/serial.h>
+@@ -351,7 +351,7 @@
+ 	return ERROR;
+     }
+ 
+-#ifdef linux
++#if defined(linux) && !defined(__dietlibc__)
+     /* if port speed is set to 38400, kernel flag might turn it into
+      * 57600 or 115200. Make sure the user knows about it!
+      */

@@ -1,0 +1,12 @@
+--- dropbear-0.43/sshpty.c.diet	2004-09-15 05:11:42.604122608 +0200
++++ dropbear-0.43/sshpty.c	2004-09-15 05:12:40.565311168 +0200
+@@ -32,6 +32,9 @@
+ #endif
+ #if defined(USE_DEV_PTMX) && defined(HAVE_STROPTS_H)
+ # include <stropts.h>
++#else
++# define __SID	    ('S' << 8)
++# define I_PUSH	    (__SID | 2)
+ #endif
+ 
+ #ifndef O_NOCTTY

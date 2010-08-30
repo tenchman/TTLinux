@@ -1,0 +1,11 @@
+--- libutf8-0.8/configure.noplugin	2001-05-26 22:37:41.000000000 +0200
++++ libutf8-0.8/configure	2005-02-18 17:51:05.310012376 +0100
+@@ -2159,7 +2159,7 @@
+ esac
+ if test -n "$OS"; then
+   
+-  PLUGLIB="libutf8_plug.so"
++  PLUGLIB=""
+ else
+   PLUGLIB=""
+ fi

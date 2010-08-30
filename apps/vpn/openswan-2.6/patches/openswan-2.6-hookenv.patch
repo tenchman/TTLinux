@@ -1,0 +1,49 @@
+--- openswan2-2.6.04/programs/pluto/dpd.c.hookenv	2008-01-25 19:38:47.000000000 +0100
++++ openswan2-2.6.04/programs/pluto/dpd.c	2008-01-31 22:26:38.000000000 +0100
+@@ -545,6 +545,8 @@
+ 
+     openswan_log("DPD: No response from peer - declaring peer dead");
+ 
++    c->dpd_dropped = TRUE;	/* mark this connection as dpd_dropped */
++
+     switch(action) {
+     case DPD_ACTION_HOLD:
+ 	/** dpdaction=hold - Wipe the SA's but %trap the eroute so we don't
+--- openswan2-2.6.04/programs/pluto/connections.c.hookenv	2008-01-31 22:26:38.000000000 +0100
++++ openswan2-2.6.04/programs/pluto/connections.c	2008-01-31 22:26:38.000000000 +0100
+@@ -1214,6 +1214,7 @@
+         c->dpd_delay = wm->dpd_delay;
+         c->dpd_timeout = wm->dpd_timeout;
+         c->dpd_action = wm->dpd_action;
++        c->dpd_dropped = FALSE;
+ 
+ 	c->forceencaps = wm->forceencaps;
+ 
+--- openswan2-2.6.04/programs/pluto/sysdep_linux.c.hookenv	2008-01-31 22:26:38.000000000 +0100
++++ openswan2-2.6.04/programs/pluto/sysdep_linux.c	2008-01-31 22:31:55.000000000 +0100
+@@ -536,6 +536,7 @@
+ 			   "PLUTO_PEER_PROTOCOL='%u' "
+ 			   "PLUTO_PEER_CA='%s' "
+ 			   "PLUTO_STACK='%s' "
++ 			   "PLUTO_DPD_DROPPED='%u' "
+ 			   "PLUTO_CONN_POLICY='%s' "
+ 			   "%s "
+ 			   "%s "       /* PLUTO_MY_SRCIP */                    
+@@ -560,6 +561,7 @@
+ 			   , sr->that.protocol
+ 			   , secure_peerca_str
+ 			   , kernel_ops->kern_name
++ 			   , c->dpd_dropped
+ 			   , prettypolicy(c->policy)
+ 			   , secure_xauth_username_str
+ 			   , srcip_str
+--- openswan2-2.6.04/programs/pluto/connections.h.hookenv	2008-01-31 22:26:38.000000000 +0100
++++ openswan2-2.6.04/programs/pluto/connections.h	2008-01-31 22:26:38.000000000 +0100
+@@ -203,6 +203,7 @@
+     time_t          dpd_delay;              /* time between checks */
+     time_t          dpd_timeout;            /* time after which we are dead */
+     enum dpd_action dpd_action;             /* what to do when we die */
++    bool            dpd_dropped;            /* this will be set in case of DPD action */
+     
+     bool               forceencaps;         /* always use NAT-T encap */
+     

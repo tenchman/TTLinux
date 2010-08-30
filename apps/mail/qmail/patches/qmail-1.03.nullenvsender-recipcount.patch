@@ -1,0 +1,42 @@
+--- qmail-1.03/qmail-smtpd.c.nullenvelope	Tue Jul 15 17:56:39 2003
++++ qmail-1.03/qmail-smtpd.c	Tue Jul 15 18:05:37 2003
+@@ -108,6 +108,7 @@
+ 
+ void err_bmf() { out("553 sorry, your envelope sender is in my badmailfrom list (#5.7.1)\r\n"); }
+ void err_nogateway() { out("553 sorry, that domain isn't in my list of allowed rcpthosts (#5.7.1)\r\n"); }
++void err_badbounce() { out("550 sorry, bounce messages should have a single envelope recipient (#5.7.1)\r\n"); }
+ #ifdef TLS
+ void err_nogwcert() { out("553 no valid cert for gatewaying (#5.7.1)\r\n"); }
+ #endif
+@@ -318,6 +319,7 @@
+ int flagbarf; /* defined if seenmail */
+ stralloc mailfrom = {0};
+ stralloc rcptto = {0};
++int recipcount;
+ int rcptcount;
+ 
+ void smtp_helo(arg) char *arg;
+@@ -356,6 +358,7 @@
+   if (!stralloc_copys(&mailfrom,addr.s)) die_nomem();
+   if (!stralloc_0(&mailfrom)) die_nomem();
+   rcptcount = 0;
++  recipcount = 0;
+   out("250 ok\r\n");
+ }
+ #ifdef TLS
+@@ -426,6 +429,7 @@
+   if (!stralloc_cats(&rcptto,addr.s)) die_nomem();
+   if (!stralloc_0(&rcptto)) die_nomem();
+   if (tarpitcount && ++rcptcount >= tarpitcount) while (sleep(tarpitdelay)); 
++  recipcount++;
+   out("250 ok\r\n");
+ }
+ 
+@@ -544,6 +548,7 @@
+  
+   if (!seenmail) { err_wantmail(); return; }
+   if (!rcptto.len) { err_wantrcpt(); return; }
++  if (mailfrom.len == 1 && recipcount > 1) { err_badbounce(); return; }
+   seenmail = 0;
+   if (databytes) bytestooverflow = databytes + 1;
+   if (qmail_open(&qqt) == -1) { err_qqt(); return; }

@@ -1,0 +1,85 @@
+#!/bin/sh
+#
+# Description:
+#   really simple ldd(1) like tool for dietlibc linked programs
+#
+# Author:
+#   Gernot Tenchio <gernot@tenchio.de>
+#
+# License:
+#   GPL, BSD 2/3/4/5/6... clause, MIT or whatever
+#   (pick it up and put it in your pocket)
+#
+# Requirements:
+#   printf(1)  - coreutils
+#   readelf(1) - binutils
+#   gawk(1)    - gawk (maybe any other awk will do it)
+#   sed(1)     - sed
+#
+# Hint:
+#   set COLOR to something else than "yes" to disable colors
+
+COLOR="yes"
+
+if [ "$COLOR" = "yes" ]; then
+  normal="\\033[0;39m"
+  white="\\033[1;37m"
+  cyan="\\033[0;36m"
+  red="\\033[0;31m"
+fi
+printnames=""
+
+[ -f /etc/diet.ld.conf ] && ldpath=`cat /etc/diet.ld.conf`
+[ -z "$ldpath" ] && ldpath="/opt/diet/lib /opt/diet/lib-i386"
+ldpath="$ldpath  $LD_LIBRARY_PATH"
+
+findlib () {
+  for dir in $ldpath; do
+    if [ -f $dir/$1 ]; then
+      fullpath="$dir/$1"
+      return 0
+    fi
+  done
+  fullpath="${red}not found${normal}"
+  return 1
+}
+
+case "$1" in
+  "")
+    printf "$0 -- missing file argument\n"
+  ;;
+  -h*|--h*)
+    printf "$0 -- nix help, guggst Du Quelletext!\n"
+    ;;
+  *)
+    if [ ! -z $2 ]; then printnames="jawolli"; fi
+
+    while [ ! -z $1 ]; do
+      exe=$1; shift
+      
+      if [ ! -z $printnames ]; then printf "$cyan$exe:$normal\n"; fi
+      
+      if [ ! -f $exe ]; then
+	printf "\t${red}file not found$normal\n"
+	continue
+      fi
+
+      libs=`readelf -d $exe|awk '/Shared library/ { print $5 }'|sed -e "s/\[\(.*\)\]/\1/"`
+      if [ "$libs" = "" ]; then
+	printf "\tnot a dynamic executable\n"
+	continue
+      fi
+
+      for lib in $libs; do
+	findlib $lib
+	if [[ $? -eq 0 ]]; then
+	  size=`stat -L -c "%s" $fullpath`
+	  printf "\t$lib $white=>$normal $fullpath ($size)\n"
+	else
+	  printf "\t$lib $white=>$normal $fullpath\n"
+	fi
+      done
+    done
+  ;;
+esac
+

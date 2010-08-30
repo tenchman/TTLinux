@@ -1,0 +1,17 @@
+diff -up openssl-0.9.8j/crypto/krb5/krb5_asn.c.diet openssl-0.9.8j/crypto/krb5/krb5_asn.c
+--- openssl-0.9.8j/crypto/krb5/krb5_asn.c.diet	2001-07-11 17:29:33.000000000 +0200
++++ openssl-0.9.8j/crypto/krb5/krb5_asn.c	2009-03-12 08:44:26.000000000 +0100
+@@ -55,6 +55,8 @@
+  * Hudson (tjh@cryptsoft.com).
+  *
+  */
++#ifndef OPENSSL_NO_KRB5
++
+ #include <openssl/asn1.h>
+ #include <openssl/asn1t.h>
+ #include <openssl/krb5_asn.h>
+@@ -165,3 +167,4 @@ ASN1_ITEM_TEMPLATE_END(KRB5_AUTHENT)
+ 
+ IMPLEMENT_ASN1_FUNCTIONS(KRB5_AUTHENT)
+ 
++#endif

@@ -1,0 +1,261 @@
+--- linux-2.6.22.18/drivers/leds/Kconfig.leds	2008-02-11 08:31:19.000000000 +0100
++++ linux-2.6.22.18/drivers/leds/Kconfig	2008-09-03 16:03:42.000000000 +0200
+@@ -95,6 +95,13 @@ config LEDS_COBALT
+ 	help
+ 	  This option enables support for the front LED on Cobalt Server
+ 
++config LEDS_VT1211
++	tristate "LED Suport for LEDs connected to the VIA vt1211 super I/O chip GPIO lines"
++	depends on VT1211_GPIO
++	help
++	  This options enables support for LEDs connected to the GPIO lines on the
++	  VIA vt1211 super I/O chip.
++
+ comment "LED Triggers"
+ 
+ config LEDS_TRIGGERS
+--- linux-2.6.22.18/drivers/leds/Makefile.leds	2008-02-11 08:31:19.000000000 +0100
++++ linux-2.6.22.18/drivers/leds/Makefile	2008-09-03 16:14:49.000000000 +0200
+@@ -14,6 +14,7 @@ obj-$(CONFIG_LEDS_S3C24XX)		+= leds-s3c2
+ obj-$(CONFIG_LEDS_AMS_DELTA)		+= leds-ams-delta.o
+ obj-$(CONFIG_LEDS_NET48XX)		+= leds-net48xx.o
+ obj-$(CONFIG_LEDS_WRAP)			+= leds-wrap.o
++obj-$(CONFIG_LEDS_VT1211)		+= leds-vt1211-gpio.o
+ obj-$(CONFIG_LEDS_H1940)		+= leds-h1940.o
+ obj-$(CONFIG_LEDS_COBALT)		+= leds-cobalt.o
+ 
+--- linux/drivers/leds/leds-vt1211-gpio.c.leds	2008-09-09 14:21:59.000000000 +0200
++++ linux/drivers/leds/leds-vt1211-gpio.c	2008-09-09 16:46:24.000000000 +0200
+@@ -0,0 +1,232 @@
++/*
++ * VT1211 GPIO driver LED driver
++ *
++ * Author: Manfred Wassmann <info@berlinos.de>
++ *
++ * Copyright (c) 2007 Manfred Wassmann
++ *
++ * Permission is hereby granted, free of charge, to any
++ * person obtaining a copy of this software and associated
++ * documentation files (the "Software"), to deal in the
++ * Software without restriction, including without
++ * limitation the rights to use, copy, modify, merge,
++ * publish, distribute, sublicense, and/or sell copies of
++ * the Software, and to permit persons to whom the
++ * Software is furnished to do so, subject to the
++ * following conditions:
++ *
++ * The above copyright notice and this permission notice
++ * shall be included in all copies or substantial portions
++ * of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
++ * ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
++ * TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
++ * PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
++ * SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
++ * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
++ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
++ * OTHER DEALINGS IN THE SOFTWARE.
++ *
++ */
++
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <linux/platform_device.h>
++//#include <linux/spinlock.h>
++#include <linux/leds.h>
++#include <linux/vt1211_gpio.h>
++
++//static DEFINE_SPINLOCK(gpio_lock);
++
++/* VT1211 Super I/O chip number of GPIO lines. Set to 56 though 5
++ * lines are not available on port 6.
++ */
++#define GPIO_MAX 56
++
++static struct vt1211_led_device {
++	struct led_classdev ancestor;
++	unsigned int state;
++} vt1211_led_devices[GPIO_MAX];
++
++
++static struct vt1211_led_device * device2dev(struct led_classdev * pled)
++{
++	return(container_of(pled, struct vt1211_led_device, ancestor));
++}
++
++
++void vt1211_led_brightness_set(struct led_classdev *pled,
++			       enum led_brightness value)
++{
++	const struct vt1211_led_device *const vt1211_dev = device2dev(pled);
++	const u32 gpio_pin = vt1211_dev - vt1211_led_devices;
++
++	if (gpio_pin < GPIO_MAX && vt1211_dev->ancestor.name != 0) {
++		/* Set or clear the 'gpio_pin' bit according to the
++		   required setting (value != 0 == on)
++		 */
++		const int gpio_value = value == LED_OFF ? 0 : 1;
++		unsigned long flags;
++
++		//spin_lock_irqsave(&gpio_lock, flags);
++		vt1211_gpio_set(gpio_pin, gpio_value);
++		//spin_unlock_irqrestore(&gpio_lock, flags);
++	}
++}
++
++/* LEDs are described in resources, the following iterates over the valid
++ * LED resources.
++ */
++#define for_all_leds(i, pdev) \
++	for (i=0; i<pdev->num_resources; ++i) \
++		if (pdev->resource[i].start < GPIO_MAX && \
++			pdev->resource[i].name != 0)
++
++/* The following applies 'operation' to each LED from the given platform,
++ * the function always returns 0 to allow tail call elimination.
++ */
++static int apply_to_all_leds(struct platform_device *pdev,
++	void (*operation)(struct led_classdev *pled))
++{
++	int i;
++
++	for_all_leds(i, pdev)
++		operation(&vt1211_led_devices[pdev->resource[i].start].ancestor);
++	return 0;
++}
++
++#ifdef CONFIG_PM
++static int vt1211_led_suspend(struct platform_device *pdev,
++			      pm_message_t state)
++{
++	return apply_to_all_leds(pdev, led_classdev_suspend);
++}
++
++static int vt1211_led_resume(struct platform_device *pdev)
++{
++	return apply_to_all_leds(pdev, led_classdev_resume);
++}
++#endif
++
++static void vt1211_led_remove_one_led(struct led_classdev *pled)
++{
++	led_classdev_unregister(pled);
++	pled->name = 0;
++}
++
++static int vt1211_led_remove(struct platform_device *pdev)
++{
++	return apply_to_all_leds(pdev, vt1211_led_remove_one_led);
++}
++
++static int vt1211_led_probe(struct platform_device *pdev)
++{
++	/* The board level has to tell the driver where the
++	 * LEDs are connected - there is no way to find out
++	 * electrically.  It must also say whether the GPIO
++	 * lines are active high or active low.
++	 *
++	 * To do this read the num_resources (the number of
++	 * LEDs) and the struct resource (the data for each
++	 * LED).  The name comes from the resource, and it
++	 * isn't copied.
++	 */
++	int i;
++
++	//printk(KERN_DEBUG "Checkpoint Alpha\n");
++	for_all_leds(i, pdev) {
++		const u8 gpio_pin = pdev->resource[i].start;
++		int      rc;
++
++		//printk(KERN_DEBUG "GPIO line #%u\n", gpio_pin);
++		if (vt1211_led_devices[gpio_pin].ancestor.name == 0) {
++			unsigned long flags;
++
++			//spin_lock_irqsave(&gpio_lock, flags);
++			vt1211_gpio_set(gpio_pin, 1);
++			//spin_unlock_irqrestore(&gpio_lock, flags);
++
++			vt1211_led_devices[gpio_pin].state =
++				pdev->resource[i].flags & IORESOURCE_BITS;
++
++			vt1211_led_devices[gpio_pin].ancestor.name =
++				pdev->resource[i].name;
++
++			if (vt1211_led_devices[gpio_pin].state) {
++				vt1211_led_devices[gpio_pin].ancestor.brightness
++					= LED_FULL;
++			} else {
++				vt1211_led_devices[gpio_pin].ancestor.brightness
++					= LED_OFF;
++			}
++
++			vt1211_led_devices[gpio_pin].ancestor.flags = 0;
++
++			vt1211_led_devices[gpio_pin].ancestor.brightness_set =
++				vt1211_led_brightness_set;
++
++			vt1211_led_devices[gpio_pin].ancestor.default_trigger = 0;
++		}
++		//printk(KERN_DEBUG "Checkpoint Bravo\n");
++
++
++		rc = led_classdev_register(&pdev->dev,
++				&vt1211_led_devices[gpio_pin].ancestor);
++		if (rc < 0) {
++			//printk(KERN_DEBUG "Checkpoint Charlie\n");
++			vt1211_led_devices[gpio_pin].ancestor.name = 0;
++			vt1211_led_remove(pdev);
++
++			return rc;
++		}
++	}
++
++	return 0;
++}
++
++static struct platform_driver vt1211_led_driver = {
++	.probe   = vt1211_led_probe,
++	.remove  = vt1211_led_remove,
++#ifdef CONFIG_PM
++	.suspend = vt1211_led_suspend,
++	.resume  = vt1211_led_resume,
++#endif
++	.driver  = {
++		//.owner = THIS_MODULE,
++		.name = "vt1211-gpio-out",
++	},
++};
++
++static int __init vt1211_led_init(void)
++{
++	int rc;
++	//printk(KERN_DEBUG "Checkpoint Alfalfa\n");
++	//rc = platform_driver_register(&vt1211_led_driver);
++	rc = platform_driver_probe(&vt1211_led_driver, vt1211_led_probe);
++	printk(KERN_DEBUG "register vt1211_led_driver = %d\n", rc);
++
++	return(rc);
++}
++
++static void __exit vt1211_led_exit(void)
++{
++	//printk(KERN_DEBUG "Checkpoint Zulu\n");
++	platform_driver_unregister(&vt1211_led_driver);
++}
++
++module_init(vt1211_led_init);
++module_exit(vt1211_led_exit);
++
++MODULE_AUTHOR("Manfred Wassmann <info@berlinos.de>");
++MODULE_DESCRIPTION("VT1211 GPIO LED driver");
++MODULE_LICENSE("GPL");
++
++/*
++ * Local Variables:
++ * mode: c
++ * c-basic-offset: 8
++ * tab-width: 8
++ * End:
++ */

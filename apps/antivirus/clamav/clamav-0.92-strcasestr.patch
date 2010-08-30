@@ -1,0 +1,30 @@
+--- clamav-0.92/libclamav/mbox.c.strcasestr	2007-12-17 21:09:04.000000000 +0100
++++ clamav-0.92/libclamav/mbox.c	2007-12-17 21:11:44.000000000 +0100
+@@ -188,8 +188,25 @@
+ #endif
+ 
+ /* Needs HAVE_STRCASSTR test in configure */
+-#ifndef	C_LINUX
+-#define	strcasestr(h, n)	strstr(h, n)	/* This will cause isBounceMessage() to match too much */
++#if !defined(C_LINUX) || defined(__dietlibc__)
++char *strcasestr (const char *haystack, const char *needle)
++{
++    char *p, *startn = 0, *np = 0;
++
++    for (p = (char *)haystack; *p; p++) {
++	if (np) {
++	    if (toupper(*p) == toupper(*np)) {
++		if (!*++np)
++		    return startn;
++	    } else
++		np = 0;
++	} else if (toupper(*p) == toupper(*needle)) {
++		np = (char *)needle + 1;
++		startn = p;
++	}
++    }
++	return (char *)0;
++}
+ #endif
+ 
+ /*

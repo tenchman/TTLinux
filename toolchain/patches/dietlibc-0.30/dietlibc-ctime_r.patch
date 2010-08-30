@@ -1,0 +1,18 @@
+--- dietlibc-0.30/libugly/ctime_r.c.ctime_r	2006-10-10 20:44:26.000000000 +0200
++++ dietlibc-0.30/libugly/ctime_r.c	2006-10-10 20:43:52.000000000 +0200
+@@ -0,0 +1,5 @@
++#include <time.h>
++
++char *ctime_r(const time_t *timep, char *buf) {
++  return asctime_r(localtime(timep),buf);
++}
+--- dietlibc-0.30/include/time.h.ctime_r	2006-10-10 20:44:54.000000000 +0200
++++ dietlibc-0.30/include/time.h	2006-10-10 20:45:12.000000000 +0200
+@@ -37,6 +37,7 @@
+ char *asctime_r(const struct tm *timeptr, char *buf) __THROW;
+ 
+ char *ctime(const time_t *timep) __THROW;
++char *ctime_r(const time_t *timep, char *buf) __THROW;
+ 
+ size_t strftime(char *s, size_t max, const char *format, const struct tm *tm) __THROW __attribute__((__format__(__strftime__,3,0)));
+ time_t time(time_t *t) __THROW;

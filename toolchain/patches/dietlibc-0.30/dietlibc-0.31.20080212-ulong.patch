@@ -1,0 +1,13 @@
+--- dietlibc-0.30/lib/strcmp.c.ulong	2008-03-31 11:10:05.000000000 +0200
++++ dietlibc-0.30/lib/strcmp.c	2008-03-31 11:10:05.000000000 +0200
+@@ -31,8 +31,8 @@ strcmp (const char *s1, const char *s2)
+     while (1) {
+         l1 = *lx1++;
+         l2 = *lx2++;
+-        if ((((l1 - MKW(0x1)) & ~l1) & MKW(0x80)) ||
+-            ((((l2 - MKW(0x1)) & ~l2) & MKW(0x80))) || l1 != l2) {
++        if ((((l1 - MKW(0x1ul)) & ~l1) & MKW(0x80ul)) ||
++            ((((l2 - MKW(0x1ul)) & ~l2) & MKW(0x80ul))) || l1 != l2) {
+             unsigned char c1, c2;
+             while (1) {
+ 		c1 = GFC(l1);

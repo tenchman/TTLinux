@@ -1,0 +1,11 @@
+diff -up squid-3.1.0.6/src/ACLIP.cc.debug squid-3.1.0.6/src/ACLIP.cc
+--- squid-3.1.0.6/src/ACLIP.cc.debug	2009-03-10 22:07:51.000000000 +0100
++++ squid-3.1.0.6/src/ACLIP.cc	2009-03-10 22:13:00.000000000 +0100
+@@ -387,6 +387,7 @@ acl_ip_data::FactoryParse(const char *t)
+     }
+ #endif
+ 
++    printf("firstaddr '%s'", addr1);
+     /* Decode addr1 */
+     if (!*addr1 || !(q->addr1 = addr1)) {
+         debugs(28, 0, "aclIpParseIpData: unknown first address in '" << t << "'");

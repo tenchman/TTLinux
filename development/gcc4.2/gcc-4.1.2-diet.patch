@@ -1,0 +1,221 @@
+--- gcc-4.1.2/gcc/collect2.c.diet	2005-08-19 03:20:34.000000000 +0200
++++ gcc-4.1.2/gcc/collect2.c	2007-04-18 23:39:54.000000000 +0200
+@@ -996,8 +996,8 @@
+   prefix_from_env ("LIBPATH", &libpath_lib_dirs);
+   /* Add to this list also two standard directories where
+      AIX loader always searches for libraries.  */
+-  add_prefix (&libpath_lib_dirs, "/lib");
+-  add_prefix (&libpath_lib_dirs, "/usr/lib");
++  add_prefix (&libpath_lib_dirs, "/opt/diet/lib-i386");
++  add_prefix (&libpath_lib_dirs, "/opt/diet/lib");
+ #endif
+ 
+   /* Get any options that the upper GCC wants to pass to the sub-GCC.
+--- gcc-4.1.2/gcc/config.gcc.diet	2006-10-16 01:12:23.000000000 +0200
++++ gcc-4.1.2/gcc/config.gcc	2007-04-18 23:39:54.000000000 +0200
+@@ -1041,6 +1041,11 @@
+ 	tm_file="${tm_file} i386/unix.h i386/bsd.h i386/gas.h dbxcoff.h i386/i386-coff.h"
+ 	use_fixproto=yes
+ 	;;
++i[34567]86-*-linux*dietlibc*)	# Intel 80386's running GNU/Linux
++				# with ELF format using dietlibc
++	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h svr4.h linux.h i386/linux.h"
++	tmake_file="t-slibgcc-elf-ver t-linux-dietlibc i386/t-crtstuff"
++	;;
+ i[34567]86-*-linux* | i[34567]86-*-kfreebsd*-gnu | i[34567]86-*-knetbsd*-gnu)
+ 			# Intel 80386's running GNU/*
+ 			# with ELF format using glibc 2
+--- gcc-4.1.2/gcc/config/i386/linux.h.diet	2005-08-10 19:53:01.000000000 +0200
++++ gcc-4.1.2/gcc/config/i386/linux.h	2007-04-19 00:34:06.000000000 +0200
+@@ -83,7 +83,11 @@
+   while (0)
+ 
+ #undef CPP_SPEC
++#if defined(__dietlibc__)
++#define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT} -D__dietlibc__"
++#else
+ #define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
++#endif
+ 
+ #undef CC1_SPEC
+ #define CC1_SPEC "%(cc1_cpu) %{profile:-p}"
+@@ -105,7 +109,7 @@
+ /* If ELF is the default format, we should not use /lib/elf.  */
+ 
+ #define LINK_EMULATION "elf_i386"
+-#define DYNAMIC_LINKER "/lib/ld-linux.so.2"
++#define DYNAMIC_LINKER "/opt/diet/lib-i386/libdl.so"
+ 
+ #undef  SUBTARGET_EXTRA_SPECS
+ #define SUBTARGET_EXTRA_SPECS \
+@@ -123,9 +127,14 @@
+ 
+ /* Similar to standard Linux, but adding -ffast-math support.  */
+ #undef  ENDFILE_SPEC
+-#define ENDFILE_SPEC \
++#if defined(__dietlibc__)
++ #define ENDFILE_SPEC \
++  "%{shared:dyn_dstop.o%s}%{!shared:%{static:dyn_stop.o%s}%{!static:dyn_dstop.o%s}}"
++#else
++ #define ENDFILE_SPEC \
+   "%{ffast-math|funsafe-math-optimizations:crtfastmath.o%s} \
+    %{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s"
++#endif
+ 
+ /* A C statement (sans semicolon) to output to the stdio stream
+    FILE the assembler definition of uninitialized global DECL named
+--- gcc-4.1.2/gcc/config/linux.h.diet	2005-08-06 15:26:35.000000000 +0200
++++ gcc-4.1.2/gcc/config/linux.h	2007-04-18 23:39:54.000000000 +0200
+@@ -32,21 +32,30 @@
+ 
+ #undef MD_EXEC_PREFIX
+ #undef MD_STARTFILE_PREFIX
++#if defined(__dietlibc__)
++#define MD_STARTFILE_PREFIX "/opt/diet/lib-i386/"
++#endif
+ 
+ /* Provide a STARTFILE_SPEC appropriate for GNU/Linux.  Here we add
+    the GNU/Linux magical crtbegin.o file (see crtstuff.c) which
+    provides part of the support for getting C++ file-scope static
+    object constructed before entering `main'.  */
+-   
++
+ #undef	STARTFILE_SPEC
+-#if defined HAVE_LD_PIE
++#if defined(__dietlibc__)
++/* Provide a STARTFILE_SPEC appropriate for dietlibc/Linux. */
+ #define STARTFILE_SPEC \
++   "%{shared:dyn_so_start.o%s} %{!shared:%{static:start.o%s dyn_start.o%s} %{!static:dstart.o%s dyn_dstart.o%s}}"
++#else
++ #if defined HAVE_LD_PIE
++ #define STARTFILE_SPEC \
+   "%{!shared: %{pg|p|profile:gcrt1.o%s;pie:Scrt1.o%s;:crt1.o%s}} \
+    crti.o%s %{static:crtbeginT.o%s;shared|pie:crtbeginS.o%s;:crtbegin.o%s}"
+-#else
+-#define STARTFILE_SPEC \
++ #else
++ #define STARTFILE_SPEC \
+   "%{!shared: %{pg|p|profile:gcrt1.o%s;:crt1.o%s}} \
+    crti.o%s %{static:crtbeginT.o%s;shared|pie:crtbeginS.o%s;:crtbegin.o%s}"
++ #endif
+ #endif
+ 
+ /* Provide a ENDFILE_SPEC appropriate for GNU/Linux.  Here we tack on
+@@ -56,8 +65,13 @@
+    GNU/Linux "finalizer" file, `crtn.o'.  */
+ 
+ #undef	ENDFILE_SPEC
++#if defined(__dietlibc__)
++#define ENDFILE_SPEC \
++  "%{shared:dyn_dstop.o%s}%{!shared:%{static:dyn_stop.o%s}%{!static:dyn_dstop.o%s}}"
++#else
+ #define ENDFILE_SPEC \
+   "%{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s"
++#endif
+ 
+ /* This is for -profile to use -lc_p instead of -lc.  */
+ #ifndef CC1_SPEC
+--- /dev/null	2007-04-14 20:35:13.776706214 +0200
++++ gcc-4.1.2/gcc/config/t-linux-dietlibc	2007-04-18 23:39:54.000000000 +0200
+@@ -0,0 +1,11 @@
++T_CFLAGS = -D__dietlibc__
++
++# Compile crtbeginS.o and crtendS.o with pic.
++CRTSTUFF_T_CFLAGS_S = $(CRTSTUFF_T_CFLAGS) -fPIC
++# Compile libgcc2.a with pic.
++TARGET_LIBGCC2_CFLAGS = -fPIC
++
++# Use unwind-dw2-fde
++LIB2ADDEH = $(srcdir)/unwind-dw2.c $(srcdir)/unwind-dw2-fde.c \
++  $(srcdir)/unwind-sjlj.c $(srcdir)/unwind-c.c
++LIB2ADDEHDEP = unwind.inc unwind-dw2-fde.h
+--- gcc-4.1.2/gcc/gcc.c.diet	2006-11-07 15:26:21.000000000 +0100
++++ gcc-4.1.2/gcc/gcc.c	2007-04-18 23:39:54.000000000 +0200
+@@ -1435,10 +1435,10 @@
+ /* Default prefixes to attach to command names.  */
+ 
+ #ifndef STANDARD_STARTFILE_PREFIX_1
+-#define STANDARD_STARTFILE_PREFIX_1 "/lib/"
++#define STANDARD_STARTFILE_PREFIX_1 "/opt/diet/lib-i386/"
+ #endif
+ #ifndef STANDARD_STARTFILE_PREFIX_2
+-#define STANDARD_STARTFILE_PREFIX_2 "/usr/lib/"
++#define STANDARD_STARTFILE_PREFIX_2 "/opt/diet/local/lib/"
+ #endif
+ 
+ #ifdef CROSS_COMPILE  /* Don't use these prefixes for a cross compiler.  */
+@@ -1459,8 +1459,8 @@
+ #endif
+ 
+ static const char *const standard_exec_prefix = STANDARD_EXEC_PREFIX;
+-static const char *const standard_exec_prefix_1 = "/usr/libexec/gcc/";
+-static const char *const standard_exec_prefix_2 = "/usr/lib/gcc/";
++static const char *const standard_exec_prefix_1 = "/opt/diet/libexec/gcc/";
++static const char *const standard_exec_prefix_2 = "/opt/diet/lib-i386/gcc/";
+ static const char *md_exec_prefix = MD_EXEC_PREFIX;
+ 
+ static const char *md_startfile_prefix = MD_STARTFILE_PREFIX;
+--- gcc-4.1.2/gcc/cppdefault.c.diet	2005-06-25 04:02:01.000000000 +0200
++++ gcc-4.1.2/gcc/cppdefault.c	2007-04-18 23:39:54.000000000 +0200
+@@ -26,7 +26,7 @@
+ #include "cppdefault.h"
+ 
+ #ifndef STANDARD_INCLUDE_DIR
+-#define STANDARD_INCLUDE_DIR "/usr/include"
++#define STANDARD_INCLUDE_DIR "/opt/diet/include"
+ #endif
+ 
+ #ifndef STANDARD_INCLUDE_COMPONENT
+--- gcc-4.1.2/gcc/system.h.diet	2005-08-16 02:13:53.000000000 +0200
++++ gcc-4.1.2/gcc/system.h	2007-04-18 23:39:54.000000000 +0200
+@@ -561,8 +561,10 @@
+    the most likely value of A is B.  This feature was added at some point
+    between 2.95 and 3.0.  Let's use 3.0 as the lower bound for now.  */
+ #if (GCC_VERSION < 3000)
++#ifndef __builtin_expect
+ #define __builtin_expect(a, b) (a)
+ #endif
++#endif
+ 
+ /* Redefine abort to report an internal error w/o coredump, and
+    reporting the location of the error in the source file.  */
+--- gcc-4.1.2/gcc/Makefile.in.diet	2006-11-01 15:40:44.000000000 +0100
++++ gcc-4.1.2/gcc/Makefile.in	2007-04-18 23:39:54.000000000 +0200
+@@ -383,7 +383,7 @@
+ MD5_H	    = $(srcdir)/../include/md5.h
+ 
+ # Default native SYSTEM_HEADER_DIR, to be overridden by targets.
+-NATIVE_SYSTEM_HEADER_DIR = /usr/include
++NATIVE_SYSTEM_HEADER_DIR = /opt/diet/include
+ # Default cross SYSTEM_HEADER_DIR, to be overridden by targets.
+ CROSS_SYSTEM_HEADER_DIR = @CROSS_SYSTEM_HEADER_DIR@
+ 
+--- gcc-4.1.2/libiberty/fopen_unlocked.c.diet	2005-05-15 18:36:40.000000000 +0200
++++ gcc-4.1.2/libiberty/fopen_unlocked.c	2007-04-18 23:39:54.000000000 +0200
+@@ -101,6 +101,7 @@
+   unlock_1 (stderr);
+ }
+ 
++#ifndef __dietlibc__
+ FILE *
+ fopen_unlocked (const char *path, const char *mode)		
+ {
+@@ -124,3 +125,4 @@
+   unlock_1 (fp);
+   return fp;
+ }
++#endif
+--- gcc-4.1.2/libtool.m4.diet	2005-07-16 04:30:53.000000000 +0200
++++ gcc-4.1.2/libtool.m4	2007-04-18 23:39:55.000000000 +0200
+@@ -743,6 +743,11 @@
+   lt_cv_deplibs_check_method=pass_all
+   ;;
+ 
++dietlibc-linux*)
++  lt_cv_deplibs_check_method=pass_all
++  lt_cv_file_magic_test_file=`echo /opt/diet/lib-i386/libc.so`
++  ;;
++
+ netbsd* | knetbsd*-gnu)
+   if echo __ELF__ | $CC -E - | grep __ELF__ > /dev/null; then
+     [lt_cv_deplibs_check_method='match_pattern /lib[^/\.]+\.so\.[0-9]+\.[0-9]+$']

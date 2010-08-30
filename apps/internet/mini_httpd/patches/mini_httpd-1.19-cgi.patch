@@ -1,0 +1,93 @@
+--- mini_httpd-1.19/mini_httpd.c.cgi	2007-02-28 09:44:50.000000000 +0100
++++ mini_httpd-1.19/mini_httpd.c	2007-02-28 09:51:18.000000000 +0100
+@@ -235,6 +235,7 @@
+ static size_t content_length;
+ static char* content_type;
+ static char* cookie;
++static char* accept_language;
+ static char* host;
+ static time_t if_modified_since;
+ static char* referer;
+@@ -313,6 +314,7 @@
+ #ifdef NO_SNPRINTF
+ static int snprintf( char* str, size_t size, const char* format, ... );
+ #endif /* NO_SNPRINTF */
++static const char* rfc1123_fmt = "%a, %d %b %Y %H:%M:%S GMT";
+ 
+ 
+ int
+@@ -1191,6 +1193,7 @@
+     content_type = (char*) 0;
+     content_length = -1;
+     cookie = (char*) 0;
++    accept_language = (char*) 0;
+     host = (char*) 0;
+     if_modified_since = (time_t) -1;
+     referer = "";
+@@ -1297,6 +1300,12 @@
+ 	    cp += strspn( cp, " \t" );
+ 	    cookie = cp;
+ 	    }
++	else if ( strncasecmp( line, "Accept-Language:", 16 ) == 0 )
++	    {
++	    cp = &line[7];
++	    cp += strspn( cp, " \t" );
++	    accept_language = cp;
++	    }
+ 	else if ( strncasecmp( line, "Host:", 5 ) == 0 )
+ 	    {
+ 	    cp = &line[5];
+@@ -2011,9 +2020,10 @@
+ 	size_t headers_size, headers_len;
+ 	char* headers;
+ 	char* br;
+-	int status;
++	int buflen;
+ 	char* title;
+ 	char* cp;
++	time_t now;
+ 
+ 	/* Slurp in all headers. */
+ 	headers_size = 0;
+@@ -2072,14 +2082,23 @@
+ 	    case 503: title = "Service Temporarily Overloaded"; break;
+ 	    default: title = "Something"; break;
+ 	    }
+-	(void) snprintf(
++	buflen = snprintf(
+ 	    buf, sizeof(buf), "HTTP/1.0 %d %s\015\012", status, title );
++	buflen += snprintf(
++	    buf + buflen, sizeof(buf) - buflen, "Server: %s\015\012Date: ", SERVER_SOFTWARE );
++	now = time( (time_t*) 0 );
++	buflen += strftime(
++	    buf + buflen, sizeof(buf) - buflen, rfc1123_fmt, gmtime( &now ) );
++	buflen += snprintf(
++	    buf + buflen, sizeof(buf) - buflen, "\015\012Connection: close\015\012" );
++
+ 	(void) my_write( buf, strlen( buf ) );
+ 
+ 	/* Write the saved headers. */
+ 	(void) my_write( headers, headers_len );
+ 	}
+ 
++    make_log_entry();
+     /* Echo the rest of the output. */
+     for (;;)
+ 	{
+@@ -2212,6 +2231,8 @@
+ 	envp[envn++] = build_env( "HTTP_USER_AGENT=%s", useragent );
+     if ( cookie != (char*) 0 )
+ 	envp[envn++] = build_env( "HTTP_COOKIE=%s", cookie );
++    if ( accept_language != (char*) 0 )
++	envp[envn++] = build_env( "HTTP_ACCEPT_LANGUAGE=%s", accept_language );
+     if ( host != (char*) 0 )
+ 	envp[envn++] = build_env( "HTTP_HOST=%s", host );
+     if ( content_type != (char*) 0 )
+@@ -2518,7 +2539,6 @@
+     char buf[10000];
+     int buflen;
+     int s100;
+-    const char* rfc1123_fmt = "%a, %d %b %Y %H:%M:%S GMT";
+ 
+     status = s;
+     bytes = b;

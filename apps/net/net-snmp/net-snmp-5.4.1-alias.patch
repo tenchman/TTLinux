@@ -1,0 +1,17 @@
+diff -up net-snmp-5.4.1/agent/mibgroup/ip-mib/data_access/ipaddress_ioctl.c.alias net-snmp-5.4.1/agent/mibgroup/ip-mib/data_access/ipaddress_ioctl.c
+--- net-snmp-5.4.1/agent/mibgroup/ip-mib/data_access/ipaddress_ioctl.c.alias	2009-04-16 11:27:14.000000000 +0200
++++ net-snmp-5.4.1/agent/mibgroup/ip-mib/data_access/ipaddress_ioctl.c	2009-04-16 11:27:54.000000000 +0200
+@@ -212,6 +212,13 @@ _netsnmp_ioctl_ipaddress_container_load_
+             continue;
+         }
+ 
++        /* restore the interface name if we modifed it due to unaliasing
++         * above
++         */
++        if (entry->flags | NETSNMP_ACCESS_IPADDRESS_ISALIAS) {
++            memcpy(ifrp->ifr_name, extras->name, sizeof(extras->name));
++        }
++
+         /*
+          * get netmask
+          */

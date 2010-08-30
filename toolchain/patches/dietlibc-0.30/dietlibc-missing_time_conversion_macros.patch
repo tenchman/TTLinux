@@ -1,0 +1,22 @@
+diff -up dietlibc-0.30/include/sys/time.h.missing_time_conversion_macros dietlibc-0.30/include/sys/time.h
+--- dietlibc-0.30/include/sys/time.h.missing_time_conversion_macros	2010-08-06 09:26:14.199061861 +0200
++++ dietlibc-0.30/include/sys/time.h	2010-08-06 09:27:08.785061041 +0200
+@@ -6,6 +6,18 @@
+ 
+ __BEGIN_DECLS
+ 
++#ifdef _GNU_SOURCE
++/* Macros for converting between `struct timeval' and `struct timespec'.  */
++# define TIMEVAL_TO_TIMESPEC(tv, ts) {                                   \
++          (ts)->tv_sec = (tv)->tv_sec;                                    \
++          (ts)->tv_nsec = (tv)->tv_usec * 1000;                           \
++}
++# define TIMESPEC_TO_TIMEVAL(tv, ts) {                                   \
++          (tv)->tv_sec = (ts)->tv_sec;                                    \
++          (tv)->tv_usec = (ts)->tv_nsec / 1000;                           \
++}
++#endif
++
+ struct timespec {
+   time_t tv_sec;	/* seconds */
+   long tv_nsec;		/* nanoseconds */

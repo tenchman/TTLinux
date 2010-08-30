@@ -1,0 +1,12 @@
+diff -up libnl-1.1/include/netlink/netlink-compat.h.compat libnl-1.1/include/netlink/netlink-compat.h
+--- libnl-1.1/include/netlink/netlink-compat.h.compat	2010-08-06 14:31:10.162061782 +0200
++++ libnl-1.1/include/netlink/netlink-compat.h	2010-08-06 14:30:48.774062183 +0200
+@@ -12,7 +12,7 @@
+ #ifndef NETLINK_COMPAT_H_
+ #define NETLINK_COMPAT_H_
+ 
+-#if !defined _LINUX_SOCKET_H && !defined _BITS_SOCKADDR_H
++#if !defined _SYS_SOCKET_H && !defined _BITS_SOCKADDR_H
+ typedef unsigned short  sa_family_t;
+ #endif
+ 

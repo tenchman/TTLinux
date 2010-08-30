@@ -1,0 +1,5 @@
+distfiles/*
+packages/*
+dist/*
+.svn
+*~

@@ -1,0 +1,18 @@
+--- iproute2-ss050901/ip/iproute.c~	2005-09-01 14:21:50.000000000 -0500
++++ iproute2-ss050901/ip/iproute.c	2005-10-06 21:30:36.000000000 -0500
+@@ -216,13 +216,13 @@ int print_route(const struct sockaddr_nl
+ 		memset(&via, 0, sizeof(via));
+ 		via.family = r->rtm_family;
+ 		if (tb[RTA_GATEWAY])
+-			memcpy(&via.data, RTA_DATA(tb[RTA_GATEWAY]), host_len);
++			memcpy(&via.data, RTA_DATA(tb[RTA_GATEWAY]), host_len/8);
+ 	}
+ 	if (filter.rprefsrc.bitlen>0) {
+ 		memset(&prefsrc, 0, sizeof(prefsrc));
+ 		prefsrc.family = r->rtm_family;
+ 		if (tb[RTA_PREFSRC])
+-			memcpy(&prefsrc.data, RTA_DATA(tb[RTA_PREFSRC]), host_len);
++			memcpy(&prefsrc.data, RTA_DATA(tb[RTA_PREFSRC]), host_len/8);
+ 	}
+ 
+ 	if (filter.rdst.family && inet_addr_match(&dst, &filter.rdst, filter.rdst.bitlen))

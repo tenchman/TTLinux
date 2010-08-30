@@ -1,0 +1,30 @@
+--- netpbm-10.18/Makefile.common.manpath	2003-10-28 16:12:49.000000000 +0100
++++ netpbm-10.18/Makefile.common	2003-10-28 16:13:38.000000000 +0100
+@@ -320,21 +320,21 @@
+ 
+ MANUALS1 = $(BINARIES) $(SCRIPTS)
+ 
+-install.man1: $(PKGDIR)/man/man1 $(MANUALS1:%=%_installman1)
++install.man1: $(PKGDIR)/share//man/man1 $(MANUALS1:%=%_installman1)
+ 
+-install.man3: $(PKGDIR)/man/man3 $(MANUALS3:%=%_installman3)
++install.man3: $(PKGDIR)/share//man/man3 $(MANUALS3:%=%_installman3)
+ 
+-install.man5: $(PKGDIR)/man/man5 $(MANUALS5:%=%_installman5)
++install.man5: $(PKGDIR)/share//man/man5 $(MANUALS5:%=%_installman5)
+ 
+-%_installman1: $(PKGDIR)/man/man1
++%_installman1: $(PKGDIR)/share/man/man1
+ 	perl -w $(SRCDIR)/buildtools/makepointerman $(@:%_installman1=%) \
+           $(NETPBM_DOCURL) $< 1 $(MANPAGE_FORMAT) $(INSTALL_PERM_MAN)
+ 
+-%_installman3: $(PKGDIR)/man/man3
++%_installman3: $(PKGDIR)/share/man/man3
+ 	perl -w $(SRCDIR)/buildtools/makepointerman $(@:%_installman3=%) \
+           $(NETPBM_DOCURL) $< 3 $(MANPAGE_FORMAT) $(INSTALL_PERM_MAN)
+ 
+-%_installman5: $(PKGDIR)/man/man5
++%_installman5: $(PKGDIR)/share/man/man5
+ 	perl -w $(SRCDIR)/buildtools/makepointerman $(@:%_installman5=%) \
+           $(NETPBM_DOCURL) $< 5 $(MANPAGE_FORMAT) $(INSTALL_PERM_MAN)
+ 

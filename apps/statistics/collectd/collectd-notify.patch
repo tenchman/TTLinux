@@ -1,0 +1,242 @@
+diff -up collectd-4.5.0/src/notify_liss.c.notify collectd-4.5.0/src/notify_liss.c
+--- collectd-4.5.0/src/notify_liss.c.notify	2008-09-25 13:10:14.000000000 +0200
++++ collectd-4.5.0/src/notify_liss.c	2008-09-25 13:40:28.000000000 +0200
+@@ -0,0 +1,202 @@
++/**
++ * collectd - src/notify_liss.c
++ * 
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License as published by the
++ * Free Software Foundation; either version 2 of the License, or (at your
++ * option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful, but
++ * WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
++ *
++ * Authors:
++ *   matthias
++ **/
++
++#include "collectd.h"
++#include "common.h"
++#include "plugin.h"
++
++#define MAXSTRING               256
++
++int count = 0;
++
++static const char *config_keys[] =
++{
++  "SMTPServer",
++  "SMTPPort",
++  "SMTPUser",
++  "SMTPPassword",
++  "From",
++  "Recipient",
++  "Subject",
++  "Counter"
++};
++static int config_keys_num = STATIC_ARRAY_SIZE (config_keys);
++
++static char *recipient = NULL;
++static int smtp_port = 25;
++static char *smtp_host = NULL;
++static char *smtp_user = NULL;
++static char *smtp_password = NULL;
++static char *email_from = NULL;
++static char *email_subject = NULL;
++static int  errorcounter = 0;
++
++const char *maildir = "/var/spool/mailsend";
++const char *mailfileaddr = "/var/spool/mailsend/collectd.addr";
++const char *mailfilebody = "/var/spool/mailsend/collectd.body";
++const char *mailsend = "/usr/libexec/liss/mailsend";
++
++
++static int notify_email_init (void)
++{
++//  char server[MAXSTRING];
++struct stat statbuf;
++if ( (stat(maildir,&statbuf)) != 0)
++	return (-1);
++  return (0);
++} /* int notify_email_init */
++
++static int notify_email_shutdown (void)
++{
++  unlink(mailfileaddr);
++  unlink(mailfilebody);
++  return (0);
++} /* int notify_email_shutdown */
++
++static int notify_liss_config (const char *key, const char *value)
++{
++  if (strcasecmp (key, "Recipient") == 0)
++  {
++    sfree (recipient);
++    recipient = strdup (value);
++
++  }
++  else if (0 == strcasecmp (key, "Counter")) {
++    errorcounter = atoi(value);
++  }
++  else if (0 == strcasecmp (key, "SMTPServer")) {
++    sfree (smtp_host);
++    smtp_host = strdup (value);
++  }
++  else if (0 == strcasecmp (key, "SMTPPort")) {
++    int port_tmp = atoi (value);
++    if (port_tmp < 1 || port_tmp > 65535)
++    {
++      WARNING ("notify_email plugin: Invalid SMTP port: %i", port_tmp);
++      return (1);
++    }
++    smtp_port = port_tmp;
++  }
++  else if (0 == strcasecmp (key, "SMTPUser")) {
++    sfree (smtp_user);
++    smtp_user = strdup (value);
++  }
++  else if (0 == strcasecmp (key, "SMTPPassword")) {
++    sfree (smtp_password);
++    smtp_password = strdup (value);
++  }
++  else if (0 == strcasecmp (key, "From")) {
++    sfree (email_from);
++    email_from = strdup (value);
++  }
++  else if (0 == strcasecmp (key, "Subject")) {
++    sfree (email_subject);
++    email_subject = strdup (value);
++  }
++  else {
++    return -1;
++  }
++  return 0;
++} /* int notify_liss_config (const char *, const char *) */
++
++static int notify_email_notification (const notification_t *n)
++{
++
++  struct tm timestamp_tm;
++  char timestamp_str[64];
++
++  char severity[32];
++  char subject[MAXSTRING];
++FILE *file;
++  char buf[4096] = "";
++  int  buf_len = sizeof (buf);
++ 
++  if (n->severity != NOTIF_FAILURE)
++	  return (0);
++  count++;
++  if (count < errorcounter)
++	 return (0);
++  count = 0;
++  ssnprintf (severity, sizeof (severity), "%s",
++      (n->severity == NOTIF_FAILURE) ? "FAILURE"
++      : ((n->severity == NOTIF_WARNING) ? "WARNING"
++        : ((n->severity == NOTIF_OKAY) ? "OKAY" : "UNKNOWN")));
++
++  ssnprintf (subject, sizeof (subject),
++      email_subject,
++      severity, n->host);
++
++  localtime_r (&n->time, &timestamp_tm);
++  strftime (timestamp_str, sizeof (timestamp_str), "%Y-%m-%d %H:%M:%S",
++      &timestamp_tm);
++  timestamp_str[sizeof (timestamp_str) - 1] = '\0';
++
++  /* write mail body file */
++  ssnprintf (buf, buf_len,
++      "FROM: %s\r\n"
++      "TO: %s\r\n"
++      "DATE: %s\r\n"
++      "Subject: %s\r\n"
++      "\r\n"
++      "%s - %s@%s\r\n"
++      "\r\n"
++      "Message: %s"
++      "counts=%i/%i",
++      email_from,
++      recipient,
++      timestamp_str,
++      subject,
++      timestamp_str,
++      severity,
++      n->host,
++      n->message,
++      count,errorcounter);
++file = fopen(mailfilebody,"w+");
++fwrite(buf,1,sizeof(buf),file);
++fclose(file);
++memset(buf,0,buf_len);
++/* write mail addr file */
++ssnprintf (buf, buf_len,
++	"%s\n"
++	"H:%s\n"
++	"R:%s",
++	recipient,
++	smtp_host,
++	email_from);
++
++file = fopen(mailfileaddr,"w+");
++fwrite(buf,1,sizeof(buf),file);
++fclose(file);
++//execl(mailsend, "mailsend", NULL, NULL, NULL);
++  return (0);
++} /* int notify_email_notification */
++
++void module_register (void)
++{
++  plugin_register_init ("notify_liss", notify_email_init);
++  plugin_register_shutdown ("notify_liss", notify_email_shutdown);
++  plugin_register_config ("notify_liss", notify_liss_config,
++      config_keys, config_keys_num);
++  plugin_register_notification ("notify_liss", notify_email_notification);
++} /* void module_register (void) */
++
++/* vim: set sw=2 sts=2 ts=8 et : */
+diff -up collectd-4.5.0/src/Makefile.am.notify collectd-4.5.0/src/Makefile.am
+--- collectd-4.5.0/src/Makefile.am.notify	2008-09-25 13:09:40.000000000 +0200
++++ collectd-4.5.0/src/Makefile.am	2008-09-25 13:39:54.000000000 +0200
+@@ -779,6 +779,14 @@ collectd_LDADD += "-dlopen" xmms.la
+ collectd_DEPENDENCIES += xmms.la
+ endif
+ 
++if BUILD_PLUGIN_NOTIFY_LISS
++pkglib_LTLIBRARIES += notify_liss.la
++notify_liss_la_SOURCES = notify_liss.c
++notify_liss_la_LDFLAGS = -module -avoid-version
++collectd_LDADD += "-dlopen" notify_liss.la
++collectd_DEPENDENCIES += notify_liss.la
++endif
++
+ 
+ dist_man_MANS = collectd.1 collectd-nagios.1 collectd.conf.5 \
+ 		collectd-email.5 collectd-exec.5 collectd-perl.5 \
+diff -up collectd-4.5.0/configure.in.notify collectd-4.5.0/configure.in
+--- collectd-4.5.0/configure.in.notify	2008-09-25 13:09:16.000000000 +0200
++++ collectd-4.5.0/configure.in	2008-09-25 13:39:26.000000000 +0200
+@@ -2740,6 +2740,7 @@ AC_PLUGIN([vmem],        [$plugin_vmem],
+ AC_PLUGIN([vserver],     [$plugin_vserver],    [Linux VServer statistics])
+ AC_PLUGIN([wireless],    [$plugin_wireless],   [Wireless statistics])
+ AC_PLUGIN([xmms],        [$with_libxmms],      [XMMS statistics])
++AC_PLUGIN([notify_liss], [yes],                [LiSS email notify])
+ 
+ dnl ip_vs.h
+ if test "x$ac_system" = "xLinux" \
+@@ -2908,5 +2909,6 @@ Configuration:
+     vserver . . . . . . . $enable_vserver
+     wireless  . . . . . . $enable_wireless
+     xmms  . . . . . . . . $enable_xmms
++    notitfy_liss. . . . . $enable_notify_liss
+ 
+ EOF

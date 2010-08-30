@@ -1,0 +1,23 @@
+diff -up linux-2.6.22.18/net/xfrm/xfrm_user.c.zero_length_keys linux-2.6.22.18/net/xfrm/xfrm_user.c
+--- linux-2.6.22.18/net/xfrm/xfrm_user.c.zero_length_keys	2009-02-23 21:45:02.000000000 +0100
++++ linux-2.6.22.18/net/xfrm/xfrm_user.c	2009-02-23 21:45:43.000000000 +0100
+@@ -54,19 +54,8 @@ static int verify_one_alg(struct rtattr 
+ 
+ 	switch (type) {
+ 	case XFRMA_ALG_AUTH:
+-		if (!algp->alg_key_len &&
+-		    strcmp(algp->alg_name, "digest_null") != 0)
+-			return -EINVAL;
+-		break;
+-
+ 	case XFRMA_ALG_CRYPT:
+-		if (!algp->alg_key_len &&
+-		    strcmp(algp->alg_name, "cipher_null") != 0)
+-			return -EINVAL;
+-		break;
+-
+ 	case XFRMA_ALG_COMP:
+-		/* Zero length keys are legal.  */
+ 		break;
+ 
+ 	default:

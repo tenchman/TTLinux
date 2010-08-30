@@ -1,0 +1,10 @@
+--- coreutils-5.94/Makefile.am.doc	2006-04-24 17:40:03.000000000 +0200
++++ coreutils-5.94/Makefile.am	2006-04-24 17:40:13.000000000 +0200
+@@ -1,6 +1,6 @@
+ ## Process this file with automake to produce Makefile.in -*-Makefile-*-
+ 
+-SUBDIRS = lib src doc man po tests
++SUBDIRS = lib src
+ EXTRA_DIST = Makefile.cfg Makefile.maint GNUmakefile \
+   .kludge-stamp .prev-version THANKS-to-translators THANKStt.in \
+   .x-sc_space_tab .x-sc_sun_os_names \

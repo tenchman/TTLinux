@@ -1,0 +1,16 @@
+There is a misplaced label in libcruft/res_query.c which prevents dietlibc
+from building without WANT_PLUGPLAY_DNS defined. The following patch will
+fix this.
+
+--- dietlibc-cvs/libcruft/res_query.c.nxdomain	2006-04-27 11:03:24.000000000 +0200
++++ dietlibc-cvs/libcruft/res_query.c	2006-04-27 11:03:35.000000000 +0200
+@@ -210,8 +210,8 @@
+ 	    } else
+ 	      continue;
+ /* ignore NXDOMAIN from the multicast socket */
+-nxdomain:
+ #endif
++nxdomain:
+ 	    h_errno=HOST_NOT_FOUND;
+ 	    return -1;
+ 	  }		/* error */

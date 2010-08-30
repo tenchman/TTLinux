@@ -1,0 +1,52 @@
+--- udev-106/Makefile.diet	Sat Mar  3 18:42:09 2007
++++ udev-106/Makefile	Tue Apr 17 14:04:18 2007
+@@ -119,7 +119,7 @@
+ 		  -Wpointer-arith -Wcast-align -Wsign-compare -Wmissing-prototypes
+ CFLAGS		+= $(WARNINGS)
+ 
+-LDFLAGS = -Wl,-warn-common
++LDFLAGS = -Wl,-warn-common -lcompat
+ 
+ OPTFLAGS = -Os
+ CFLAGS += $(OPTFLAGS)
+@@ -184,7 +184,7 @@
+ # "Static Pattern Rule" to build all programs
+ $(PROGRAMS): %: $(HEADERS) $(GEN_HEADERS) $(LIBUDEV) %.o
+ 	$(E) "  LD      " $@
+-	$(Q) $(LD) $(LDFLAGS) $@.o -o $@ $(LIBUDEV) $(LIB_OBJS)
++	$(Q) $(LD) $@.o -o $@ $(LIBUDEV) $(LIB_OBJS) $(LDFLAGS)
+ 
+ $(LIBUDEV): $(HEADERS) $(GEN_HEADERS) $(UDEV_OBJS)
+ 	$(Q) rm -f $@
+@@ -253,6 +253,7 @@
+ 	$(INSTALL_DATA) -D udevtrigger.8 $(DESTDIR)$(mandir)/man8/udevtrigger.8
+ 	$(INSTALL_DATA) -D udevsettle.8 $(DESTDIR)$(mandir)/man8/udevsettle.8
+ 	$(INSTALL_DATA) -D udevmonitor.8 $(DESTDIR)$(mandir)/man8/udevmonitor.8
++	$(INSTALL_DATA) -D udevstart.8 $(DESTDIR)$(mandir)/man8/udevstart.8
+ 	- ln -f -s udevd.8 $(DESTDIR)$(mandir)/man8/udevcontrol.8
+ 	@extras="$(EXTRAS)"; for target in $$extras; do \
+ 		$(MAKE) -C $$target $@ || exit 1; \
+@@ -268,6 +269,7 @@
+ 	- rm -f $(DESTDIR)$(mandir)/man8/udevsettle.8
+ 	- rm -f $(DESTDIR)$(mandir)/man8/udevmonitor.8
+ 	- rm -f $(DESTDIR)$(mandir)/man8/udevcontrol.8
++	- rm -f $(DESTDIR)$(mandir)/man8/udevstart.8
+ 	@ extras="$(EXTRAS)"; for target in $$extras; do \
+ 		$(MAKE) -C $$target $@ || exit 1; \
+ 	done;
+@@ -279,6 +281,7 @@
+ 	$(INSTALL_PROGRAM) -D udevtrigger $(DESTDIR)$(sbindir)/udevtrigger
+ 	$(INSTALL_PROGRAM) -D udevsettle $(DESTDIR)$(sbindir)/udevsettle
+ 	$(INSTALL_PROGRAM) -D udevcontrol $(DESTDIR)$(sbindir)/udevcontrol
++	$(INSTALL_PROGRAM) -D udevstart $(DESTDIR)$(sbindir)/udevstart
+ 	$(INSTALL_PROGRAM) -D udevmonitor $(DESTDIR)$(usrsbindir)/udevmonitor
+ 	$(INSTALL_PROGRAM) -D udevinfo $(DESTDIR)$(usrbindir)/udevinfo
+ 	$(INSTALL_PROGRAM) -D udevtest $(DESTDIR)$(usrbindir)/udevtest
+@@ -297,6 +300,7 @@
+ 	- rm -f $(DESTDIR)$(sbindir)/udevtrigger
+ 	- rm -f $(DESTDIR)$(sbindir)/udevsettle
+ 	- rm -f $(DESTDIR)$(sbindir)/udevcontrol
++	- rm -f $(DESTDIR)$(sbindir)/udevstart
+ 	- rm -f $(DESTDIR)$(usrsbindir)/udevmonitor
+ 	- rm -f $(DESTDIR)$(usrbindir)/udevinfo
+ 	- rm -f $(DESTDIR)$(usrbindir)/udevtest

@@ -1,0 +1,12 @@
+# vim:set syntax=kconfig:
+menu "Toolchain"
+#  source "dietlibc/Config.in"
+  source "development/gcc/Config.in"
+  source "development/gcc4.1/Config.in"
+  source "development/automake/Config.in"
+  source "development/binutils/Config.in"
+  source "development/bison/Config.in"
+  source "development/flex/Config.in"
+  source "development/libtool/Config.in"
+#  source "development/makedepend/Config.in"
+endmenu

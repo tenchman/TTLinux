@@ -1,0 +1,53 @@
+Try to print if the user hits PrtSc.  Careful, mkdtemp() is OpenBSD and
+glibc 2.2+ only AFAIK, so we have to implement one for older systems.
+How the heck do we get Imake to tell us *that*?
+
+--- mgetty-1.1.25/frontends/X11/viewfax-2.5/viewfax.c	Tue Mar 13 14:20:33 2001
++++ mgetty-1.1.25/frontends/X11/viewfax-2.5/viewfax.c	Tue Mar 13 14:25:02 2001
+@@ -125,6 +125,29 @@
+ "\t-2\traw files are g3-2d\n"
+ "\t-4\traw files are g4\n";
+
++#ifdef NEED_MKDTEMP
++#include <errno.h>
++static int
++mkdtemp(char *template)
++{
++    char temp[strlen(template) + 1];
++    int i, old_errno = errno;
++    do {
++        strcpy(temp, template);
++        if(mktemp(temp)) {
++            i = mkdir(temp, 0700);
++        } else {
++            i = -1;
++        }
++    } while ((i == -1) && (errno == EEXIST));
++    if(i == 0) {
++        strcpy(template, temp);
++        errno = old_errno;
++    }
++    return i;
++}
++#endif
++
+ int
+ main(int argc, char **argv)
+ {
+@@ -758,6 +781,16 @@
+ 			      0, 0, PaneWidth, PaneHeight);
+ 		    XDefineCursor(Disp, Win, ReadyCursor);
+ 		    break;
++		case XK_Print:
++		   {char cmd[256], tmpdir[256] = "/tmp/viewfaxXXXXXX";
++		    struct pagenode *p = firstpage;
++		    if(mkdtemp(tmpdir) != -1) {
++		        snprintf(cmd, sizeof(cmd), "tiffsplit %s %s/viewfax.; "
++			"tiff2ps %s/viewfax.* | lpr; "
++			"rm -fr %s", thispage->pathname, tmpdir, tmpdir,
++			tmpdir);
++		    system(cmd);}}
++		    break;
+ 		case XK_z:
+ 		    if (Event.xkey.state & ShiftMask)
+ 			goto Zoomout;

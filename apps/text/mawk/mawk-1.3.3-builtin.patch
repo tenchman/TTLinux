@@ -1,0 +1,11 @@
+--- mawk-1.3.3/configure.builtin	2004-04-24 12:55:42.950359056 +0200
++++ mawk-1.3.3/configure	2004-04-24 12:53:25.020327608 +0200
+@@ -529,7 +529,7 @@
+ 
+ int main() { return 0; }
+ int t() {
+-log()
++log(1.1)
+ ; return 0; }
+ EOF
+ if eval $ac_link; then

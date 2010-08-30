@@ -1,0 +1,128 @@
+--- mm-1.3.0/mm_alloc.c.diet	2003-06-13 18:40:25.000000000 +0200
++++ mm-1.3.0/mm_alloc.c	2003-06-13 18:40:13.000000000 +0200
+@@ -134,6 +134,8 @@
+ /*
+  * Display debugging information
+  */
++
++#ifndef WITHOUT_INFO
+ void mm_display_info(MM *mm)
+ {
+     mem_chunk *mc;
+@@ -177,6 +179,7 @@
+     mm_core_unlock((void *)mm);
+     return;
+ }
++#endif
+ 
+ /*
+  * Insert a chunk to the list of free chunks. Algorithm used is:
+--- mm-1.3.0/dietit.sh.diet	2003-06-14 13:14:02.000000000 +0200
++++ mm-1.3.0/dietit.sh	2003-06-14 20:46:41.000000000 +0200
+@@ -0,0 +1,18 @@
++#!/bin/ash
++
++[ -f Makefile ] && make clean
++
++CC='diet-dyn -Os gcc'
++CPPFLAGS='-nostdinc'
++CFLAGS='-nostdinc -DWITHOUT_INFO'
++LDFLAGS='-nostdlib'
++export CC CPPFLAGS CFLAGS LDFLAGS
++
++./configure --prefix=/opt/diet --enable-shared --enable-static
++make
++
++#CC='diet-dyn gcc'
++#export CC
++
++#./configure --prefix=/opt/diet --disable-static
++#make
+--- mm-1.3.0/mm_core.c.diet	2003-06-14 20:13:55.000000000 +0200
++++ mm-1.3.0/mm_core.c	2003-06-14 20:20:41.000000000 +0200
+@@ -72,6 +72,17 @@
+ static size_t mm_core_mapoffset = 1024*1024*1; /* we share with other apps */
+ #endif
+ 
++static unsigned int fmt_ulong(char *dest,unsigned long i) {
++  register unsigned long len,tmp,len2;
++  /* first count the number of bytes needed */
++  for (len=1, tmp=i; tmp>9; ++len) tmp/=10;
++  if (dest)
++    for (tmp=i, dest+=len, len2=len+1; --len2; tmp/=10)
++      *--dest = (tmp%10)+'0';
++  return len;
++}
++
++
+ static void mm_core_init(void)
+ {
+     static int initialized = FALSE;
+@@ -225,7 +236,8 @@
+         return NULL;
+     }
+     if (file == NULL) {
+-        sprintf(filename, MM_CORE_DEFAULT_FILE, (int)getpid());
++        strcpy(filename, "/tmp/mm.core.");
++	fmt_ulong(filename + 13, (unsigned long)getpid());
+         file = filename;
+     }
+ 
+@@ -233,11 +245,13 @@
+     size = mm_core_align2page(usersize+SIZEOF_mem_core);
+ 
+ #if defined(MM_SHMT_MMPOSX) || defined(MM_SHMT_MMFILE)
+-    sprintf(shmfilename, "%s.mem", file);
++    strcpy(shmfilename, file);
++    strcat(shmfilename, ".mem");
+     fnmem = shmfilename;
+ #endif
+ #if defined(MM_SEMT_FLOCK) || defined(MM_SEMT_FCNTL)
+-    sprintf(semfilename, "%s.sem", file);
++    strcpy(semfilename, file);
++    strcat(semfilename, ".sem");
+     fnsem = semfilename;
+ #endif
+ 
+--- mm-1.3.0/mm_test.c.diet	2003-06-14 21:59:42.000000000 +0200
++++ mm-1.3.0/mm_test.c	2003-06-14 13:26:14.000000000 +0200
+@@ -200,7 +200,9 @@
+         size = 1024*1024*1;
+     mm = mm_create(size, NULL);
+     FAILED_IF(mm == NULL)
++#ifndef WITHOUT_INFO
+     mm_display_info(mm);
++#endif
+     s = mm_available(mm);
+     FAILED_IF(s == 0);
+     fprintf(stderr, "actually available bytes = %d\n", s);
+@@ -225,8 +227,9 @@
+         FAILED_IF(cp[i] == NULL)
+         memset(cp[i], 0xF5, (i+1)*(i+1));
+     }
++#ifndef WITHOUT_INFO
+     mm_display_info(mm);
+-
++#endif
+     fprintf(stderr, "\n=== Testing Defragmentation ===\n");
+ 
+     fprintf(stderr, "Fragmenting memory area by freeing some selected areas\n");
+@@ -237,14 +240,16 @@
+             mm_free(mm, cp[i]);
+         cp[i] = NULL;
+     }
++#ifndef WITHOUT_INFO
+     mm_display_info(mm);
+-
++#endif
+     fprintf(stderr, "Freeing all areas\n");
+     for (i = 0; i < 1024; i++) {
+         mm_free(mm, cp[i]);
+     }
++#ifndef WITHOUT_INFO
+     mm_display_info(mm);
+-
++#endif
+     fprintf(stderr, "Checking for memory leaks\n");
+     s2 = mm_available(mm);
+     if (s != s2) {

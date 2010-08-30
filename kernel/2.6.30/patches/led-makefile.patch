@@ -1,0 +1,16 @@
+--- linux-2.6.28/drivers/leds/Makefile.led	2009-02-09 11:37:16.000000000 +0100
++++ linux-2.6.28/drivers/leds/Makefile	2009-02-09 11:37:38.000000000 +0100
+@@ -23,8 +23,12 @@ obj-$(CONFIG_LEDS_FSG)			+= leds-fsg.o
+ obj-$(CONFIG_LEDS_PCA955X)		+= leds-pca955x.o
+ obj-$(CONFIG_LEDS_DA903X)		+= leds-da903x.o
+ obj-$(CONFIG_LEDS_HP_DISK)		+= leds-hp-disk.o
++obj-$(LEDS_W83627DHG)			+= leds-w83627dhg-gpio.c
++obj-$(LEDS_W83627HF)			+= leds-w83627hf-gpio.c
++obj-$(LEDS_W83627THF)			+= leds-w83627thf-gpio.c
+ 
+-# LED Triggers
++
++## LED Triggers
+ obj-$(CONFIG_LEDS_TRIGGER_TIMER)	+= ledtrig-timer.o
+ obj-$(CONFIG_LEDS_TRIGGER_IDE_DISK)	+= ledtrig-ide-disk.o
+ obj-$(CONFIG_LEDS_TRIGGER_HEARTBEAT)	+= ledtrig-heartbeat.o

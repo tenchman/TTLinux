@@ -1,0 +1,336 @@
+--- source/auth/auth_domain.c.principal	2008-10-29 11:05:48.000000000 +0100
++++ source/auth/auth_domain.c	2008-10-29 11:07:03.000000000 +0100
+@@ -117,7 +117,7 @@ machine %s. Error was : %s.\n", dc_name,
+ 
+ 	if (!lp_client_schannel()) {
+ 		/* We need to set up a creds chain on an unauthenticated netlogon pipe. */
+-		uint32 neg_flags = NETLOGON_NEG_AUTH2_FLAGS;
++		uint32 neg_flags = NETLOGON_NEG_SELECT_AUTH2_FLAGS;
+ 		uint32 sec_chan_type = 0;
+ 		unsigned char machine_pwd[16];
+ 
+--- source/include/rpc_dce.h.principal	2008-10-29 11:01:59.000000000 +0100
++++ source/include/rpc_dce.h	2008-10-29 11:02:49.000000000 +0100
+@@ -111,6 +111,7 @@ enum RPC_PKT_TYPE {
+  
+ /* these are the flags that ADS clients use */
+ #define NETLOGON_NEG_AUTH2_ADS_FLAGS (0x200fbffb | NETLOGON_NEG_ARCFOUR | NETLOGON_NEG_128BIT | NETLOGON_NEG_SCHANNEL)
++#define NETLOGON_NEG_SELECT_AUTH2_FLAGS ((lp_security() == SEC_ADS) ? NETLOGON_NEG_AUTH2_ADS_FLAGS : NETLOGON_NEG_AUTH2_FLAGS)
+ 
+ enum schannel_direction {
+ 	SENDER_IS_INITIATOR,
+--- source/libads/sasl.c.principal	2007-02-04 19:59:24.000000000 +0100
++++ source/libads/sasl.c	2008-10-29 08:47:32.000000000 +0100
+@@ -22,6 +22,65 @@
+ 
+ #ifdef HAVE_LDAP
+ 
++#define ADS_IGNORE_PRINCIPAL "not_defined_in_RFC4178@please_ignore"
++
++static ADS_STATUS ads_guess_service_principal(ADS_STRUCT *ads,
++				       char **returned_principal)
++{
++	char *princ = NULL;
++
++	if (ads->server.realm && ads->server.ldap_server) {
++		char *server, *server_realm;
++
++		server = SMB_STRDUP(ads->server.ldap_server);
++		server_realm = SMB_STRDUP(ads->server.realm);
++
++		if (!server || !server_realm) {
++			return ADS_ERROR(LDAP_NO_MEMORY);
++		}
++
++		strlower_m(server);
++		strupper_m(server_realm);
++		asprintf(&princ, "ldap/%s@%s", server, server_realm);
++
++		SAFE_FREE(server);
++		SAFE_FREE(server_realm);
++
++		if (!princ) {
++			return ADS_ERROR(LDAP_NO_MEMORY);
++		}
++	} else if (ads->config.realm && ads->config.ldap_server_name) {
++		char *server, *server_realm;
++
++		server = SMB_STRDUP(ads->config.ldap_server_name);
++		server_realm = SMB_STRDUP(ads->config.realm);
++
++		if (!server || !server_realm) {
++			return ADS_ERROR(LDAP_NO_MEMORY);
++		}
++
++		strlower_m(server);
++		strupper_m(server_realm);
++		asprintf(&princ, "ldap/%s@%s", server, server_realm);
++
++		SAFE_FREE(server);
++		SAFE_FREE(server_realm);
++
++		if (!princ) {
++			return ADS_ERROR(LDAP_NO_MEMORY);
++		}
++	}
++
++	if (!princ) {
++		return ADS_ERROR(LDAP_PARAM_ERROR);
++	}
++
++	*returned_principal = princ;
++
++	return ADS_SUCCESS;
++}
++
++
+ /* 
+    perform a LDAP/SASL/SPNEGO/NTLMSSP bind (just how many layers can
+    we fit on one socket??)
+@@ -221,7 +280,19 @@ static ADS_STATUS ads_sasl_spnego_bind(A
+ #ifdef HAVE_KRB5
+ 	if (!(ads->auth.flags & ADS_AUTH_DISABLE_KERBEROS) &&
+ 	    got_kerberos_mechanism) {
++		
++		if (strequal(principal, ADS_IGNORE_PRINCIPAL)) {
++			SAFE_FREE(principal);
++			status = ads_guess_service_principal(ads, &principal);
++
++			if (!ADS_ERR_OK(status)) {
++				return status;
++			}
++			DEBUG(3,("ads_sasl_spnego_bind: guessed server principal name =%s\n", principal));
++		}
++		
+ 		status = ads_sasl_spnego_krb5_bind(ads, principal);
++		
+ 		if (ADS_ERR_OK(status)) {
+ 			SAFE_FREE(principal);
+ 			return status;
+--- source/libsmb/cliconnect.c.principal	2007-02-04 19:59:20.000000000 +0100
++++ source/libsmb/cliconnect.c	2008-10-29 08:47:32.000000000 +0100
+@@ -21,6 +21,9 @@
+ 
+ #include "includes.h"
+ 
++#define ADS_IGNORE_PRINCIPAL "not_defined_in_RFC4178@please_ignore"
++static const char *star_smbserver_name = "*SMBSERVER";
++
+ extern pstring user_socket_options;
+ 
+ static const struct {
+@@ -39,6 +42,57 @@ static const struct {
+ 	{-1,NULL}
+ };
+ 
++static char *kerberos_get_default_realm_from_ccache( void )
++{
++	char *realm = NULL;
++	krb5_context ctx = NULL;
++	krb5_ccache cc = NULL;
++	krb5_principal princ = NULL;
++
++	initialize_krb5_error_table();
++	if (krb5_init_context(&ctx)) {
++		return NULL;
++	}
++
++	DEBUG(5,("kerberos_get_default_realm_from_ccache: "
++		"Trying to read krb5 cache: %s\n",
++		krb5_cc_default_name(ctx)));
++	if (krb5_cc_default(ctx, &cc)) {
++		DEBUG(0,("kerberos_get_default_realm_from_ccache: "
++			"failed to read default cache\n"));
++		goto out;
++	}
++	if (krb5_cc_get_principal(ctx, cc, &princ)) {
++		DEBUG(0,("kerberos_get_default_realm_from_ccache: "
++			"failed to get default principal\n"));
++		goto out;
++	}
++
++#if defined(HAVE_KRB5_PRINCIPAL_GET_REALM)
++	realm = SMB_STRDUP(krb5_principal_get_realm(ctx, princ));
++#elif defined(HAVE_KRB5_PRINC_REALM)
++	{
++		krb5_data *realm_data = krb5_princ_realm(ctx, princ);
++		realm = SMB_STRNDUP(realm_data->data, realm_data->length);
++	}
++#endif
++
++  out:
++
++	if (princ) {
++		krb5_free_principal(ctx, princ);
++	}
++	if (cc) {
++		krb5_cc_close(ctx, cc);
++	}
++	if (ctx) {
++		krb5_free_context(ctx);
++	}
++
++	return realm;
++}
++
++
+ /**
+  * Set the user session key for a connection
+  * @param cli The cli structure to add it too
+@@ -717,6 +771,7 @@ ADS_STATUS cli_session_setup_spnego(stru
+ 	int i;
+ 	BOOL got_kerberos_mechanism = False;
+ 	DATA_BLOB blob;
++	char *dest_realm = NULL;
+ 
+ 	DEBUG(3,("Doing spnego session setup (blob length=%lu)\n", (unsigned long)cli->secblob.length));
+ 
+@@ -789,10 +844,61 @@ ADS_STATUS cli_session_setup_spnego(stru
+ 			}
+ 		}
+ 		
+-		rc = cli_session_setup_kerberos(cli, principal, domain);
+-		if (ADS_ERR_OK(rc) || !cli->fallback_after_kerberos) {
++		/* If we get a bad principal, try to guess it if
++		   we have a valid host NetBIOS name.
++		 */
++		if (strequal(principal, ADS_IGNORE_PRINCIPAL)) {
+ 			SAFE_FREE(principal);
+-			return rc;
++		}
++		if (principal == NULL &&
++			!is_ipaddress(cli->desthost) &&
++			!strequal(star_smbserver_name,
++				cli->desthost)) {
++			char *realm = NULL;
++			char *machine = NULL;
++			char *host = NULL;
++			DEBUG(3,("cli_session_setup_spnego: got a "
++				"bad server principal, trying to guess ...\n"));
++
++			host = strchr_m(cli->desthost, '.');
++			if (host) {
++				machine = SMB_STRNDUP(cli->desthost,
++					host - cli->desthost);
++			} else {
++				machine = SMB_STRDUP(cli->desthost);
++			}
++			if (machine == NULL) {
++				return ADS_ERROR_NT(NT_STATUS_NO_MEMORY);
++			}
++
++			if (dest_realm) {
++				realm = SMB_STRDUP(dest_realm);
++				strupper_m(realm);
++			} else {
++				realm = kerberos_get_default_realm_from_ccache();
++			}
++			if (realm && *realm) {
++				if (asprintf(&principal, "%s$@%s",
++						machine, realm) < 0) {
++					SAFE_FREE(machine);
++					SAFE_FREE(realm);
++					return ADS_ERROR_NT(NT_STATUS_NO_MEMORY);
++				}
++				DEBUG(3,("cli_session_setup_spnego: guessed "
++					"server principal=%s\n",
++					principal ? principal : "<null>"));
++			}
++			SAFE_FREE(machine);
++			SAFE_FREE(realm);
++		}
++
++		if (principal) {
++			rc = cli_session_setup_kerberos(cli, principal,
++				dest_realm);
++			if (ADS_ERR_OK(rc) || !cli->fallback_after_kerberos) {
++				SAFE_FREE(principal);
++				return rc;
++			}
+ 		}
+ 	}
+ #endif
+--- source/libsmb/trusts_util.c.principal	2008-10-29 11:07:45.000000000 +0100
++++ source/libsmb/trusts_util.c	2008-10-29 11:08:19.000000000 +0100
+@@ -41,7 +41,7 @@ static NTSTATUS just_change_the_password
+ 	   already have valid creds. If not we must set them up. */
+ 
+ 	if (cli->auth.auth_type != PIPE_AUTH_TYPE_SCHANNEL) {
+-		uint32 neg_flags = NETLOGON_NEG_AUTH2_FLAGS;
++		uint32 neg_flags = NETLOGON_NEG_SELECT_AUTH2_FLAGS;
+ 
+ 		result = rpccli_netlogon_setup_creds(cli, 
+ 					cli->cli->desthost, /* server name */
+--- source/nsswitch/winbindd_cm.c.principal	2008-10-29 11:14:05.000000000 +0100
++++ source/nsswitch/winbindd_cm.c	2008-10-29 11:14:30.000000000 +0100
+@@ -1355,7 +1355,7 @@ NTSTATUS cm_connect_netlogon(struct winb
+ 	struct winbindd_cm_conn *conn;
+ 	NTSTATUS result;
+ 
+-	uint32 neg_flags = NETLOGON_NEG_AUTH2_FLAGS;
++	uint32 neg_flags = NETLOGON_NEG_SELECT_AUTH2_FLAGS;
+ 	uint8  mach_pwd[16];
+ 	uint32  sec_chan_type;
+ 	const char *account_name;
+--- source/rpc_client/cli_pipe.c.principal	2008-10-29 11:03:55.000000000 +0100
++++ source/rpc_client/cli_pipe.c	2008-10-29 11:09:29.000000000 +0100
+@@ -2628,7 +2628,7 @@ struct rpc_pipe_client *cli_rpc_pipe_ope
+ 						const char *password,
+ 						NTSTATUS *perr)
+ {
+-	uint32 neg_flags = NETLOGON_NEG_AUTH2_FLAGS|NETLOGON_NEG_SCHANNEL;
++	uint32 neg_flags = NETLOGON_NEG_SELECT_AUTH2_FLAGS|NETLOGON_NEG_SCHANNEL;
+ 	struct rpc_pipe_client *netlogon_pipe = NULL;
+ 	struct rpc_pipe_client *result = NULL;
+ 
+@@ -2662,7 +2662,7 @@ struct rpc_pipe_client *cli_rpc_pipe_ope
+                                                 const char *domain,
+ 						NTSTATUS *perr)
+ {
+-	uint32 neg_flags = NETLOGON_NEG_AUTH2_FLAGS|NETLOGON_NEG_SCHANNEL;
++	uint32 neg_flags = NETLOGON_NEG_SELECT_AUTH2_FLAGS|NETLOGON_NEG_SCHANNEL;
+ 	struct rpc_pipe_client *netlogon_pipe = NULL;
+ 	struct rpc_pipe_client *result = NULL;
+ 
+--- source/rpcclient/rpcclient.c.principal	2008-10-29 11:09:46.000000000 +0100
++++ source/rpcclient/rpcclient.c	2008-10-29 11:10:18.000000000 +0100
+@@ -570,7 +570,7 @@ static NTSTATUS do_cmd(struct cli_state 
+ 		}
+ 
+ 		if (cmd_entry->pipe_idx == PI_NETLOGON) {
+-			uint32 neg_flags = NETLOGON_NEG_AUTH2_FLAGS;
++			uint32 neg_flags = NETLOGON_NEG_SELECT_AUTH2_FLAGS;
+ 			uint32 sec_channel_type;
+ 			uchar trust_password[16];
+ 	
+--- source/utils/net_rpc_join.c.principal	2008-10-29 11:10:44.000000000 +0100
++++ source/utils/net_rpc_join.c	2008-10-29 11:11:43.000000000 +0100
+@@ -43,7 +43,7 @@
+  **/
+ int net_rpc_join_ok(const char *domain, const char *server, struct in_addr *ip )
+ {
+-	uint32 neg_flags = NETLOGON_NEG_AUTH2_FLAGS|NETLOGON_NEG_SCHANNEL;
++	uint32 neg_flags = NETLOGON_NEG_SELECT_AUTH2_FLAGS|NETLOGON_NEG_SCHANNEL;
+ 	struct cli_state *cli = NULL;
+ 	struct rpc_pipe_client *pipe_hnd = NULL;
+ 	struct rpc_pipe_client *netlogon_pipe = NULL;
+@@ -114,7 +114,7 @@ int net_rpc_join_newstyle(int argc, cons
+ 	struct cli_state *cli;
+ 	TALLOC_CTX *mem_ctx;
+         uint32 acb_info = ACB_WSTRUST;
+-	uint32 neg_flags = NETLOGON_NEG_AUTH2_FLAGS|(lp_client_schannel() ? NETLOGON_NEG_SCHANNEL : 0);
++	uint32 neg_flags = NETLOGON_NEG_SELECT_AUTH2_FLAGS|(lp_client_schannel() ? NETLOGON_NEG_SCHANNEL : 0);
+ 	uint32 sec_channel_type;
+ 	struct rpc_pipe_client *pipe_hnd = NULL;
+ 
+--- source/utils/net_rpc_samsync.c.principal	2008-10-29 11:12:10.000000000 +0100
++++ source/utils/net_rpc_samsync.c	2008-10-29 11:13:00.000000000 +0100
+@@ -269,7 +269,7 @@ NTSTATUS rpc_samdump_internals(const DOM
+ 
+ 	NTSTATUS nt_status = NT_STATUS_UNSUCCESSFUL;
+ 	uchar trust_password[16];
+-	uint32 neg_flags = NETLOGON_NEG_AUTH2_FLAGS;
++	uint32 neg_flags = NETLOGON_NEG_SELECT_AUTH2_FLAGS;
+ 	uint32 sec_channel_type = 0;
+ 
+ 	if (!secrets_fetch_trust_account_password(domain_name,

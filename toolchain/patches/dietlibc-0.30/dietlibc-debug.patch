@@ -1,0 +1,264 @@
+--- dietlibc-0.30/libdl/_dl_relocate.c.debug	2005-05-13 14:14:06.000000000 +0200
++++ dietlibc-0.30/libdl/_dl_relocate.c	2006-11-03 21:38:11.000000000 +0100
+@@ -108,7 +116,8 @@
+ #endif
+ 
+ #ifdef DEBUG
+-  pf(__FUNCTION__); pf(": @ "); ph((unsigned long)loc); pf(" val "); ph(*(unsigned long*)loc); pf("\n");
++  pf(__FUNCTION__); pf(": @ "); ph((unsigned long)loc); pf(" val "); ph(*(unsigned long*)loc);
++  pf(" type "); ph((unsigned long)typ); pf("\n");
+ #endif
+   return ret;
+ }
+--- dietlibc-0.30/libdl/_dl_main.c.debug	2005-10-07 21:33:34.000000000 +0200
++++ dietlibc-0.30/libdl/_dl_main.c	2006-11-03 21:34:00.000000000 +0100
+@@ -639,8 +639,8 @@
+ }
+ 
+ /* basic debug output functions */
+-static void pf(const char*s) { _dl_sys_write(2,(void*)s,_dl_lib_strlen(s)); }
+-static void ph(unsigned long l) {
++void pf(const char*s) { _dl_sys_write(2,(void*)s,_dl_lib_strlen(s)); }
++void ph(unsigned long l) {
+   const int max=(sizeof(unsigned long)<<1);
+   unsigned char buf[16];
+   int i;
+--- dietlibc-0.30/libdl/_dl_rel.c.debug	2005-05-13 15:47:52.000000000 +0200
++++ dietlibc-0.30/libdl/_dl_rel.c	2006-11-03 21:34:00.000000000 +0100
+@@ -4,7 +4,7 @@
+ 
+ static void exit_now(void) {
+ #ifdef DEBUG
+-  pf(__func__": symbol not found\n");
++  pf(__func__); pf(": symbol not found\n");
+ #endif
+   _exit(212);
+ }
+@@ -18,9 +18,9 @@
+   register unsigned long sym_val;
+ 
+ #ifdef DEBUG
+-  pf(__func__": "); ph((unsigned long)tmp_dl); pf(" "); ph(off); pf(" on ");
++  pf(__func__); pf(": "); ph((unsigned long)tmp_dl); pf(" "); ph(off); pf(" on ");
+   ph((long)tmp_dl->plt_rel); pf("\n");
+-  pf(__func__": @ "); ph((long)tmp->r_offset); pf(" with type ");
++  pf(__func__); pf(": @ "); ph((long)tmp->r_offset); pf(" with type ");
+   ph(ELF_R_TYPE(tmp->r_info)); pf(" and sym "); ph(sym);
+   pf(" symval "); ph(tmp_dl->dyn_sym_tab[sym].st_value); pf("\n");
+ #endif
+@@ -31,7 +31,7 @@
+   *((unsigned long*)(tmp_dl->mem_base+tmp->r_offset))=sym_val;
+ 
+ #ifdef DEBUG
+-  pf(__func__": sym "); ph(sym_val); pf("\n");
++  pf(__func__); pf(": sym "); ph(sym_val); pf("\n");
+ #endif
+   /* JUMP (arg sysdep...) */
+   if (sym_val) return sym_val;
+--- dietlibc-0.30/libdl/_dl_int.h.debug	2006-11-03 21:33:57.000000000 +0100
++++ dietlibc-0.30/libdl/_dl_int.h	2006-11-03 21:33:59.000000000 +0100
+@@ -150,4 +150,7 @@
+ extern const char* _dl_error_data;
+ #endif
+ 
++void pf(const char*s);
++void ph(unsigned long l);
++
+ #endif
+--- dietlibc-0.30/libdl/_dl_load.c.debug	2006-11-03 21:33:57.000000000 +0100
++++ dietlibc-0.30/libdl/_dl_load.c	2006-11-03 21:34:00.000000000 +0100
+@@ -56,7 +56,7 @@
+   if (fd==-1) return 0;
+ 
+ #ifdef DEBUG
+-  pf(__func__": "); pf(pathname); pf("\n");
++  pf(__func__); pf(": "); pf(pathname); pf("\n");
+ #endif
+ 
+   if (fstat(fd,&st)<0) {
+@@ -174,7 +174,7 @@
+   int i;
+ 
+ #ifdef DEBUG
+-  pf(__func__": pre dynamic scan "); ph((unsigned long)dh); pf("\n");
++  pf(__func__); pf(": pre dynamic scan "); ph((unsigned long)dh); pf("\n");
+ #endif
+   dh->dyn_str_tab=0;
+   dh->flags=flags;
+@@ -184,19 +184,19 @@
+     if (dyn_tab[i].d_tag==DT_HASH) {
+       dh->hash_tab = (unsigned long*)(dh->mem_base+dyn_tab[i].d_un.d_ptr);
+ #ifdef DEBUG
+-      pf(__func__": have hash @ "); ph((long)dh->hash_tab); pf("\n");
++      pf(__func__); pf(": have hash @ "); ph((long)dh->hash_tab); pf("\n");
+ #endif
+     }
+     else if (dyn_tab[i].d_tag==DT_SYMTAB) {
+       dh->dyn_sym_tab = (Elf_Sym*)(dh->mem_base+dyn_tab[i].d_un.d_ptr);
+ #ifdef DEBUG
+-      pf(__func__": have dyn_sym_tab @ "); ph((long)dh->dyn_sym_tab); pf("\n");
++      pf(__func__); pf(": have dyn_sym_tab @ "); ph((long)dh->dyn_sym_tab); pf("\n");
+ #endif
+     }
+     else if (dyn_tab[i].d_tag==DT_STRTAB) {
+       dh->dyn_str_tab = (char*)(dh->mem_base+dyn_tab[i].d_un.d_ptr);
+ #ifdef DEBUG
+-      pf(__func__": have dyn_str_tab @ "); ph((long)dh->dyn_str_tab); pf("\n");
++      pf(__func__); pf(": have dyn_str_tab @ "); ph((long)dh->dyn_str_tab); pf("\n");
+ #endif
+     }
+ 
+@@ -204,13 +204,13 @@
+     else if (dyn_tab[i].d_tag==DT_FINI) {
+       dh->fini = (void(*)(void))(dh->mem_base+dyn_tab[i].d_un.d_val);
+ #ifdef DEBUG
+-      pf(__func__": have fini @ "); ph((long)dh->fini); pf("\n");
++      pf(__func__); pf(": have fini @ "); ph((long)dh->fini); pf("\n");
+ #endif
+     }
+     else if (dyn_tab[i].d_tag==DT_INIT) {
+       init = (void(*)(void))(dh->mem_base+dyn_tab[i].d_un.d_val);
+ #ifdef DEBUG
+-      pf(__func__": have init @ "); ph((long)init); pf("\n");
++      pf(__func__); pf(": have init @ "); ph((long)init); pf("\n");
+ #endif
+     }
+ 
+@@ -219,26 +219,26 @@
+       got=(unsigned long*)(dh->mem_base+dyn_tab[i].d_un.d_val);
+       dh->pltgot=got;
+ #ifdef DEBUG
+-      pf(__func__": have plt got @ "); ph((long)dh->pltgot); pf("\n");
++      pf(__func__); pf(": have plt got @ "); ph((long)dh->pltgot); pf("\n");
+ #endif
+     }
+     else if (dyn_tab[i].d_tag==DT_PLTREL) {
+       pltreltype=dyn_tab[i].d_un.d_val;
+ #ifdef DEBUG
+-      pf(__func__": have pltreltype @ "); ph((long)pltreltype); pf("\n");
++      pf(__func__); pf(": have pltreltype @ "); ph((long)pltreltype); pf("\n");
+ #endif
+     }
+     else if (dyn_tab[i].d_tag==DT_PLTRELSZ) {
+       pltrelsize=dyn_tab[i].d_un.d_val;
+ #ifdef DEBUG
+-      pf(__func__": have pltrelsize @ "); ph((long)pltrelsize); pf("\n");
++      pf(__func__); pf(": have pltrelsize @ "); ph((long)pltrelsize); pf("\n");
+ #endif
+     }
+     else if (dyn_tab[i].d_tag==DT_JMPREL) {
+       jmprel=(dh->mem_base+dyn_tab[i].d_un.d_val);
+       dh->plt_rel=jmprel;
+ #ifdef DEBUG
+-      pf(__func__": have jmprel @ "); ph((long)jmprel); pf("\n");
++      pf(__func__); pf(": have jmprel @ "); ph((long)jmprel); pf("\n");
+ #endif
+     }
+ 
+@@ -246,19 +246,19 @@
+     else if (dyn_tab[i].d_tag==DT_REL) {
+       rel=(unsigned long)(dh->mem_base+dyn_tab[i].d_un.d_val);
+ #ifdef DEBUG
+-      pf(__func__": have rel @ "); ph((long)rel); pf("\n");
++      pf(__func__); pf(": have rel @ "); ph((long)rel); pf("\n");
+ #endif
+     }
+     else if (dyn_tab[i].d_tag==DT_RELENT) {
+       relent=dyn_tab[i].d_un.d_val;
+ #ifdef DEBUG
+-      pf(__func__": have relent  @ "); ph((long)relent); pf("\n");
++      pf(__func__); pf(": have relent  @ "); ph((long)relent); pf("\n");
+ #endif
+     }
+     else if (dyn_tab[i].d_tag==DT_RELSZ) {
+       relsize=dyn_tab[i].d_un.d_val;
+ #ifdef DEBUG
+-      pf(__func__": have relsize @ "); ph((long)relsize); pf("\n");
++      pf(__func__); pf(": have relsize @ "); ph((long)relsize); pf("\n");
+ #endif
+     }
+ 
+@@ -275,19 +275,19 @@
+ 	char *rpath=dh->dyn_str_tab+dyn_tab[i].d_un.d_val;
+ 	_dl_set_rpath(rpath);
+ #ifdef DEBUG
+-	pf(__func__": have runpath: "); pf(rpath); pf("\n");
++	pf(__func__); pf(": have runpath: "); pf(rpath); pf("\n");
+ #endif
+       }
+     }
+   }
+ 
+ #ifdef DEBUG
+-  pf(__func__": post dynamic scan "); ph((unsigned long)dh); pf("\n");
++  pf(__func__); pf(": post dynamic scan "); ph((unsigned long)dh); pf("\n");
+ #endif
+ 
+   if ((got=_dlsym(dh,"_GLOBAL_OFFSET_TABLE_"))) {
+ #ifdef DEBUG
+-    pf(__func__": found a GOT @ "); ph((unsigned long)got); pf("\n");
++    pf(__func__); pf(": found a GOT @ "); ph((unsigned long)got); pf("\n");
+ #endif
+     /* GOT */
+     got[0]+=(unsigned long)dh->mem_base;	/* reloc dynamic pointer */
+@@ -309,7 +309,7 @@
+     if (dyn_tab[i].d_tag==DT_NEEDED) {
+       char *lib_name=dh->dyn_str_tab+dyn_tab[i].d_un.d_val;
+ #ifdef DEBUG
+-      pf(__func__": needed for this lib: "); pf(lib_name); pf("\n");
++      pf(__func__); pf(": needed for this lib: "); pf(lib_name); pf("\n");
+ #endif
+       _dl_queue_lib(lib_name,flags);
+     }
+@@ -323,7 +323,7 @@
+   /* relocate */
+   if (rel) {
+ #ifdef DEBUG
+-    pf(__func__": try to relocate some values\n");
++    pf(__func__); pf(": try to relocate some values\n");
+ #endif
+     if (_dl_relocate(dh,(Elf_Rel*)rel,relsize/relent)) {
+       munmap(dh->mem_base,dh->mem_size);
+@@ -337,7 +337,7 @@
+     Elf_Rel *tmp = jmprel;
+     char * t=(char*)tmp;
+ #ifdef DEBUG
+-    pf(__func__": rel got\n");
++    pf(__func__); pf(": rel got\n");
+ #endif
+     for (;t < (((char*)jmprel)+pltrelsize); t = t + sizeof(Elf_Rel)) {
+       if ((flags&RTLD_NOW)) {
+@@ -361,7 +361,7 @@
+     Elf_Rela *tmp = jmprel;
+     char * t=(char*)tmp;
+ #ifdef DEBUG
+-    pf(__func__": rela got\n");
++    pf(__func__); pf(": rela got\n");
+ #endif
+     for (;t < (((char*)jmprel)+pltrelsize); t = t + sizeof(Elf_Rela)) {
+       if ((flags&RTLD_NOW)) {
+@@ -384,11 +384,11 @@
+ 
+   /* _dl_load depending libs ... */
+ #ifdef DEBUG
+-  pf(__func__": post resolve, pre init\n");
++  pf(__func__); pf(": post resolve, pre init\n");
+ #endif
+   if (init) init();
+ #ifdef DEBUG
+-  pf(__func__": post init\n");
++  pf(__func__); pf(": post init\n");
+ #endif
+ 
+   return dh;
+--- dietlibc-0.30/Makefile.debug	2008-04-08 09:16:07.000000000 +0200
++++ dietlibc-0.30/Makefile	2008-04-08 09:16:43.000000000 +0200
+@@ -136,7 +136,7 @@ CFLAGS+=-O -fomit-frame-pointer
+ endif
+ 
+ ifneq ($(DEBUG),)
+-CFLAGS = -g
++CFLAGS = -g -DDEBUG
+ COMMENT = :
+ endif
+ CFLAGS += -Wall -W -Wchar-subscripts -Wmissing-prototypes -Wmissing-declarations -Wno-switch -Wno-unused -Wredundant-decls

@@ -1,0 +1,56 @@
+--- dietlibc-0.30/lib/strcpy.c.strend	2003-12-21 13:06:36.000000000 +0100
++++ dietlibc-0.30/lib/strcpy.c	2008-03-31 10:58:32.000000000 +0200
+@@ -25,11 +25,10 @@ strcpy (char *s1, const char *s2)
+ 
+     while (1) {
+ 	l = *(const unsigned long *) s2;
+-	if (((l - MKW(0x1)) & ~l) & MKW(0x80)) {
+-	    unsigned char c;
+-	    while ((*s1++ = (l & 0xff))) l>>=8;
+-	    return (res);
+-	}
++  	if (((l - MKW(0x1ul)) & ~l) & MKW(0x80ul)) {
++ 	    while ((*s1++ = GFC(l))) INCSTR(l);
++  	    return (res);
++  	}
+ 	*(unsigned long *) s1 = l;
+ 	s2 += sizeof(unsigned long);
+ 	s1 += sizeof(unsigned long);
+--- dietlibc-0.30/lib/strcmp.c.strend	2003-12-21 13:06:36.000000000 +0100
++++ dietlibc-0.30/lib/strcmp.c	2008-03-31 10:48:12.000000000 +0200
+@@ -35,12 +35,12 @@ strcmp (const char *s1, const char *s2)
+             ((((l2 - MKW(0x1)) & ~l2) & MKW(0x80))) || l1 != l2) {
+             unsigned char c1, c2;
+             while (1) {
+-                c1 = l1 & 0xff;
+-                c2 = l2 & 0xff;
++		c1 = GFC(l1);
++                c2 = GFC(l2);
+                 if (!c1 || c1 != c2)
+                     return (c1 - c2);
+-                l1 >>= 8;
+-                l2 >>= 8;
++                INCSTR(l1);
++                INCSTR(l2);
+             }
+         }
+     }
+--- dietlibc-0.30/dietstring.h.strend	2008-03-31 10:48:12.000000000 +0200
++++ dietlibc-0.30/dietstring.h	2008-03-31 10:48:12.000000000 +0200
+@@ -13,6 +13,16 @@
+ # define STRALIGN(x) (((unsigned long)x&3)?4-((unsigned long)x&3):0)
+ #endif
+ 
++/* GFC(x)    - returns first character */
++/* INCSTR(x) - moves to next character */
++#if __BYTE_ORDER == __LITTLE_ENDIAN
++# define GFC(x) ((x)&0xff)
++# define INCSTR(x) do { x >>= 8; } while (0)
++#else
++# define GFC(x) (((x)>>(sizeof(x)*8-8))&0xff)
++# define INCSTR(x) do { x <<= 8; } while (0)
++#endif
++
+ #define UNALIGNED(x,y) (((unsigned long)x & (sizeof (unsigned long)-1)) ^ ((unsigned long)y & (sizeof (unsigned long)-1)))
+ 
+ #endif /* _DIET_STRING_H_ */

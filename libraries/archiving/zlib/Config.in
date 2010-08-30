@@ -1,0 +1,9 @@
+# vim:set syntax=kconfig:
+config CONFIG_ZLIB
+  bool "zlib - The zlib compression and decompression library"
+  default n
+  help
+    Zlib is a general-purpose, patent-free, lossless data compression
+    library which is used by many different programs.
+
+    http://www.gzip.org/zlib/

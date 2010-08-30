@@ -1,0 +1,31 @@
+--- fnord-1.9/httpd.c.fnord-1.9-sendfile.path	2005-10-03 19:53:25.000000000 +0200
++++ fnord-1.9/httpd.c	2005-10-03 19:54:45.000000000 +0200
+@@ -813,7 +813,7 @@
+   if (parsetime(c,&x)) return (time_t)-1;
+ done:
+   x.tm_wday=x.tm_yday=x.tm_isdst=0;
+-  return mktime(&x);
++  return mktime(&x)-timezone;
+ }
+ 
+ static struct stat st;
+@@ -1197,7 +1197,7 @@
+       off_t l=rangeend-rangestart;
+       do {
+ 	off_t c;
+-	c=(l>(1<<31))?1<<31:l;
++        c=(l>(1UL<<31))?1UL<<31:l;
+ 	if (sendfile(1,fd,&offset,c)==-1) break;
+ 	l-=c;
+       } while (l);
+@@ -1230,6 +1230,10 @@
+   int len;
+   int in;
+ 
++  struct timezone tz;
++  gettimeofday(0, &tz);
++  timezone=tz.tz_minuteswest*60L;
++
+   if (argc>1) chdir(argv[1]);
+ 
+ #ifdef CHROOT

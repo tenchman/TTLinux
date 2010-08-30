@@ -1,0 +1,55 @@
+# vim:set syntax=kconfig:
+
+menu "Libraries"
+menu "Database"
+source "libraries/database/db-4.1/Config.in"
+source "libraries/database/qdbm/Config.in"
+source "libraries/database/sqlite2/Config.in"
+source "libraries/database/sqlite3/Config.in"
+endmenu
+
+menu "Cryptography"
+source "libraries/crypto/matrixssl/Config.in"
+source "libraries/crypto/libgcrypt/Config.in"
+source "libraries/crypto/gnutls/Config.in"
+source "libraries/crypto/openssl/Config.in"
+source "libraries/crypto/krb5/Config.in"
+source "libraries/crypto/axTLS/Config.in"
+source "libraries/crypto/polarssl/Config.in"
+endmenu
+
+menu "Archiving"
+source "libraries/archiving/liblzo/Config.in"
+source "libraries/archiving/zlib/Config.in"
+source "libraries/archiving/libtar/Config.in"
+endmenu
+
+menu "Firewalling"
+source "libraries/netfilter/libnfnetlink/Config.in"
+source "libraries/netfilter/libnetfilter_conntrack/Config.in"
+endmenu
+
+menu "Graphics"
+source "libraries/libpng/Config.in"
+source "libraries/libjpeg/Config.in"
+endmenu
+
+menu "Generic"
+source "libraries/dbus/Config.in"
+source "libraries/expat/Config.in"
+source "libraries/gmp/Config.in"
+source "libraries/libpcap/Config.in"
+source "libraries/ncurses/Config.in"
+source "libraries/libevent/Config.in"
+source "libraries/libowfat/Config.in"
+source "libraries/mm/Config.in"
+source "libraries/pcre/Config.in"
+source "libraries/tre/Config.in"
+source "libraries/openldap/Config.in"
+source "libraries/libcom_err/Config.in"
+endmenu
+
+menu "Development"
+source "libraries/devel/pcl/Config.in"
+endmenu
+endmenu

@@ -1,0 +1,70 @@
+diff -up ripmime-1.4.0.7/Makefile.make ripmime-1.4.0.7/Makefile
+--- ripmime-1.4.0.7/Makefile.make	2007-07-10 15:02:50.000000000 +0200
++++ ripmime-1.4.0.7/Makefile	2008-03-18 17:48:04.000000000 +0100
+@@ -27,6 +27,7 @@ CFLAGS=-Wall -g -I.
+ #
+ COMPONENTS= -DRIPOLE
+ LIBS= 
++SHAREDLIB=libripmime.so.1.4.0.5
+ #COMPONENTS= 
+ 
+ #  DEBUGGING Related Flags
+@@ -42,10 +43,10 @@ buildcodes.h: 
+ 	./generate-buildcodes.sh
+ 
+ ripOLE/ole.o:
+-	./build_ripOLE
++	$(MAKE) -C ripOLE
+ 
+ tnef/tnef.o:
+-	./build_tnef
++	$(MAKE) -C tnef
+ 
+ .c.o:
+ 	${CC} ${CFLAGS} $(COMPONENTS) -c $*.c
+@@ -54,7 +55,7 @@ all: ${OBJ} 
+ 
+ 
+ solib: ${OFILES} ripmime-api.o
+-	gcc --shared -Wl,-soname,libripmime.so.1 ${OFILES} ripmime-api.o -o libripmime.so.1.4.0 -lc
++	$(CC) --shared -Wl,-soname,libripmime.so.1 ${OFILES} ripmime-api.o -o $(SHAREDLIB) -lc
+ 
+ libripmime: ${OFILES} ripmime-api.o
+ 	ar ruvs libripmime.a ${OFILES}  ripmime-api.o
+@@ -71,11 +72,22 @@ ripmime: ${OFILES} ripmime.c buildcodes.
+ riptest: ${OFILES}
+ 	${CC} ${CFLAGS} riptest.c ${OFILES} -o riptest
+ 
++install_lib: libripmime solib
++	mkdir -p ${LOCATION}$(LIBDIR)
++	install -m 644 libripmime.a ${LOCATION}$(LIBDIR)
++	install -m 644 $(SHAREDLIB) ${LOCATION}$(LIBDIR)
++	( \
++		cd ${LOCATION}$(LIBDIR); \
++		ln -sf $(SHAREDLIB) libripmime.so.1; \
++		ln -sf $(SHAREDLIB) libripmime.so \
++	);
++
+ install: ${OBJ}
+-	strip ripmime
++	mkdir -p ${LOCATION}/bin/
++	mkdir -p ${LOCATION}/man/man1
+ 	cp ripmime ${LOCATION}/bin/
+-	cp ripmime.1  ${LOCATION}/man/man1
+-
++	cp ripmime.1 ${LOCATION}/man/man1
++	gzip ${LOCATION}/man/man1/ripmime.1
+ clean:
+ 	rm -f *.o *core ${OBJ} buildcodes.h
+ 	rm -f tnef/*.o
+diff -up ripmime-1.4.0.7/MIME_headers.h.make ripmime-1.4.0.7/MIME_headers.h
+--- ripmime-1.4.0.7/MIME_headers.h.make	2007-07-10 15:02:50.000000000 +0200
++++ ripmime-1.4.0.7/MIME_headers.h	2008-03-18 17:45:53.000000000 +0100
+@@ -90,6 +90,7 @@
+ #define MIMEH_DEFECT_MULTIPLE_NAMES 9
+ #define MIMEH_DEFECT_MULTIPLE_FILENAMES 10
+ 
++#include "strstack.h"
+ 
+ struct MIMEH_header_info
+ {

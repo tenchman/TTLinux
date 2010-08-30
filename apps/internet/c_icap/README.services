@@ -1,0 +1,51 @@
+Each service is described by the following struct:
+
+struct  service_module{
+  char   *mod_name;
+  char   *mod_short_descr;
+  int     mod_type;
+  char  **mod_options_header;
+  char   *mod_options_body;
+
+  int   (*mod_init_service)(service_module_t *this, struct icap_server_conf *server_conf);
+  int   (*mod_post_init_service)(service_module_t *this, struct icap_server_conf *server_conf);
+  void  (*mod_close_service)(service_module_t *this);
+  void *(*mod_init_request_data)(service_module_t *this, struct request *);
+  void  (*mod_release_request_data)(void *module_data);
+  int   (*mod_check_preview_handler)(char *preview_data, int preview_data_len, struct request *);
+  int   (*mod_end_of_data_handler)(struct request*);
+  int   (*mod_service_io)(char *rbuf, int *rlen, char *wbuf, int *wlen, int iseof, struct request *);
+
+  struct conf_entry *mod_conf_table;
+  void *mod_data;
+};
+
+mod_init_service:
+  Called when service loaded into c-icap
+
+mod_post_init_service:
+  Called after configuration file was read.
+
+mod_close_service:
+  Called when the c-icap shuts down (In practice not called yet.......)
+
+mod_init_request_data:
+  Called when a new request for this service come into the c-icap.
+
+mod_release_request_data:
+  Called after the request had end.
+
+mod_check_preview_handler:
+  Called when the headers and preview data had received from the
+  icap-client (or only headers if preview is not supported)
+
+mod_end_of_data_handler:
+  Called when all the data had received from the icap-client.
+
+mod_service_io:
+  Called to send the received data from client to service or
+  to read and send back data from service to client.
+
+  2007-07-20: In order to inform the ICAP Server that all data has read,
+    you have to set *rlen to CI_EOF!
+

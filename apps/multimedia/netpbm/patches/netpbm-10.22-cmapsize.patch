@@ -1,0 +1,10 @@
+--- netpbm-10.22/converter/other/bmptopnm.c.cmapsize	2004-07-02 17:59:51.799270546 +0200
++++ netpbm-10.22/converter/other/bmptopnm.c	2004-07-02 18:03:16.995978954 +0200
+@@ -962,6 +962,7 @@
+                    , BMPoffbits(BMPheader.class, BMPheader.cBitCount, 
+                                 BMPheader.cmapsize));
+     }
++    if(BMPheader.cmapsize != 0)
+     {
+         unsigned int bytesRead;
+         BMPreadcolormap(ifP, BMPheader.cBitCount, BMPheader.class, 

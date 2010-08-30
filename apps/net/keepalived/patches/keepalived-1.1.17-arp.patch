@@ -1,0 +1,21 @@
+diff -up keepalived-1.1.17/keepalived/vrrp/vrrp_arp.c.arp keepalived-1.1.17/keepalived/vrrp/vrrp_arp.c
+--- keepalived-1.1.17/keepalived/vrrp/vrrp_arp.c.arp	2009-03-05 09:30:03.000000000 +0100
++++ keepalived-1.1.17/keepalived/vrrp/vrrp_arp.c	2009-03-06 09:10:17.000000000 +0100
+@@ -83,7 +83,16 @@ int send_gratuitous_arp(ip_address *ipad
+ 	struct ether_header *eth = (struct ether_header *) garp_buffer;
+ 	m_arphdr *arph		 = (m_arphdr *) (garp_buffer + ETHER_HDR_LEN);
+ 	char *hwaddr		 = (char *) IF_HWADDR(ipaddress->ifp);
+-	int len;
++ 	int len, found = 0;
++
++ 	/* Don't send an ARP message for 00:00:00:00:00:00 */
++ 	for (len = 0; len < ETH_ALEN; len++) {
++ 	  if (hwaddr[len])
++ 	    found = 1;
++ 	}
++
++ 	if (!found)
++ 	  return 0;
+ 
+ 	/* Ethernet header */
+ 	memset(eth->ether_dhost, 0xFF, ETH_ALEN);

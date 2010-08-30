@@ -1,0 +1,37 @@
+--- minit-0.10/minit.c.down	2006-07-27 08:46:33.000000000 +0200
++++ minit-0.10/minit.c	2006-07-27 08:53:07.000000000 +0200
+@@ -295,6 +295,23 @@
+   return root[service].pid;
+ }
+ 
++int checkdown(int service) {
++  int fd, rc = 0;
++
++  if (service<0) return 0;
++  if (chdir(MINITROOT) || chdir(root[service].name)) return -1;
++
++  fd = open("down", O_RDONLY);
++  if(fd>=0) {
++    close(fd);
++    rc = 1;
++  }
++
++  chdir(MINITROOT);
++
++  return rc;
++}
++
+ int startservice(int service,int pause,int father) {
+   int dir=-1;
+   unsigned long len;
+@@ -303,6 +320,10 @@
+   if (service<0) return 0;
+   if (root[service].circular)
+     return 0;
++
++  if(checkdown(service))
++    return 0;
++
+   root[service].circular=1;
+ #if 0
+   printf("setting father of %d (%s) to %d (%s)\n",

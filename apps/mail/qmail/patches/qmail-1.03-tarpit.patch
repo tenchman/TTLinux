@@ -1,0 +1,77 @@
+Chris Johnson
+dcj-qmaildoc@palomine.net
+
+What's tarpitting? It's the practice of inserting a small sleep in an SMTP
+session for each RCPT TO after some set number of RCPT TOs. The idea is to
+thwart spammers who would hand your SMTP server a single message with a long
+list of RCPT TOs. If a spammer were to attempt to use your server to relay a
+message with, say, 10,000 recipients, and you inserted a five-second delay for
+each recipient after the fiftieth, the spammer would be "tarpitted" and would
+likely assume that his connection had stalled and give up.
+
+The subject originally came up in a discussion on the qmail mailing list of
+ways to run an open relay safely (I didn't suggest it, and I don't do that kind
+of thing), but it could also be useful in keeping your own dial-up customers
+from using you as a spam relay.
+
+This patch will allow qmail-smtpd to do tarpitting. There are two control files
+involved: control/tarpitcount and control/tarpitdelay. tarpitcount is the
+number of RCPT TOs you accept before you start tarpitting, and tarpitdelay is
+the number of seconds of delay to introduce after each subsequent RCPT TO.
+tarpitcount defaults to 0 (which means no tarpitting), and tarpitdelay defaults
+to 5. You can override both tarpitcount and tarpitdelay by setting TARPITCOUNT
+and TARPITDELAY in qmail-smtpd's environment (with tcpserver). If you used the
+earlier version of this patch, note that this version no longer uses the
+NOTARPIT environment variable; set TARPITCOUNT to 0 to achieve the same effect.
+
+--- qmail-1.03/qmail-smtpd.c.tarpit	2004-03-23 20:33:09.000000000 +0100
++++ qmail-1.03/qmail-smtpd.c	2004-03-23 20:33:09.000000000 +0100
+@@ -168,6 +168,8 @@
+ int bmfok = 0;
+ stralloc bmf = {0};
+ struct constmap mapbmf;
++int tarpitcount = 0;
++int tarpitdelay = 5;
+ 
+ void setup()
+ {
+@@ -185,6 +187,15 @@
+   if (control_readint(&timeout,"control/timeoutsmtpd") == -1) die_control();
+   if (timeout <= 0) timeout = 1;
+ 
++  if (control_readint(&tarpitcount,"control/tarpitcount") == -1) die_control();
++  if (tarpitcount < 0) tarpitcount = 0;
++  x = env_get("TARPITCOUNT");
++  if (x) { scan_ulong(x,&u); tarpitcount = u; };
++  if (control_readint(&tarpitdelay,"control/tarpitdelay") == -1) die_control();
++  if (tarpitdelay < 0) tarpitdelay = 0;
++  x = env_get("TARPITDELAY");
++  if (x) { scan_ulong(x,&u); tarpitdelay = u; };
++
+   if (rcpthosts_init() == -1) die_control();
+ 
+   bmfok = control_readfile(&bmf,"control/badmailfrom",0);
+@@ -307,6 +318,7 @@
+ int flagbarf; /* defined if seenmail */
+ stralloc mailfrom = {0};
+ stralloc rcptto = {0};
++int rcptcount;
+ 
+ void smtp_helo(arg) char *arg;
+ {
+@@ -343,6 +355,7 @@
+   if (!stralloc_copys(&rcptto,"")) die_nomem();
+   if (!stralloc_copys(&mailfrom,addr.s)) die_nomem();
+   if (!stralloc_0(&mailfrom)) die_nomem();
++  rcptcount = 0;
+   out("250 ok\r\n");
+ }
+ #ifdef TLS
+@@ -412,6 +425,7 @@
+   if (!stralloc_cats(&rcptto,"T")) die_nomem();
+   if (!stralloc_cats(&rcptto,addr.s)) die_nomem();
+   if (!stralloc_0(&rcptto)) die_nomem();
++  if (tarpitcount && ++rcptcount >= tarpitcount) while (sleep(tarpitdelay)); 
+   out("250 ok\r\n");
+ }
+ 

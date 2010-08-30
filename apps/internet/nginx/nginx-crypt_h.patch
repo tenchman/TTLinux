@@ -1,0 +1,12 @@
+--- nginx-0.8.49/src/os/unix/ngx_linux_config.h.diet	2010-08-22 21:14:53.000000000 +0200
++++ nginx-0.8.49/src/os/unix/ngx_linux_config.h	2010-08-22 21:15:42.000000000 +0200
+@@ -51,7 +51,9 @@
+ #include <limits.h>             /* IOV_MAX */
+ #include <sys/ioctl.h>
+ #include <sys/sysctl.h>
++#if ! defined(__dietlibc__)
+ #include <crypt.h>
++#endif
+ #include <sys/utsname.h>        /* uname() */
+ 
+ 

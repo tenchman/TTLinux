@@ -1,0 +1,27 @@
+# vim:set syntax=kconfig:
+config CONFIG_DROPBEAR
+  bool "Dropbear - SSH 2 Server/Client"
+  default y
+  help
+    Dropbear is a relatively small SSH 2 server and client. It runs on a
+    variety of POSIX-based platforms. Dropbear is open source software,
+    distributed under a MIT-style license. Dropbear is particularly useful
+    for "embedded"-type Linux (or other Unix) systems, such as wireless
+    routers.
+    
+    http://matt.ucc.asn.au/dropbear/dropbear.html
+
+  config CONFIG_DROPBEAR_ONETIME
+    bool "Support for onetime passwords"
+    default n
+    depends CONFIG_DROPBEAR
+
+  config CONFIG_DROPBEAR_BLACKLIST
+    bool "Support for blacklisting after a configurable amount of failed logins"
+    default n
+    depends CONFIG_DROPBEAR
+
+  config CONFIG_DROPBEAR_SYSLOG
+    bool "Support for syslog"
+    default n
+    depends CONFIG_DROPBEAR

@@ -1,0 +1,31 @@
+--- minised-1.9/Makefile.install	2006-04-02 10:44:05.000000000 +0200
++++ minised-1.9/Makefile	2006-05-11 15:50:49.000000000 +0200
+@@ -1,20 +1,23 @@
+ # Makefile for minised
+ 
+ PREFIX=/usr
++PROGRAM=minised
+ 
+ minised: sedcomp.o sedexec.o
+-	$(CC) $(LFLAGS) sedcomp.o sedexec.o -o minised
++	$(CC) $(LFLAGS) sedcomp.o sedexec.o -o $(PROGRAM)
+ 
+ sedcomp.o: sedcomp.c sed.h
+ sedexec.o: sedexec.c sed.h
+ 
+ install:
+-	install minised $(PREFIX)/bin/
+-	install minised.1 $(PREFIX)/man/man1/
++	install -d $(DESTDIR)$(PREFIX)/bin/
++	install -d $(DESTDIR)$(PREFIX)/man/man1/
++	install $(PROGRAM) $(DESTDIR)$(PREFIX)/bin/
++	install minised.1 $(DESTDIR)$(PREFIX)/man/man1/
+ 
+ clean:
+-	rm -f minised sedcomp.o sedexec.o
++	rm -f $(PROGRAM) sedcomp.o sedexec.o
+ 
+ check: minised
+-	cd tests; ./run ../minised
++	cd tests; ./run ../$(PROGRAM)
+ 

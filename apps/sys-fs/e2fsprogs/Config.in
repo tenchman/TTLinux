@@ -1,0 +1,20 @@
+# vim:set syntax=kconfig:
+config CONFIG_E2FSPROGS
+  bool "e2fsprogs - Utilities for managing ext2/ext3 filesystems"
+  default n
+  help
+    The e2fsprogs package contains a number of utilities for creating,
+    checking, modifying, and correcting any inconsistencies in second
+    and third extended (ext2/ext3) filesystems. E2fsprogs contains
+    e2fsck (used to repair filesystem inconsistencies after an unclean
+    shutdown), mke2fs (used to initialize a partition to contain an
+    empty ext2 filesystem), debugfs (used to examine the internal
+    structure of a filesystem, to manually repair a corrupted
+    filesystem, or to create test cases for e2fsck), tune2fs (used to
+    modify filesystem parameters), and most of the other core ext2fs
+    filesystem utilities.
+
+    You should install the e2fsprogs package if you need to manage the
+    performance of an ext2 and/or ext3 filesystem.
+
+    http://e2fsprogs.sourceforge.net/

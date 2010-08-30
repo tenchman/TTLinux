@@ -1,0 +1,29 @@
+--- dietlibc-cvs/include/arpa/nameser.h.nameser	2006-01-06 17:37:58.000000000 +0100
++++ dietlibc-cvs/include/arpa/nameser.h	2006-01-06 17:37:26.000000000 +0100
+@@ -105,6 +105,26 @@
+ 	ns_o_max = 6
+ } ns_opcode;
+ 
++typedef enum __ns_sect {
++	ns_s_qd = 0,            /* Query: Question. */
++	ns_s_zn = 0,            /* Update: Zone. */
++	ns_s_an = 1,            /* Query: Answer. */
++	ns_s_pr = 1,            /* Update: Prerequisites. */
++	ns_s_ns = 2,            /* Query: Name servers. */
++	ns_s_ud = 2,            /* Update: Update. */
++	ns_s_ar = 3,            /* Query|Update: Additional records. */
++	ns_s_max = 4
++} ns_sect;
++
++typedef struct __ns_msg {
++	const unsigned char *_msg, *_eom;
++	uint16_t	    _id, _flags, _counts[ns_s_max];
++	const unsigned char *_sections[ns_s_max];
++	ns_sect		    _sect;
++	int		    _rrnum;
++	const unsigned char *_ptr;
++} ns_msg;
++
+ /*
+  * Currently defined response codes.
+  */

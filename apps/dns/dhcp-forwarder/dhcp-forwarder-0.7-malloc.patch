@@ -1,0 +1,12 @@
+--- dhcp-forwarder-0.7/config.h.in.malloc	2004-09-06 20:36:39.991469328 +0200
++++ dhcp-forwarder-0.7/config.h.in	2004-09-06 20:37:02.721013912 +0200
+@@ -183,9 +183,6 @@
+ #undef inline
+ #endif
+ 
+-/* Define to rpl_malloc if the replacement function should be used. */
+-#undef malloc
+-
+ /* Define to `int' if <sys/types.h> does not define. */
+ #undef pid_t
+ 

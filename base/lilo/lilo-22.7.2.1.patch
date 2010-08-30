@@ -1,0 +1,66 @@
+diff -ur lilo-22.7.2/geometry.c lilo-22.7.2.1/geometry.c
+--- lilo-22.7.2/geometry.c	2005-10-19 19:15:21.000000000 -0700
++++ lilo-22.7.2.1/geometry.c	2006-07-07 10:17:35.000000000 -0700
+@@ -1,7 +1,7 @@
+ /* geometry.c  -  Device and file geometry computation */
+ /*
+ Copyright 1992-1998 Werner Almesberger.
+-Copyright 1999-2005 John Coffman.
++Copyright 1999-2006 John Coffman.
+ All rights reserved.
+ 
+ Licensed under the terms contained in the file 'COPYING' in the 
+@@ -245,7 +245,7 @@
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,   /*  Cx   */
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+-  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 15, 63,  0	   /*  /dev/md_dXX at 254  */
++  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 63,  0	   /*  /dev/md_dXX at 254  */
+ 								   /* and /dev/dm-0 at 253 */
+ /*								   
+   0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+diff -ur lilo-22.7.2/Makefile lilo-22.7.2.1/Makefile
+--- lilo-22.7.2/Makefile	2006-07-05 09:03:14.000000000 -0700
++++ lilo-22.7.2.1/Makefile	2006-07-07 10:18:00.000000000 -0700
+@@ -92,7 +92,7 @@
+ PCONFIG=$(KVER) $(LILO) `( if [ -r $$ROOT/etc/lilo.defines ]; then \
+   cat $$ROOT/etc/lilo.defines; else echo $(CONFIG); fi ) | \
+   sed 's/-D/-DLCF_/g'`
+-LILO=-DLILO=0x7179bbbd
++LILO=-DLILO=0x938cb652
+ KVER=`if [ -f /usr/include/linux/version.h ]; then echo -DHAS_VERSION_H; fi`
+ TMP=_TmP_
+ 
+@@ -374,15 +374,15 @@
+ 
+ second.s:	second.S read.S volume.S mapper.S biosdata.S shs3.S bdata.h lilo.h version.h \
+ 			graph.S menu.S strlen.S bitmap.S crt.S display4.S Makefile
+-		$(CPP) $(PCONFIG) -DTEXT=0x67e672f5 second.S -o second.s
++		$(CPP) $(PCONFIG) -DTEXT=0x116f90f8 second.S -o second.s
+ 
+ third.s:	second.S read.S volume.S mapper.S biosdata.S shs3.S bdata.h lilo.h version.h \
+ 			graph.S menu.S strlen.S bitmap.S crt.S display4.S Makefile
+-		$(CPP) $(PCONFIG) -DMENU=0xa9ae4981 second.S -o third.s
++		$(CPP) $(PCONFIG) -DMENU=0x1ac3cb16 second.S -o third.s
+ 
+ bitmap.s:	second.S read.S volume.S mapper.S biosdata.S shs3.S bdata.h lilo.h version.h \
+ 			graph.S menu.S strlen.S bitmap.S crt.S display4.S Makefile
+-		$(CPP) $(PCONFIG) -DBITMAP=0xecd78e4 second.S -o bitmap.s
++		$(CPP) $(PCONFIG) -DBITMAP=0x77e25d4d second.S -o bitmap.s
+ 
+ chain.s:	chain.S lilo.h version.h first.b Makefile
+ 		$(CPP) $(PCONFIG) -DCHAIN=0xb3213213 chain.S -o chain.s
+Only in lilo-22.7.2.1: retail
+diff -ur lilo-22.7.2/version.h lilo-22.7.2.1/version.h
+--- lilo-22.7.2/version.h	2006-07-05 08:57:48.000000000 -0700
++++ lilo-22.7.2.1/version.h	2006-07-07 10:16:13.000000000 -0700
+@@ -5,7 +5,7 @@
+ 			/* retail */
+ #define VERSION_MAJOR 22
+ #define VERSION_MINOR 7
+-#define VERSION_EDIT  ".2"
+-#define VERSION_DATE "05-Jul-2006"
++#define VERSION_EDIT  ".2.1"
++#define VERSION_DATE "07-Jul-2006"
+ 
+ #endif

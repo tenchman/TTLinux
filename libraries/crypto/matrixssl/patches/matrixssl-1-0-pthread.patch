@@ -1,0 +1,14 @@
+--- matrixssl/src/os/linux/linux.c.diet	2004-02-09 18:15:49.800920344 +0100
++++ matrixssl/src/os/linux/linux.c	2004-02-09 18:18:51.091360008 +0100
+@@ -52,7 +52,11 @@
+ 	itself, rather than error or recursive lock
+ */
+ #ifdef USE_MULTITHREADING
++#ifdef __dietlibc__
++	pthread_mutexattr_setkind_np(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
++#else
+ 	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
++#endif
+ 	pthread_mutexattr_init(&attr);
+ #endif
+ 	sslOpenMalloc(MAX_MEMORY_USAGE);

@@ -1,0 +1,10 @@
+# vim:set syntax=kconfig:
+config CONFIG_INOTIFY_TOOLS
+  bool "inotify-tools - Command line utilities for inotify"
+  default n
+  help
+    inotify-tools is a set of command-line programs for Linux providing
+    a simple interface to inotify. These programs can be used to monitor
+    and act upon filesystem events.
+
+    http://inotify-tools.sourceforge.net/

@@ -1,0 +1,11 @@
+--- gnutls-1.4.1/Makefile.in.subdir	2006-08-10 23:44:30.000000000 +0200
++++ gnutls-1.4.1/Makefile.in	2006-08-10 23:44:44.000000000 +0200
+@@ -348,7 +348,7 @@
+ target_os = @target_os@
+ target_vendor = @target_vendor@
+ DISTCHECK_CONFIGURE_FLAGS = --enable-gtk-doc
+-SUBDIRS = gl includes lib libextra src doc tests po
++SUBDIRS = gl includes lib libextra src
+ EXTRA_DIST = mkinstalldirs
+ ACLOCAL_AMFLAGS = -I m4 -I gl/m4
+ tag = $(PACKAGE)_`echo $(VERSION) | sed 's/\./_/g'`

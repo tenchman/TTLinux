@@ -1,0 +1,29 @@
+--- netpbm-10.27/converter/other/bmptopnm.c.bmptopnm	2005-05-09 10:06:05.707795976 +0200
++++ netpbm-10.27/converter/other/bmptopnm.c	2005-05-09 10:29:30.498235368 +0200
+@@ -932,7 +932,7 @@ readBmp(FILE *               const ifP, 
+         xel **               const colormapP,
+         bool                 const verbose) {
+ 
+-    xel * colormap;  /* malloc'ed */
++    xel * colormap = NULL;  /* malloc'ed */
+     unsigned int pos;
+ 
+     /* The following are all information from the BMP headers */
+@@ -1081,7 +1081,7 @@ main(int argc, char ** argv) {
+     parse_command_line(argc, argv, &cmdline);
+ 
+     ifP = pm_openr(cmdline.input_filespec);
+-    if (strcmp(cmdline.input_filespec, "-"))
++    if (!strcmp(cmdline.input_filespec, "-"))
+         ifname = "Standard Input";
+     else 
+         ifname = cmdline.input_filespec;
+@@ -1106,7 +1106,7 @@ main(int argc, char ** argv) {
+     writeRaster(BMPraster, cols, rows, outputType, cBitCount, pixelformat,
+                 colormap);
+ 
+-    free(colormap);
++    if (colormap) free(colormap);
+     free(BMPraster);
+ 
+     exit(0);

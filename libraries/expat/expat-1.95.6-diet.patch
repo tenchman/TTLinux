@@ -1,0 +1,63 @@
+--- expat-1.95.6/dietit.sh.diet	2005-04-27 22:21:49.244421488 +0200
++++ expat-1.95.6/dietit.sh	2005-04-27 22:21:49.244421488 +0200
+@@ -0,0 +1,14 @@
++#!/bin/ash
++
++[ -f Makefile ] && make clean
++
++CC='diet-dyn -Os gcc'
++CPPFLAGS='-nostdinc'
++CFLAGS='-nostdinc -D_BSD_SOURCE -DXML_MIN_SIZE'
++LDFLAGS='-nostdlib'
++
++export CC CPPFLAGS CFLAGS LDFLAGS
++
++./configure --prefix=/opt/diet --enable-shared --enable-static
++
++make
+--- expat-1.95.6/Makefile.in.diet	2005-04-27 22:28:49.360554128 +0200
++++ expat-1.95.6/Makefile.in	2005-04-27 22:28:38.451212600 +0200
+@@ -73,22 +73,22 @@
+ 	tests/runtests
+ 
+ install: xmlwf/xmlwf installlib
+-	$(mkinstalldirs) $(bindir) $(mandir)
+-	$(LIBTOOL) --mode=install $(INSTALL_PROGRAM) xmlwf/xmlwf $(bindir)/xmlwf
+-	$(INSTALL_DATA) $(MANFILE) $(mandir)
++	$(mkinstalldirs) $(DESTDIR)$(bindir) $(DESTDIR)$(mandir)
++	$(LIBTOOL) --mode=install $(INSTALL_PROGRAM) xmlwf/xmlwf $(DESTDIR)$(bindir)/xmlwf
++	$(INSTALL_DATA) $(MANFILE) $(DESTDIR)$(mandir)
+ 
+ installlib: $(LIBRARY) $(APIHEADER)
+-	$(mkinstalldirs) $(libdir) $(includedir)
+-	$(LIBTOOL) --mode=install $(INSTALL) $(LIBRARY) $(libdir)/$(LIBRARY)
+-	$(INSTALL_DATA) $(APIHEADER) $(includedir)
++	$(mkinstalldirs) $(DESTDIR)$(libdir) $(DESTDIR)$(includedir)
++	$(LIBTOOL) --mode=install $(INSTALL) $(LIBRARY) $(DESTDIR)$(libdir)/$(LIBRARY)
++	$(INSTALL_DATA) $(APIHEADER) $(DESTDIR)$(includedir)
+ 
+ uninstall: uninstalllib
+-	$(LIBTOOL) --mode=uninstall rm -f $(bindir)/xmlwf
+-	rm -f $(mandir)/xmlwf.1
++	$(LIBTOOL) --mode=uninstall rm -f $(DESTDIR)$(bindir)/xmlwf
++	rm -f $(DESTDIR)$(mandir)/xmlwf.1
+ 
+ uninstalllib:
+-	$(LIBTOOL) --mode=uninstall rm -f $(libdir)/$(LIBRARY)
+-	rm -f $(includedir)/$(APIHEADER)
++	$(LIBTOOL) --mode=uninstall rm -f $(DESTDIR)$(libdir)/$(LIBRARY)
++	rm -f $(DESTDIR)$(includedir)/$(APIHEADER)
+ 
+ # for VPATH builds (invoked by configure)
+ mkdir-init:
+--- expat-1.95.6/configure.diet	2003-01-28 07:04:08.000000000 +0100
++++ expat-1.95.6/configure	2005-04-27 22:21:49.277416472 +0200
+@@ -6704,7 +6704,7 @@
+ whole_archive_flag_spec=$lt_whole_archive_flag_spec
+ 
+ # Compiler flag to generate thread-safe objects.
+-thread_safe_flag_spec=$lt_thread_safe_flag_spec
++thread_safe_flag_spec=no
+ 
+ # Library versioning type.
+ version_type=$version_type

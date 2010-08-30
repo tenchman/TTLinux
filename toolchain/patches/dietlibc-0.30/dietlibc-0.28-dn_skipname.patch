@@ -1,0 +1,43 @@
+--- dietlibc-0.28/libcruft/dn_skipname.c.dn_skipname	2005-08-15 09:49:03.000000000 +0200
++++ dietlibc-0.28/libcruft/dn_skipname.c	2005-08-15 09:37:54.000000000 +0200
+@@ -0,0 +1,29 @@
++#include <resolv.h>
++#include <errno.h>
++
++int dn_skipname(unsigned char *comp_dn, const unsigned char *eom) {
++  const unsigned char *cp = comp_dn;
++  unsigned int n;
++
++  while (cp < eom && (n = *cp) != 0) {
++    cp++;
++    switch (n & 0xc0) {
++      case 0:
++	cp += n;
++	if (*cp)
++	  continue;
++      case 0xc0:
++	cp++;
++	goto out;
++      default:
++	goto err;
++    }
++  }
++out:
++  if (cp > eom) {
++err:
++    errno = EMSGSIZE;
++    return -1;
++  }
++  return (cp - comp_dn);
++}
+--- dietlibc-0.28/include/resolv.h.dn_skipname	2005-08-15 09:48:51.000000000 +0200
++++ dietlibc-0.28/include/resolv.h	2005-08-15 09:48:09.000000000 +0200
+@@ -123,6 +123,8 @@
+       unsigned char *comp_dn, unsigned char *exp_dn,
+       int length) __THROW;
+ 
++int dn_skipname(unsigned char *comp_dn, const unsigned char *eom) __THROW;
++
+ void res_close(void) __THROW __attribute_dontuse__;
+ 
+ __END_DECLS

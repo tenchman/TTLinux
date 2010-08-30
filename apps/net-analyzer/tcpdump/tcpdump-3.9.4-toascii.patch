@@ -1,0 +1,40 @@
+--- tcpdump-3.9.4/print-krb.c.toascii	2003-11-16 10:36:26.000000000 +0100
++++ tcpdump-3.9.4/print-krb.c	2006-05-10 14:52:43.000000000 +0200
+@@ -113,7 +113,7 @@
+ 			break;
+ 		}
+ 		if (!isascii(c)) {
+-			c = toascii(c);
++			c &= 0x7f;
+ 			putchar('M');
+ 			putchar('-');
+ 		}
+--- tcpdump-3.9.4/util.c.toascii	2005-06-16 03:19:57.000000000 +0200
++++ tcpdump-3.9.4/util.c	2006-05-10 14:58:55.000000000 +0200
+@@ -63,7 +63,7 @@
+ 			break;
+ 		}
+ 		if (!isascii(c)) {
+-			c = toascii(c);
++			c &= 0x7f;
+ 			putchar('M');
+ 			putchar('-');
+ 		}
+@@ -91,7 +91,7 @@
+ 		n--;
+ 		c = *s++;
+ 		if (!isascii(c)) {
+-			c = toascii(c);
++			c &= 0x7f;
+ 			putchar('M');
+ 			putchar('-');
+ 		}
+@@ -125,7 +125,7 @@
+ 			break;
+ 		}
+ 		if (!isascii(c)) {
+-			c = toascii(c);
++			c &= 0x7f;
+ 			putchar('M');
+ 			putchar('-');
+ 		}

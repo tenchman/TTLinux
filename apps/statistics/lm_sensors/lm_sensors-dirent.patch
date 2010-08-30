@@ -1,0 +1,15 @@
+diff -up lm_sensors-3.1.1/lib/sysfs.c.dirent lm_sensors-3.1.1/lib/sysfs.c
+--- lm_sensors-3.1.1/lib/sysfs.c.dirent	2009-02-20 11:56:52.000000000 +0100
++++ lm_sensors-3.1.1/lib/sysfs.c	2009-09-01 12:31:51.000000000 +0200
+@@ -366,9 +366,10 @@ static int sensors_read_dynamic_chip(sen
+ 		int nr;
+ 
+ 		/* Skip directories and symlinks */
++#ifndef __dietlibc__
+ 		if (ent->d_type != DT_REG)
+ 			continue;
+-
++#endif
+ 		name = ent->d_name;
+ 
+ 		sftype = sensors_subfeature_get_type(name, &nr);

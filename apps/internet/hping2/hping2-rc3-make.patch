@@ -1,0 +1,27 @@
+--- hping2-rc3/Makefile.in.make	2004-10-04 10:57:53.678513392 +0200
++++ hping2-rc3/Makefile.in	2004-10-04 10:59:57.695659920 +0200
+@@ -64,15 +64,17 @@
+ 	-(cd utils; $(MAKE) clean)
+ 
+ install: hping2
+-	cp -f hping2 /usr/sbin/
+-	chmod 755 /usr/sbin/hping2
+-	ln -sf /usr/sbin/hping2 /usr/sbin/hping
+-	@if [ -d ${INSTALL_MANPATH}/man8 ]; then \
+-		cp ./docs/hping2.8 ${INSTALL_MANPATH}/man8; \
+-		chmod 644 ${INSTALL_MANPATH}/man8/hping2.8; \
++	mkdir -p $(DESTDIR)/usr/sbin
++	mkdir -p $(DESTDIR)${INSTALL_MANPATH}/man8
++	cp -f hping2 $(DESTDIR)/usr/sbin/
++	chmod 755 $(DESTDIR)/usr/sbin/hping2
++	(cd $(DESTDIR)/usr/sbin && ln -sf hping2 hping)
++	@if [ -d $(DESTDIR)${INSTALL_MANPATH}/man8 ]; then \
++		cp ./docs/hping2.8 $(DESTDIR)${INSTALL_MANPATH}/man8; \
++		chmod 644 $(DESTDIR)${INSTALL_MANPATH}/man8/hping2.8; \
+ 	else \
+ 		echo "@@@@@@ WARNING @@@@@@"; \
+-		echo "Can't install the man page: ${INSTALL_MANPATH}/man8 does not exist"; \
++		echo "Can't install the man page: $(DESTDIR)${INSTALL_MANPATH}/man8 does not exist"; \
+ 	fi
+ 
+ strip: hping2

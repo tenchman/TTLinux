@@ -1,0 +1,34 @@
+--- ocfs2-tools-1.2.7.orig/o2cb_ctl/o2cb_ctl.c	2006-04-21 23:40:30.000000000 +0200
++++ ocfs2-tools-1.2.7/o2cb_ctl/o2cb_ctl.c	2008-01-15 14:02:50.000000000 +0100
+@@ -779,16 +779,25 @@
+ 
+ static errcode_t o2cb_node_is_local(gchar *node_name, gboolean *is_local)
+ {
+-    char hostname[PATH_MAX];
++    char hostname[PATH_MAX], *env_drbd_nodename = NULL;
+     size_t host_len, node_len = strlen(node_name);
+     gboolean local = 0;
+     errcode_t ret = 0;
+ 
+-    ret = gethostname(hostname, sizeof(hostname));
+-    if (ret) {
+-        fprintf(stderr, "gethostname() failed: %s", strerror(errno));
+-        ret = O2CB_ET_HOSTNAME_UNKNOWN;
+-        goto out;
++    env_drbd_nodename = getenv("__DRBD_NODE__");
++    if (env_drbd_nodename && *env_drbd_nodename) {
++	strncpy(hostname, env_drbd_nodename, sizeof(hostname) - 1);
++	/* silently truncate env_drbd_nodename if its length is the
++	 * size of the hostname buffer or longer. In this case the
++	 * resulting string in hostname will not be nul terminated. */
++	hostname[sizeof(hostname) - 1] = '\0';
++    } else {
++	ret = gethostname(hostname, sizeof(hostname));
++	if (ret) {
++	    fprintf(stderr, "gethostname() failed: %s", strerror(errno));
++	    ret = O2CB_ET_HOSTNAME_UNKNOWN;
++	    goto out;
++	}
+     }
+ 
+     host_len = strlen(hostname);

@@ -1,0 +1,23 @@
+--- matrixssl-1-2-5/src/os/linux/linux.c.pthread	2005-04-04 23:23:32.000000000 +0200
++++ matrixssl-1-2-5/src/os/linux/linux.c	2005-07-01 19:33:53.000000000 +0200
+@@ -39,7 +39,7 @@
+ #include "../osLayer.h"
+ 
+ #if defined(__i386__) || defined(RDTSC)
+-#include <asm/timex.h>
++// #include <asm/timex.h>
+ /*
+ 	As defined in asm/timex.h for x386:
+ */
+@@ -120,7 +120,11 @@
+ */
+ #ifdef USE_MULTITHREADING
+ #ifndef OSX
++#ifdef __dietlibc__
++	pthread_mutexattr_setkind_np(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
++#else
+ 	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
++#endif
+ #endif /* !OSX */
+ 	pthread_mutexattr_init(&attr);
+ #endif /* USE_MULTITHREADING */

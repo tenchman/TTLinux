@@ -1,0 +1,45 @@
+--- pigz-2.1.4/Makefile.make	2008-10-29 07:27:57.000000000 +0100
++++ pigz-2.1.4/Makefile	2009-04-08 22:41:01.000000000 +0200
+@@ -1,28 +1,36 @@
++CC=gcc
+ CFLAGS=-O2
++LDFLAGS=
+ 
+ pigz: pigz.o yarn.o
+-	cc -o pigz pigz.o yarn.o -lpthread -lz
++	$(CC) -o pigz pigz.o yarn.o $(LDFLAGS) -lpthread -lz
+ 
+ pigz.o: pigz.c yarn.h
++	$(CC) $(CFLAGS) -c -o pigz.o pigz.c
+ 
+ yarn.o: yarn.c yarn.h
++	$(CC) $(CFLAGS) -c -o yarn.o yarn.c
+ 
+ dev: pigz pigzt pigzn
+ 
+ pigzt: pigzt.o yarnt.o
+-	cc -o pigzt pigzt.o yarnt.o -lpthread -lz
++	$(CC) -o pigzt pigzt.o yarnt.o $(LDFLAGS) -lpthread -lz
+ 
+ pigzt.o: pigz.c yarn.h
+-	cc -Wall -O3 -DDEBUG -g -c -o pigzt.o pigz.c
++	$(CC) $(CFLAGS) -c -o pigzt.o pigz.c
+ 
+ yarnt.o: yarn.c yarn.h
+-	cc -Wall -O3 -DDEBUG -g -c -o yarnt.o yarn.c
++	$(CC) $(CFLAGS) -c -o yarnt.o yarn.c
+ 
+ pigzn: pigzn.o
+-	cc -o pigzn pigzn.o -lz
++	$(CC) -o pigzn pigzn.o $(LDFLAGS) -lz
+ 
+ pigzn.o: pigz.c
+-	cc -Wall -O3 -DDEBUG -DNOTHREAD -g -c -o pigzn.o pigz.c
++	$(CC) $(CFLAGS) -DNOTHREAD -c -o pigzn.o pigz.c
+ 
+ clean:
+ 	rm -f *.o pigz pigzn pigzt
++
++install: pigz
++	mkdir -p $(DESTDIR)/bin
++	cp -f pigz $(DESTDIR)/bin

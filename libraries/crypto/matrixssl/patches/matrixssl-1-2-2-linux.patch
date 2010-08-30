@@ -1,0 +1,36 @@
+--- matrixssl-1-2-2/src/os/osLayer.h.linux	2004-09-21 20:19:15.000000000 +0200
++++ matrixssl-1-2-2/src/os/osLayer.h	2005-01-10 15:40:32.222042920 +0100
+@@ -102,9 +102,11 @@
+ 		long sec;
+ 		long usec;
+ 	} sslTime_t;
++/*
+ #elif __i386__
+ typedef unsigned long long LARGE_INTEGER;
+ typedef LARGE_INTEGER sslTime_t;
++*/
+ #elif WINCE
+ #include <windows.h>
+ #include <stdlib.h>
+--- matrixssl-1-2-2/src/os/linux/linux.c.linux	2004-09-21 20:19:15.000000000 +0200
++++ matrixssl-1-2-2/src/os/linux/linux.c	2005-01-10 15:38:10.590574176 +0100
+@@ -39,6 +39,7 @@
+ 
+ #include "../../matrixInternal.h"
+ 
++#undef __i386__
+ #ifdef __i386__
+ #define rdtscll(val) __asm__ __volatile__("rdtsc" : "=A" (val))
+ static sslTime_t	hiresStart; 	/* zero-time */
+@@ -114,7 +115,11 @@
+ */
+ #ifdef USE_MULTITHREADING
+ #ifndef OSX
++#ifdef __dietlibc__
++	pthread_mutexattr_setkind_np(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
++#else
+ 	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
++#endif
+ #endif /* !OSX */
+ 	pthread_mutexattr_init(&attr);
+ #endif /* USE_MULTITHREADING */

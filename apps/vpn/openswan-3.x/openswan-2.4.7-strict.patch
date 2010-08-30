@@ -1,0 +1,15 @@
+--- openswan-2.4.7/lib/libopenswan/alg_info.c.strict	2006-10-06 18:47:38.000000000 +0200
++++ openswan-2.4.7/lib/libopenswan/alg_info.c	2007-05-10 09:35:00.000000000 +0200
+@@ -568,10 +568,12 @@
+ 	/* use default if nul esp string */
+ 	if (!*alg_str) {
+ 	    (*alg_info_add)(alg_info, 0, 0, 0, 0, 0, 0);
++#if 0
+ 	} else {
+ 		/* This is necessary to have mandatory proposals
+ 		   add the flag as soon as an explicit proposal is set */
+ 		alg_info->alg_info_flags |= ALG_INFO_F_STRICT;
++#endif
+ 	}
+ 
+ 	for(ret=0,ptr=alg_str;ret<ST_EOF;) {

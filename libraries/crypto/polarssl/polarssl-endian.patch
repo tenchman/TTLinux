@@ -1,0 +1,29 @@
+diff -up polarssl-0.10.1/library/net.c.endian polarssl-0.10.1/library/net.c
+--- polarssl-0.10.1/library/net.c.endian	2009-03-24 16:00:59.000000000 +0100
++++ polarssl-0.10.1/library/net.c	2009-03-24 16:01:06.000000000 +0100
+@@ -71,6 +71,7 @@ static int wsa_init_done = 0;
+ 
+ #endif
+ 
++#include <endian.h>
+ #include <string.h>
+ #include <stdlib.h>
+ #include <stdio.h>
+@@ -79,6 +80,7 @@ static int wsa_init_done = 0;
+ /*
+  * htons() is not always available
+  */
++#if __BYTE_ORDER==__LITTLE_ENDIAN
+ static unsigned short net_htons( int port )
+ {
+     unsigned char buf[4];
+@@ -89,6 +91,9 @@ static unsigned short net_htons( int por
+ 
+     return( *(unsigned short *) buf );
+ }
++#else
++#define net_htons(x) (x)
++#endif
+ 
+ /*
+  * Initiate a TCP connection with host:port

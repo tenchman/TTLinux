@@ -1,0 +1,6 @@
+# vim:set syntax=kconfig:
+config CONFIG_LIBCOMERR
+  bool "libcom_err - common error display library"
+  default n
+  help
+    http://e2fsprogs.sourceforge.net/

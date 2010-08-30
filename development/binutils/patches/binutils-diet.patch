@@ -1,0 +1,45 @@
+--- binutils-2.17/ld/configure.tgt.diet	2006-04-05 14:41:57.000000000 +0200
++++ binutils-2.17/ld/configure.tgt	2006-10-15 22:56:16.000000000 +0200
+@@ -613,6 +613,12 @@
+   NATIVE_LIB_DIRS='/usr/lib /usr/lib/w32api'
+   ;;
+ 
++*-dietlibc-linux*)
++  NATIVE_LIB_DIRS='/opt/diet/local/lib /opt/diet/lib-i386 /opt/diet/lib'
++  ;;
++*-linux-dietlibc*)
++  NATIVE_LIB_DIRS='/opt/diet/local/lib /opt/diet/lib-i386 /opt/diet/lib'
++  ;;
+ *-*-linux*)
+   ;;
+ 
+--- binutils-2.17/ld/emultempl/elf32.em.diet	2006-06-12 15:05:04.000000000 +0200
++++ binutils-2.17/ld/emultempl/elf32.em	2006-10-15 22:58:44.000000000 +0200
+@@ -772,11 +772,11 @@
+ 
+       info.path = NULL;
+       info.len = info.alloc = 0;
+-      tmppath = concat (ld_sysroot, "${prefix}/etc/ld.so.conf", NULL);
++      tmppath = concat (ld_sysroot, "${prefix}/etc/diet.ld.conf", NULL);
+       if (!gld${EMULATION_NAME}_parse_ld_so_conf (&info, tmppath))
+ 	{
+ 	  free (tmppath);
+-	  tmppath = concat (ld_sysroot, "/etc/ld.so.conf", NULL);
++	  tmppath = concat (ld_sysroot, "/etc/diet.ld.conf", NULL);
+ 	  gld${EMULATION_NAME}_parse_ld_so_conf (&info, tmppath);
+ 	}
+       free (tmppath);
+--- binutils-2.17/bfd/config.bfd.diet	2006-04-05 14:41:57.000000000 +0200
++++ binutils-2.17/bfd/config.bfd	2006-10-15 22:56:16.000000000 +0200
+@@ -545,6 +545,11 @@
+     targ_selvecs="i386linux_vec bfd_efi_app_ia32_vec"
+     targ64_selvecs=bfd_elf64_x86_64_vec
+     ;;
++  i[3-7]86-*-linux-dietlibc*)
++    targ_defvec=bfd_elf32_i386_vec
++    targ_selvecs="i386linux_vec bfd_efi_app_ia32_vec"
++    targ64_selvecs=bfd_elf64_x86_64_vec
++    ;;
+ #ifdef BFD64
+   x86_64-*-elf*)
+     targ_defvec=bfd_elf64_x86_64_vec

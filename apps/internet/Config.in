@@ -1,0 +1,16 @@
+#curl
+#fnord
+#hping2
+#mathopd
+#mini_httpd
+#openntpd
+#tcpdump
+#thttpd
+#thy
+menu "Proxy"
+source "apps/internet/tinyproxy/Config.in"
+source "apps/internet/squid32/Config.in"
+source "apps/internet/c_icap/Config.in"
+source "apps/internet/gnu-httptunnel/Config.in"
+endmenu
+#uucp

@@ -1,0 +1,8 @@
+# vim:set syntax=kconfig:
+config CONFIG_P3SCAN
+  bool "p3scan - Transparent POP3 Proxy"
+  default n
+  help
+    A full-transparent proxy-server for email clients.
+
+    http://p3scan.sourceforge.net/

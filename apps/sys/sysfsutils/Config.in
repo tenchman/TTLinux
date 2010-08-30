@@ -1,0 +1,9 @@
+# vim:set syntax=kconfig:
+config CONFIG_SYSFSUTILS
+  bool "sysfsutils - library interface to sysfs"
+  default n
+  help
+    This package's purpose is to provide a set of utilities for interfacing
+    with sysfs.
+
+    http://linux-diag.sourceforge.net/

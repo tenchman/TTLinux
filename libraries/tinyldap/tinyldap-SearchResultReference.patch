@@ -1,0 +1,35 @@
+diff -up tinyldap-20080311/ldap.h.SearchResultReference tinyldap-20080311/ldap.h
+--- tinyldap-20080311/ldap.h.SearchResultReference	2008-03-11 19:46:27.000000000 +0100
++++ tinyldap-20080311/ldap.h	2008-03-11 19:45:25.000000000 +0100
+@@ -95,15 +95,24 @@ struct AddRequest {
+ };
+ 
+ enum ldapops {
+-  BindRequest=0, BindResponse=1,
++  BindRequest=0,
++  BindResponse=1,
+   UnbindRequest=2,
+-  SearchRequest=3, SearchResultEntry=4, SearchResultDone=5,
+-  ModifyRequest=6, ModifyResponse=7,
+-  AddRequest=8, AddResponse=9,
+-  DelRequest=10, DelResponse=11,
+-  ModifyDNRequest=12, ModifyDNResponse=13,
+-  CompareRequest=14, CompareResponse=15,
++  SearchRequest=3,
++  SearchResultEntry=4,
++  SearchResultDone=5,
++  ModifyRequest=6,
++  ModifyResponse=7,
++  AddRequest=8,
++  AddResponse=9,
++  DelRequest=10,
++  DelResponse=11,
++  ModifyDNRequest=12,
++  ModifyDNResponse=13,
++  CompareRequest=14,
++  CompareResponse=15,
+   AbandonRequest=16,
++  SearchResultReference=19,
+   ExtendedRequest=23 /* coincidence?  I think not. */,
+   ExtendedResponse=24
+ };

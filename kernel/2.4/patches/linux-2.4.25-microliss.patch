@@ -1,0 +1,2609 @@
+--- linux-2.4.25/kernel/panic.c.microliss	2003-12-17 09:58:00.000000000 +0100
++++ linux-2.4.25/kernel/panic.c	2004-03-04 13:55:49.000000000 +0100
+@@ -20,13 +20,23 @@
+ 
+ asmlinkage void sys_sync(void);	/* it's really int */
+ 
++#ifdef CONFIG_MICROLISS
++#ifndef CONFIG_MICROLISS_DEBUG
++const int panic_timeout = 16;
++#else
++const int panic_timeout = 0;
++#endif
++#else
+ int panic_timeout;
++#endif
+ 
+ struct notifier_block *panic_notifier_list;
+ 
+ static int __init panic_setup(char *str)
+ {
++#ifndef CONFIG_MICROLISS
+ 	panic_timeout = simple_strtoul(str, NULL, 0);
++#endif
+ 	return 1;
+ }
+ 
+--- linux-2.4.25/drivers/char/console.c.microliss	2003-12-17 09:57:49.000000000 +0100
++++ linux-2.4.25/drivers/char/console.c	2004-03-04 13:55:49.728415168 +0100
+@@ -163,7 +163,7 @@
+ int console_blanked;
+ 
+ static int vesa_blank_mode; /* 0:none 1:suspendV 2:suspendH 3:powerdown */
+-static int blankinterval = 10*60*HZ;
++static int blankinterval = 0;
+ static int vesa_off_interval;
+ 
+ static struct tq_struct console_callback_tq = {
+--- linux-2.4.25/drivers/block/ll_rw_blk.c.microliss	2004-02-19 14:24:15.000000000 +0100
++++ linux-2.4.25/drivers/block/ll_rw_blk.c	2004-03-04 13:55:49.000000000 +0100
+@@ -32,6 +32,10 @@
+ #include <linux/slab.h>
+ #include <linux/module.h>
+ 
++#ifdef CONFIG_MICROLISS
++#include <linux/microliss.h>
++#endif
++
+ /*
+  * MAC Floppy IWM hooks
+  */
+@@ -670,6 +674,50 @@
+ 
+ static long ro_bits[MAX_BLKDEV][8];
+ 
++#ifdef CONFIG_MICROLISS
++
++/* This is the conventional ro test */
++static int _is_read_only(kdev_t dev)
++{
++	int minor,major;
++
++	major = MAJOR(dev);
++	minor = MINOR(dev);
++	if (major < 0 || major >= MAX_BLKDEV) return 0;
++	return ro_bits[major][minor >> 5] & (1 << (minor & 31));
++}
++
++
++/* This is the interface to _is_read_only used by other modules.
++ * We check first if it's a MicroLiSS device and return an appropriate value
++ * if so. Else we call _is_read_only.
++ */
++int is_read_only( kdev_t dev)
++{
++	if (is_microliss_dev( dev))
++	{
++		if (microliss_is_readonly()) { return( 1 << (MINOR(dev) & 31)); }
++	}
++	return _is_read_only( dev);
++}
++
++
++/* This is the interface to _is_read_only used from inside ll_rw_blk.c
++ * It differs from the above only in that it returns "state ro" only if
++ * microliss_is_readonly indicates that all syncing of the corresponding
++ * device has been done.
++ */
++static int internal_is_read_only(kdev_t dev)
++{
++	if (is_microliss_dev( dev))
++	{
++		if (microliss_is_readonly() == 1) { return( 1 << (MINOR(dev) & 31)); }
++	}
++	return _is_read_only( dev);
++}
++
++#else	 /* not defined CONFIG_MICROLISS */
++
+ int is_read_only(kdev_t dev)
+ {
+ 	int minor,major;
+@@ -679,6 +727,7 @@
+ 	if (major < 0 || major >= MAX_BLKDEV) return 0;
+ 	return ro_bits[major][minor >> 5] & (1 << (minor & 31));
+ }
++#endif /* defined CONFIG_MICROLISS */
+ 
+ void set_device_ro(kdev_t dev,int flag)
+ {
+@@ -687,6 +736,33 @@
+ 	major = MAJOR(dev);
+ 	minor = MINOR(dev);
+ 	if (major < 0 || major >= MAX_BLKDEV) return;
++#ifdef CONFIG_MICROLISS
++	if (is_microliss_dev( dev))
++	{
++		if (flag)
++		{
++#ifdef MICROLISS_LOG_ATTACK
++			printk( KERN_INFO
++							"Attempt to remount protected device %s r/o\n", kdevname( dev));
++#endif
++		}
++		else if (microliss_is_readonly())
++		{
++#ifdef MICROLISS_LOG_ATTACK
++			printk( KERN_WARNING
++							"Attempt to remount protected device %s r/w\n", kdevname( dev));
++#endif
++			return;
++		}
++		else
++		{
++#ifdef MICROLISS_LOG_ATTACK
++			printk( KERN_NOTICE
++							"Attempt to remount protected device %s r/w\n", kdevname( dev));
++#endif
++		}
++	}
++#endif
+ 	if (flag) ro_bits[major][minor >> 5] |= 1 << (minor & 31);
+ 	else ro_bits[major][minor >> 5] &= ~(1 << (minor & 31));
+ }
+@@ -1367,13 +1443,55 @@
+ 			goto sorry;
+ 		}
+ 	}
+-
++#ifdef CONFIG_MICROLISS
++	if ((rw & WRITE) && internal_is_read_only(bhs[0]->b_dev))
++	{
++#ifdef CONFIG_MICROLISS_PANIC_ONWRITE2RODEV
++		panic(
++#else
++		printk( KERN_NOTICE
++#endif
++		      "Can't write to read-only device %s (%s)\n"
++		      " Sector: #%ld  Block: #%ld\n"
++		      // " Size: %ld  Use: %ld  State: %#3.3lx\n"
++		      " Data: %2.2hx %2.2hx %2.2hx %2.2hx  %2.2hx %2.2hx %2.2hx %2.2hx "
++		      " %2.2hx %2.2hx %2.2hx %2.2hx\n"
++		      "       %2.2hx %2.2hx %2.2hx %2.2hx  %2.2hx %2.2hx %2.2hx %2.2hx "
++		      " %2.2hx %2.2hx %2.2hx %2.2hx\n       %2.2hx %2.2hx %2.2hx %2.2hx "
++		      " %2.2hx %2.2hx %2.2hx %2.2hx ... \n",
++		      kdevname(bhs[0]->b_dev),
++		      kdevname(bhs[0]->b_rdev),
++		      bhs[0]->b_rsector,
++		      bhs[0]->b_blocknr,
++		      // TODO
++		      // bhs[0]->b_size,
++		      // bhs[0]->b_count,
++		      // bhs[0]->b_state,
++		      (0xff & bhs[0]->b_data[0]), (0xff & bhs[0]->b_data[1]),
++		      (0xff & bhs[0]->b_data[2]), (0xff & bhs[0]->b_data[3]),
++		      (0xff & bhs[0]->b_data[4]), (0xff & bhs[0]->b_data[5]),
++		      (0xff & bhs[0]->b_data[6]), (0xff & bhs[0]->b_data[7]),
++		      (0xff & bhs[0]->b_data[8]), (0xff & bhs[0]->b_data[9]),
++		      (0xff & bhs[0]->b_data[10]), (0xff & bhs[0]->b_data[11]),
++		      (0xff & bhs[0]->b_data[12]), (0xff & bhs[0]->b_data[13]),
++		      (0xff & bhs[0]->b_data[14]), (0xff & bhs[0]->b_data[15]),
++		      (0xff & bhs[0]->b_data[16]), (0xff & bhs[0]->b_data[17]),
++		      (0xff & bhs[0]->b_data[18]), (0xff & bhs[0]->b_data[19]),
++		      (0xff & bhs[0]->b_data[20]), (0xff & bhs[0]->b_data[21]),
++		      (0xff & bhs[0]->b_data[22]), (0xff & bhs[0]->b_data[23]),
++		      (0xff & bhs[0]->b_data[24]), (0xff & bhs[0]->b_data[25]),
++		      (0xff & bhs[0]->b_data[26]), (0xff & bhs[0]->b_data[27]),
++		      (0xff & bhs[0]->b_data[28]), (0xff & bhs[0]->b_data[29]),
++		      (0xff & bhs[0]->b_data[30]), (0xff & bhs[0]->b_data[31]));
++		goto sorry;
++	}
++#else  /* not defined CONFIG_MICROLISS  */
+ 	if ((rw & WRITE) && is_read_only(bhs[0]->b_dev)) {
+ 		printk(KERN_NOTICE "Can't write to read-only device %s\n",
+ 		       kdevname(bhs[0]->b_dev));
+ 		goto sorry;
+ 	}
+-
++#endif
+ 	for (i = 0; i < nr; i++) {
+ 		struct buffer_head *bh = bhs[i];
+ 
+@@ -1389,6 +1507,9 @@
+ 				/* Hmmph! Nothing to write */
+ 				goto end_io;
+ 			__mark_buffer_clean(bh);
++#ifdef CONFIG_MICROLISS
++			microliss_start_timer2_conditionally( bh->b_rdev);
++#endif
+ 			break;
+ 
+ 		case READA:
+@@ -1530,6 +1651,9 @@
+ #ifdef CONFIG_ISP16_CDI
+ 	isp16_init();
+ #endif
++#ifdef CONFIG_MICROLISS
++	{ extern void microliss_init( void); microliss_init(); };
++#endif
+ #ifdef CONFIG_BLK_DEV_PS2
+ 	ps2esdi_init();
+ #endif
+--- linux-2.4.25/drivers/block/Config.in.microliss	2003-12-17 09:57:49.000000000 +0100
++++ linux-2.4.25/drivers/block/Config.in	2004-03-04 15:04:48.932160552 +0100
+@@ -11,6 +11,20 @@
+ if [ "$CONFIG_ATARI" = "y" ]; then
+    tristate 'Atari floppy support' CONFIG_ATARI_FLOPPY
+ fi
++bool 'MicroLiSS support' CONFIG_MICROLISS
++if [ "$CONFIG_MICROLISS" = "y" ]; then
++   bool 'Enable MicroLiSS debugging' CONFIG_MICROLISS_DEBUG
++   bool 'MicroLiSS init check' CONFIG_MICROLISS_INIT
++   hex 'MicroLiSS parallel port address' CONFIG_MICROLISS_PARPORT_ADDRESS 378
++   bool 'Disable hardware write protection timeouts' CONFIG_MICROLISS_NO_TIMEOUT
++bool 'Panic on write to r/o device' CONFIG_MICROLISS_PANIC_ONWRITE2RODEV
++   if [ "$CONFIG_MICROLISS_NO_TIMEOUT" = "n" ]; then
++   int 'MicroLiSS readonly timeout' CONFIG_MICROLISS_TIMEOUT_RO 120
++   int 'MicroLiSS net down timeout' CONFIG_MICROLISS_TIMEOUT_NET_SOFT 30
++   int 'MicroLiSS net down period' CONFIG_MICROLISS_TIMEOUT_NET_HARD 10
++   fi
++   int 'MicroLiSS sync timeout' CONFIG_MICROLISS_TIMEOUT_SYNC 45
++fi
+ if [ "$CONFIG_MAC" = "y" ]; then
+    dep_bool 'Macintosh IIfx/Quadra 900/Quadra 950 floppy support (EXPERIMENTAL)' CONFIG_BLK_DEV_SWIM_IOP $CONFIG_EXPERIMENTAL
+ fi
+--- linux-2.4.25/drivers/block/Makefile.microliss	2003-06-27 14:01:36.000000000 +0200
++++ linux-2.4.25/drivers/block/Makefile	2004-03-04 13:55:49.717416840 +0100
+@@ -16,6 +16,7 @@
+ 
+ obj-$(CONFIG_MAC_FLOPPY)	+= swim3.o
+ obj-$(CONFIG_BLK_DEV_FD)	+= floppy.o
++obj-$(CONFIG_MICROLISS)         += microliss.o
+ obj-$(CONFIG_AMIGA_FLOPPY)	+= amiflop.o
+ obj-$(CONFIG_ATARI_FLOPPY)	+= ataflop.o
+ obj-$(CONFIG_BLK_DEV_SWIM_IOP)	+= swim_iop.o
+--- linux-2.4.25/drivers/block/microliss.c.microliss	2004-03-04 13:55:49.000000000 +0100
++++ linux-2.4.25/drivers/block/microliss.c	2004-03-04 13:55:49.000000000 +0100
+@@ -0,0 +1,1277 @@
++/*
++ * Write protectable block device driver routines for microLiSS(TM) TELCO TECH.
++ *
++ * Copyright (C) 2001 Manfred Waﬂmann 
++ *
++ * microLiSS is a registered trademark of TELCO TECH GmbH Teltow Germany
++ *
++ *		This program is free software; you can redistribute it and/or
++ *		modify it under the terms of the GNU General Public License
++ *		as published by the Free Software Foundation; either version
++ *		2 of the License, or (at your option) any later version.
++ *
++ */
++#include <linux/stddef.h>				/* NULL */
++#include <linux/unistd.h>
++#include <linux/errno.h>				/* errno */
++#include <linux/string.h>
++#include <linux/init.h>					/* __init macro */
++#include <linux/timer.h>				/* {add,mod,del}_timer */
++#include <linux/sched.h>				/* for timer and for_each_task */
++#include <linux/interrupt.h>		/* IMMEDIATE_BH and mark_bh */
++#include <asm/atomic.h>				/* atomic operations variable */
++#include <linux/mount.h>				/* struct vfsmount */
++#include <linux/fs.h>						/* remount_fs, invalidate_buffers */
++#include <linux/locks.h>				/* (un)lock_super */
++#include <linux/quotaops.h>			/* the DQUOT_OFF Macro */
++#include <linux/tqueue.h>
++#include <linux/if.h>						/* IFNAMSIZ used in inetdevice.h */
++#include <linux/inet.h>		  /* for (un)setting the ip_forward flag */
++#include <asm/unistd.h>					/* execve etc. */
++#include <asm/io.h>							/* inb */
++#include <asm/processor.h>			/* init_task */
++#include <linux/smp_lock.h>			/* (un)lock_kernel */
++#include <linux/spinlock.h>				/* spinlocks (obviously;) */
++#include <linux/sysrq.h>
++#include <linux/reboot.h>				/* reboot */
++#include <linux/microliss.h>
++
++#define STATUS(base) (base + 0x1)
++
++rwlock_t microliss_lock = RW_LOCK_UNLOCKED;
++
++static struct timer_list microliss_heartbeat;
++static struct timer_list microliss_timer0;
++static struct timer_list microliss_timer1;
++static struct timer_list microliss_timer2;
++static struct timer_list microliss_synctimer;
++static struct timer_list reboot_timer;
++static struct tq_struct microliss_tq;
++#define SET_TASK_ID(id) *((unsigned long *)microliss_tq.data) = id
++#define SET_TIMER(timer,timeout) if (timer.list.prev == NULL)\
++		{\
++			timer.expires = timeout;\
++			add_timer( &timer);\
++		}\
++		else\
++		{\
++			mod_timer( &timer, timeout);\
++		}
++
++/** 
++ * Threadsafe test if a timer is running
++ */
++inline int timerRunning( const struct timer_list timer, unsigned int running)
++{
++		if (in_interrupt())
++		{
++			running = timer.list.prev != NULL;
++		}
++		else
++		{
++			unsigned long irqflags;
++			read_lock_irqsave( &microliss_lock, irqflags);
++			running = timer.list.prev != NULL;
++			read_unlock_irqrestore( &microliss_lock, irqflags);
++		}
++
++		return( running);
++}
++
++/* Do not change RO_STATE and SYNC_STATE!  They are hardcoded in
++ * microliss_is_readonly.
++ */
++#define RO_STATE 0x1
++#define SYNC_STATE 0x2
++#define BOOT_STATE 0x4
++#define INIT_STATE 0x8
++#define ANNOY_STATE 0x10
++#define INITED_STATE 0x20
++#define PLUGGED_STATE 0x40
++#define WRITTEN_STATE 0x80
++static atomic_t state = ATOMIC_INIT(BOOT_STATE);
++
++#ifdef MICROLISS_RODEV1
++#ifdef MICROLISS_RODEV2
++#ifdef MICROLISS_RODEV3
++#define DEVCNT 4
++const int devices[] = {
++		MICROLISS_RODEV3,
++#else
++#define DEVCNT 3
++const int devices[] = {
++#endif
++		MICROLISS_RODEV2,
++#else
++#define DEVCNT 2
++const int devices[] = {
++#endif
++		MICROLISS_RODEV1,
++#else
++#define DEVCNT 1
++const int devices[] = {
++#endif
++		MICROLISS_RODEV0 };
++
++#ifndef MICROLISS_DEBUG_MSG_INTERVAL
++#define MICROLISS_DEBUG_MSG_INTERVAL 16
++#endif
++
++#if CONFIG_MICROLISS_DEBUG & MICROLISS_DBGFL_TIMEOUT
++#define _RO_TIMEOUT (MICROLISS_TIMEOUT_RO / 10)
++#define _NET_TIMEOUT_HARD (MICROLISS_TIMEOUT_NET_HARD / 10)
++#define _NET_TIMEOUT_SOFT (MICROLISS_TIMEOUT_NET_SOFT / 10)
++#else
++#define _RO_TIMEOUT MICROLISS_TIMEOUT_RO
++#define _NET_TIMEOUT_HARD MICROLISS_TIMEOUT_NET_HARD
++#define _NET_TIMEOUT_SOFT MICROLISS_TIMEOUT_NET_SOFT
++#endif
++
++
++/**
++ * Returns:
++ *  0 if rw
++ *  1 if ro
++ *  >1 if ro, but syncing
++ */
++int microliss_is_readonly()
++{
++		return( atomic_read( &state) & (RO_STATE | SYNC_STATE));
++}
++
++
++/**
++ * Returns:
++ *  <0 if no timeout pending
++ *  =0 if pin is plugged and all ro-timeout
++ *  >0 with the timer index in the upper half and the timeout in the lower half
++ *     of a long value.
++ */
++long microliss_next_timeout()
++{
++#ifndef CONFIG_MICROLISS_NO_TIMEOUT
++		unsigned long irqflags;
++#endif
++		unsigned int t0running;
++		int index = -((int) '?'), seconds = 0, st = atomic_read( &state);
++
++		if (st == BOOT_STATE)
++		{
++			index = -((int) 'B');
++		}
++		else if (st & INIT_STATE)
++		{
++			index = -((int) 'I');
++		}
++		else if (timerRunning( microliss_timer0, t0running))
++		{
++#ifdef CONFIG_MICROLISS_NO_TIMEOUT
++			index = 3;
++			seconds = 9999;
++#else
++			read_lock_irqsave( &microliss_lock, irqflags);
++
++			/* Timeout 0 (ro-timer) is pending */
++			if ((_NET_TIMEOUT_HARD < _RO_TIMEOUT) /* let cc optimize this ... */
++					&& (microliss_timer1.list.prev))
++			{
++				/* Timeout 1 (hard limit net-down) expires before Timeout 0 */
++				if ((_NET_TIMEOUT_SOFT < _NET_TIMEOUT_HARD) /* ... and this too */
++						&& microliss_timer2.list.prev
++						&& (microliss_timer2.expires < microliss_timer1.expires))
++				{
++					/* Timeout 2 (soft limit net-down) expires before Timeout 1 */
++					index = 3;
++					seconds = (microliss_timer2.expires - jiffies) / HZ;
++				}
++				else
++				{
++					/* Timeout 1 expires next */
++					index = (st & WRITTEN_STATE) ? 2 : 4;
++					seconds = (microliss_timer1.expires - jiffies) / HZ;
++				}
++			}
++			else
++			{
++				/* Timeout 0 expires next */
++				index = 1;
++				seconds = (microliss_timer0.expires - jiffies) / HZ;
++			}
++
++			read_unlock_irqrestore( &microliss_lock, irqflags);
++#endif
++		}
++		else
++		{
++			/* No timeout pending */
++			index = (st & PLUGGED_STATE) ? 0 : -((int)'-');
++			seconds = 0;
++		}
++
++		return( ((long) index) << 16 | (seconds < 0 ? 0 : seconds));
++}
++
++
++/**
++ *
++ */
++long microliss_time_left( int timer)
++{
++#ifdef CONFIG_MICROLISS_NO_TIMEOUT
++		long seconds = 9999L;
++#else
++		long seconds = -1L;
++		unsigned long irqflags;
++		
++		read_lock_irqsave( &microliss_lock, irqflags);
++		switch (timer)
++		{
++			/* If timer.prev is NULL it ain't runnin' ! */
++			case 0:
++				if (microliss_timer0.list.prev)
++				{
++					seconds = (microliss_timer0.expires > jiffies
++										 ? (microliss_timer0.expires - jiffies) / HZ
++										 : 0L);
++				}
++				break;
++			case 1:
++				if (microliss_timer1.list.prev)
++				{
++					seconds = (microliss_timer1.expires > jiffies
++										 ? (microliss_timer1.expires - jiffies) / HZ
++										 : 0L);
++				}
++				break;
++			case 2:
++				if (microliss_timer2.list.prev)
++				{
++					seconds = (microliss_timer2.expires > jiffies
++										 ? (microliss_timer2.expires - jiffies) / HZ
++										 : 0L);
++				}
++				break;
++			default:
++				seconds = -2L;
++		}
++		read_unlock_irqrestore( &microliss_lock, irqflags);
++#endif
++
++		return seconds;
++}
++
++
++/**
++ *
++ */
++void microliss_start_timer2_conditionally( kdev_t dev)
++{
++		long timeout = jiffies + _NET_TIMEOUT_SOFT * HZ;
++		unsigned long irqflags;
++
++		write_lock_irqsave( &microliss_lock, irqflags);
++		if (0 == (atomic_read( &state) & (RO_STATE | BOOT_STATE | ANNOY_STATE))
++				&& is_microliss_dev( dev)
++				&& (microliss_timer2.expires < timeout))
++		{
++			/* The first or a subsequent write occured */
++			atomic_set( &state, atomic_read( &state) | WRITTEN_STATE);
++			if ((microliss_timer1.list.prev) && (microliss_timer1.expires > timeout))
++			{
++				if (microliss_timer2.list.prev == NULL)
++				{
++#ifdef CONFIG_MICROLISS_DEBUG
++					printk( KERN_DEBUG "Starting timer 2\n");
++#endif
++					/* Timer 2 is not running -> start it */
++					microliss_timer2.expires = timeout;
++					add_timer( &microliss_timer2);
++				}
++				else if (timeout - microliss_timer2.expires > HZ)
++				{
++					/* Restart only if new timeout expires at least one second later */
++#ifdef CONFIG_MICROLISS_DEBUG
++					printk( KERN_DEBUG "Restarting timer 2\n");
++#endif
++					/* Timer 2 already running -> restart */
++					mod_timer( &microliss_timer2, timeout);
++				}
++			}
++			else
++			{
++				/* Not enough time left to start timer 2, let timer 1 do the work */
++				if (microliss_timer2.list.prev)
++				{
++#ifdef CONFIG_MICROLISS_DEBUG
++					printk( KERN_DEBUG "timeout 1 too short, cancelling timer 2\n");
++#endif
++					del_timer( &microliss_timer2);
++				}
++			}
++		}
++		write_unlock_irqrestore( &microliss_lock, irqflags);
++}
++
++/*** Internal functions ***/
++
++/**
++ *
++ */
++static int fs_are_ro( void)
++{
++		unsigned int rc = 1, cnt = DEVCNT;
++		kdev_t dev;
++		struct super_block * super;
++
++		
++		while (cnt-- > 0)
++		{
++			dev = devices[cnt];
++			if (NULL != (super = get_super( dev)))
++			{
++#ifdef CONFIG_MICROLISS_DEBUG
++				printk( KERN_DEBUG "performing r/o test for device %#x flags: %#lx\n",
++								devices[cnt],
++								super->s_flags);
++#endif
++				rc = rc && (super->s_flags & MS_RDONLY);
++				drop_super(super);
++			}
++		}
++		
++
++#ifdef CONFIG_MICROLISS_DEBUG
++		printk( KERN_DEBUG "r/o tests returned %d\n", rc);
++#endif
++
++		return rc;
++}
++
++
++/**
++ *
++ */
++static int netDown( void)
++{
++		if (atomic_read( &state) & ANNOY_STATE)
++		{
++#ifdef CONFIG_MICROLISS_DEBUG
++			printk( KERN_DEBUG
++							"Multiple consecutive invocations of netDown occurred!\n");
++#endif
++		}
++		else
++		{
++#ifdef CONFIG_MICROLISS_DEBUG
++			printk( KERN_DEBUG "Disabling network\n");
++#endif
++
++			/* disable IP forwarding */
++			inet_forward_set( 0);
++
++#ifdef MICROLISS_SHORTEN_TIMEOUT0
++			if (_RO_TIMEOUT > _NET_TIMEOUT_HARD)
++			{
++				unsigned long irqflags;
++
++				write_lock_irqsave( &microliss_lock, irqflags);
++				/* Sanity checked */
++				if (microliss_timer0.list.prev)
++				{
++					/* Shorten timeout 0 so that net down time is limited to the difference
++					 * between ro and net-down timout.
++					 */
++					mod_timer( &microliss_timer0,
++										 jiffies + (_RO_TIMEOUT - _NET_TIMEOUT_HARD) * HZ);
++				}
++				write_unlock_irqrestore( &microliss_lock, irqflags);
++			}
++#endif
++
++			/* Set the annoy flag */
++			atomic_set( &state, atomic_read( &state) | ANNOY_STATE);
++		}
++
++		return 0;
++}
++
++
++/**
++ *
++ */
++static int netUp( void)
++{
++		if (atomic_read( &state) & ANNOY_STATE)
++		{
++#ifdef CONFIG_MICROLISS_DEBUG
++			printk( KERN_DEBUG "Enabling network\n");
++#endif
++
++			inet_forward_set( 1);
++
++			/* Unset the annoy flag */
++			atomic_set( &state, atomic_read( &state) & ~ANNOY_STATE);
++
++#ifdef CONFIG_MICROLISS_DEBUG
++		}
++		else
++		{
++			printk( KERN_DEBUG "Multiple consecutive invocations of netUp occurred!\n");
++#endif
++		}
++
++		return 0;
++}
++
++
++/**
++ * set_readonly is called from different locations to initiate remounting the
++ * microliss devices readonly and sets the appropriate state bits.  The actual
++ * work is done by task_readonly, the execution of which is scheduled via the
++ * task queue tq_immediate.
++ */
++static void set_readonly( void)
++{
++		unsigned long irqflags;
++
++		if (atomic_read( &state) & RO_STATE) { return; }
++
++		atomic_set( &state, atomic_read( &state) | SYNC_STATE|RO_STATE);
++
++		write_lock_irqsave( &microliss_lock, irqflags);
++		/*  Start the sync timer */
++		if (microliss_synctimer.list.prev == NULL)
++		{
++			microliss_synctimer.expires = jiffies + CONFIG_MICROLISS_TIMEOUT_SYNC * HZ;
++			add_timer( &microliss_synctimer);
++		}
++		else
++		{
++			mod_timer( &microliss_synctimer,
++								 jiffies + CONFIG_MICROLISS_TIMEOUT_SYNC * HZ);
++		}
++		microliss_synctimer.data = 0;
++
++		/* Cancel timer 0 if running */
++		if (microliss_timer0.list.prev != NULL) { del_timer( &microliss_timer0); }
++
++		/* schedule sync/remounting of the microliss devices */
++		SET_TASK_ID(0);
++		schedule_task( &microliss_tq);
++		write_unlock_irqrestore( &microliss_lock, irqflags);
++}
++
++
++#ifdef CONFIG_MICROLISS_DEBUG
++static void debugPortState( unsigned char byte)
++{
++		int st = atomic_read( &state);
++		if (st & RO_STATE)
++		{
++			printk( KERN_DEBUG
++							"%c%c%c+%c%c%c+%c%c Read byte %#x from port %#x\n",
++							(st & RO_STATE) ? 'r' : '-',
++							(st & SYNC_STATE) ? 's' : '-',
++							(st & ANNOY_STATE) ? 'a' : '-',
++							(st & BOOT_STATE) ? 'b' : '-',
++							(st & INIT_STATE) ? 'i' : '-',
++							(st & INITED_STATE) ? 'I' : '-',
++							(st & PLUGGED_STATE) ? 'p' : '-',
++							(st & WRITTEN_STATE) ? 'w' : '-',
++							byte, CONFIG_MICROLISS_PARPORT_ADDRESS);
++		}
++		else
++		{
++			printk( KERN_DEBUG
++							"%c%c%c+%c%c%c+%c%c %#x(%#x), t/o: %ld/%ld/%ld\n",
++							(st & RO_STATE) ? 'r' : '-',
++							(st & SYNC_STATE) ? 's' : '-',
++							(st & ANNOY_STATE) ? 'a' : '-',
++							(st & BOOT_STATE) ? 'b' : '-',
++							(st & INIT_STATE) ? 'i' : '-',
++							(st & INITED_STATE) ? 'I' : '-',
++							(st & PLUGGED_STATE) ? 'p' : '-',
++							(st & WRITTEN_STATE) ? 'w' : '-',
++							byte, CONFIG_MICROLISS_PARPORT_ADDRESS,
++							microliss_time_left( 0),
++							microliss_time_left( 1),
++							microliss_time_left( 2));
++		}
++}
++#endif
++
++static void wpinPlugAction( void)
++{
++		unsigned long irqflags;
++
++#if CONFIG_MICROLISS_DEBUG
++		printk( KERN_INFO "Write enable pin has been plugged\n");
++#endif
++
++		write_lock_irqsave( &microliss_lock, irqflags);
++		/* write pin is plugged -> check if can go rw */
++		if (fs_are_ro() && microliss_timer0.list.prev == NULL)
++		{
++#ifdef CONFIG_MICROLISS_DEBUG
++			printk( KERN_DEBUG
++							"State %#x: Setting rw and starting timers\n", atomic_read( &state));
++#endif
++			/* If sync timeout is still active, cancel it */
++			if (microliss_synctimer.list.prev)
++			{
++				del_timer( &microliss_synctimer);
++				atomic_set( &state, atomic_read( &state) & ~SYNC_STATE);
++			}
++			/* Timers 0 and 1 are not running, unset ro and written flag, set
++			 * plugged flag and start timers.
++			 */
++			atomic_set( &state,
++									(atomic_read( &state) & ~(RO_STATE|WRITTEN_STATE))
++									| PLUGGED_STATE);
++			microliss_timer0.expires = jiffies + _RO_TIMEOUT * HZ;
++#if _RO_TIMEOUT > _NET_TIMEOUT_HARD
++			microliss_timer1.expires = jiffies + _NET_TIMEOUT_HARD * HZ;
++#endif
++			add_timer( &microliss_timer0);
++#if _RO_TIMEOUT > _NET_TIMEOUT_HARD
++			add_timer( &microliss_timer1);
++#endif
++		}
++		write_unlock_irqrestore( &microliss_lock, irqflags);
++}
++
++static void bootInit( unsigned char byte)
++{
++		atomic_set( &state,
++								((atomic_read( &state) & ~(BOOT_STATE|INIT_STATE))|ANNOY_STATE));
++		netUp();
++		/* Set state to a sane default */
++		atomic_set( &state, RO_STATE);
++
++		if (byte & MICROLISS_INIT_BITMASK)
++		{
++			printk( KERN_INFO
++							"Init pin was plugged at boot time, factory settings restored!\n");
++			atomic_set( &state, atomic_read( &state) | INITED_STATE);
++		}
++
++	 if (byte & MICROLISS_RO_BITMASK)
++		{
++#ifdef CONFIG_MICROLISS_DEBUG
++			printk( KERN_DEBUG "Write enable pin was not removed while rebooting\n");
++#endif
++#ifdef CONFIG_MICROLISS_NO_TIMEOUT
++			wpinPlugAction();
++#else
++			atomic_set( &state, atomic_read( &state) | PLUGGED_STATE);
++#endif
++		}
++}
++
++
++int isLocalDisk( kdev_t dev)
++{
++		switch (MAJOR(dev))
++		{
++			case 1: /* FALLTHROUGH */
++			case 3:
++				return( 1);
++		}
++
++		return( 0);
++}
++
++
++void remountDevRO( kdev_t dev)
++{
++		struct super_block *sb = get_super(dev);
++		// struct vfsmount *vfsmnt;
++		int rc = 0, flags = MS_RDONLY|MS_SYNCHRONOUS;
++
++		if (sb && ! (sb->s_flags & MS_RDONLY))
++		{
++			DQUOT_OFF(dev);
++
++			/* Try to get rid of all dirty inodes */
++			rc = invalidate_inodes( sb);
++
++			lock_super( sb);
++			if (sb->s_dirt && sb->s_op && sb->s_op->write_super)
++			{
++				sb->s_op->write_super( sb);
++			}
++			unlock_super( sb);
++
++#ifdef CONFIG_MICROLISS_DEBUG
++			printk( KERN_DEBUG "Syncing device %#x for remount\n", dev);
++#endif
++			fsync_dev( sb->s_dev);
++#ifdef CONFIG_MICROLISS_DEBUG
++			printk( KERN_DEBUG "Finished syncing device %#x\n", dev);
++#endif
++			invalidate_buffers( sb->s_dev);
++
++			if (sb->s_op && sb->s_op->remount_fs)
++			{
++#ifdef CONFIG_MICROLISS_DEBUG
++				printk( KERN_DEBUG "Calling remount function for dev %#x\n", dev);
++#endif
++				rc = sb->s_op->remount_fs(sb, &flags, NULL);
++				if (rc)
++				{
++					printk( KERN_WARNING "Remount function for %#x failed\n", dev);
++				}
++			}
++
++			sb->s_flags = (sb->s_flags & ~MS_RMT_MASK) | (flags & MS_RMT_MASK);
++		}
++		drop_super(sb);
++}
++
++
++void emergency_remount( void)
++{
++		// struct vfsmount *vfsmnt;
++		struct super_block *sb;
++		unsigned long irqflags;
++
++		// prune_dcache( 0, -1 ); is the same as shrink_dcache in 2.2      
++		prune_dcache(0);       // is the same as shrink_dcache in 2.4
++		lock_kernel();
++
++		for (sb = sb_entry(super_blocks.next);
++				 sb != sb_entry(&super_blocks);
++				 sb = sb_entry(sb->s_list.next))
++				if (isLocalDisk(sb->s_dev))
++				{
++				remountDevRO(sb->s_dev);
++				}
++		unlock_kernel();
++
++		write_lock_irqsave( &microliss_lock, irqflags);
++		SET_TIMER(reboot_timer, jiffies + CONFIG_MICROLISS_TIMEOUT_SYNC * HZ);
++		write_unlock_irqrestore( &microliss_lock, irqflags);
++}
++
++
++/**
++ * Things we have to do once the write enable pin has been plugged.
++ */
++
++/**
++ * Things we have to do once the write enable pin has been unplugged.
++ */
++static void wpinUnplugAction( void)
++{
++		int st = atomic_read( &state);
++
++		if (st & RO_STATE)
++		{
++			printk( KERN_INFO "Write enable pin has been unplugged while r/o\n");
++			atomic_set( &state, st & ~PLUGGED_STATE);
++		}
++		else
++		{
++			unsigned long irqflags;
++
++			printk( KERN_INFO "Write enable pin has been unplugged while r/w\n");
++
++			set_readonly();					/* sets RO_STATE bit in state if successful */
++			write_lock_irqsave( &microliss_lock, irqflags);
++			/* We can delete timers 1 and 2 right away ... */
++			if (microliss_timer2.list.prev != NULL) { del_timer( &microliss_timer2); }
++			if (microliss_timer1.list.prev != NULL) { del_timer( &microliss_timer1); }
++			write_unlock_irqrestore( &microliss_lock, irqflags);
++
++			/* state may have changed in set_readonly, don't use st here! */
++			atomic_set( &state, atomic_read( &state) & ~PLUGGED_STATE);
++		}
++}
++
++
++/**
++ * Things we have to do once the init pin has been unplugged.
++ */
++static void ipinPlugAction( void)
++{
++		unsigned long timeout, irqflags;
++
++		printk( KERN_INFO "Init pin has been plugged\n");
++
++		atomic_set( &state, atomic_read( &state) | INIT_STATE);
++
++		timeout = jiffies + MICROLISS_REBOOT_TIMEOUT * HZ;
++		write_lock_irqsave( &microliss_lock, irqflags);
++		SET_TIMER(reboot_timer,timeout);
++
++		/* schedule rebooting */
++		SET_TASK_ID(1);
++		queue_task( &microliss_tq, &tq_immediate);
++		mark_bh( IMMEDIATE_BH);
++		write_unlock_irqrestore( &microliss_lock, irqflags);
++}
++
++
++/**
++ * Things we have to do once the init pin has been unplugged.
++ */
++static void ipinUnplugAction( void)
++{
++		printk( KERN_INFO "Init pin has been unplugged\n");
++		atomic_set( &state, atomic_read( &state) & ~INITED_STATE);
++}
++
++
++/**
++ * microliss_read_status - read the status byte from the microliss parport
++ *
++ * This is called from the heartbeat timer
++ */
++static void microliss_read_status( unsigned long data)
++{
++		unsigned long irqflags;
++		/* Read one byte from the port */
++		unsigned char byte = inb( STATUS( CONFIG_MICROLISS_PARPORT_ADDRESS));
++		int st = atomic_read( &state);
++
++#ifdef CONFIG_MICROLISS_DEBUG
++		long timeout;
++		read_lock_irqsave( &microliss_lock, irqflags);
++		timeout = (microliss_timer0.expires - jiffies) / HZ;
++		read_unlock_irqrestore( &microliss_lock, irqflags);
++
++		if (! (((unsigned long)timeout) % MICROLISS_DEBUG_MSG_INTERVAL))
++		{
++			debugPortState( byte);
++		}
++#endif
++
++		/* RO and Init bits are active low, so we toggle them here */
++		byte ^= (MICROLISS_RO_BITMASK|MICROLISS_INIT_BITMASK);
++
++		if (st & BOOT_STATE)
++		{
++			/* First time we check the pin state */
++			bootInit( byte);
++		}
++		else if (st & INIT_STATE)
++		{
++			/* Nothing but reboot will get us out of this state */
++		}
++		else if (byte & MICROLISS_INIT_BITMASK)	/* Init pin plugged */
++		{
++			/* init pin is plugged ... */
++			if (! (st & (INIT_STATE|INITED_STATE)))
++			{
++				/* ... but wasn't before */
++				ipinPlugAction();
++			}
++		}
++		else if (byte & MICROLISS_RO_BITMASK)	/* Write enable pin plugged */
++		{
++			/* write pin is plugged ... */
++			if ((! (st & PLUGGED_STATE)) && (st & RO_STATE))
++			{
++				/* ... but wasn't before */
++				wpinPlugAction();
++			}
++		}
++		else													/* No pin plugged */
++		{
++			/* write or init pin has been unplugged */
++			if (st & PLUGGED_STATE)
++			{
++				/* write pin was plugged before */
++				wpinUnplugAction();
++			}
++			else if (st & INITED_STATE)
++			{
++				/* init pin was plugged before */
++				ipinUnplugAction();
++			}
++		}
++
++		write_lock_irqsave( &microliss_lock, irqflags);
++		/* schedule the next heartbeat */
++		mod_timer( &microliss_heartbeat, jiffies + MICROLISS_POLL_INTERVAL * HZ);
++		write_unlock_irqrestore( &microliss_lock, irqflags);
++}
++
++
++/**
++ * process_timeout0 - timeout function for timer 0
++ *
++ * This is called when microliss_timer0 expires.
++ * It sets the microLiSS devices readonly again.
++ *
++ */
++static void process_timeout0( unsigned long data)
++{
++#ifdef CONFIG_MICROLISS_NO_TIMEOUT
++		/* simply restart */
++#ifdef CONFIG_MICROLISS_DEBUG
++		printk( KERN_NOTICE "Processing timeout 0: restarting timer 0\n");
++#endif
++		SET_TIMER(microliss_timer0, jiffies + _RO_TIMEOUT * HZ)
++#else
++#ifdef CONFIG_MICROLISS_DEBUG
++		printk( KERN_NOTICE "Processing timeout 0: setting readonly\n");
++#endif
++		/* Timeout 0 has expired. Set devices readonly. */
++		set_readonly();
++#endif
++}
++
++
++/**
++ * process_timeout1 - timeout function for timer 1
++ *
++ * This is called when one of microliss_timer1 expires.
++ * It will disable network interfaces or, at least, IP forwarding.
++ *
++ */
++static void process_timeout1( unsigned long data)
++{
++#ifdef CONFIG_MICROLISS_DEBUG
++		printk( KERN_NOTICE
++						"Processing timeout 1: disable networking (hard limit)\n");
++#endif
++
++		netDown();
++}
++
++
++/**
++ * process_timeout2 - timeout function for timer 2
++ *
++ * This is called when one of microliss_timer2 expires.
++ * It will disable network interfaces or, at least, IP forwarding.
++ *
++ */
++static void process_timeout2( unsigned long data)
++{
++		unsigned long irqflags;
++
++#ifdef CONFIG_MICROLISS_DEBUG
++		printk( KERN_NOTICE
++						"Processing timeout 2: disable network (soft limit)\n");
++#endif
++
++		netDown();
++
++		write_lock_irqsave( &microliss_lock, irqflags);
++		if (microliss_timer1.list.prev != NULL)
++		{
++			del_timer( &microliss_timer1);
++		}
++		write_unlock_irqrestore( &microliss_lock, irqflags);
++}
++
++
++/**
++ * process_synctimeout - timeout function for sync timer
++ *
++ * This is called when microliss_synctimer expires.
++ *
++ */
++static void process_synctimeout( unsigned long data)
++{
++		unsigned long irqflags;
++		int st = atomic_read( &state);
++
++		if (data == SYNC_STATE)
++		{
++#ifdef CONFIG_MICROLISS_DEBUG
++			printk( KERN_DEBUG "Processing sync timeout: block devs now r/o\n");
++#endif
++			atomic_set( &state, st & ~SYNC_STATE);
++		}
++		else if (st & SYNC_STATE)
++		{
++			printk( KERN_WARNING
++							"Processing sync timeout: syncing did not succeed, forcing r/o\n");
++
++			/* set the ro flag and unset the sync flag */
++			atomic_set( &state, (st | RO_STATE)  & ~SYNC_STATE);
++		}
++
++		write_lock_irqsave( &microliss_lock, irqflags);
++		/* If timer 0 is still running it should definitely be cancelled by now */
++		if (microliss_timer0.list.prev != NULL) { del_timer( &microliss_timer0); }
++		write_unlock_irqrestore( &microliss_lock, irqflags);
++}
++
++
++/**
++ * Hard reboot (bypassing init). Called from reboot_timer.
++ */
++static void process_reboot_timeout( unsigned long data)
++{
++		static int stage = 0;
++		if (stage++)
++		{
++			machine_restart( UNUSED_PTR);
++		}
++		else
++		{
++			unsigned long irqflags;
++
++			write_lock_irqsave( &microliss_lock, irqflags);
++			if (reboot_timer.list.prev)
++			{
++				/* Reboot timer is already active, this should not happen */
++				printk( KERN_DEBUG
++								"Timer is not yet deleted when timer function is called!\n");
++				mod_timer( &reboot_timer, jiffies + CONFIG_MICROLISS_TIMEOUT_SYNC * HZ);
++			}
++			else
++			{
++				reboot_timer.expires = jiffies + CONFIG_MICROLISS_TIMEOUT_SYNC * HZ;
++				add_timer( &reboot_timer);
++			}
++			printk( KERN_WARNING
++							"Reboot through init impossible, doing emergency sync\n");
++			SET_TASK_ID(2);
++			queue_task( &microliss_tq, &tq_immediate);
++			mark_bh( IMMEDIATE_BH);
++			write_unlock_irqrestore( &microliss_lock, irqflags);
++		}
++}
++
++
++/**
++ * Serves as the worker function for the task_queue set up by set_readonly.
++ */
++static void task_readonly( void * unused)
++{
++		unsigned long irqflags;
++		int flags = MS_RDONLY, cnt = DEVCNT;
++		int rc = 0, needSync = 0;
++		kdev_t dev;
++		// struct vfsmount * mount;
++		struct super_block * sb;
++
++		write_lock_irqsave( &microliss_lock, irqflags);
++		/* Will be rescheduled later if necessary */
++		if (microliss_synctimer.list.prev)
++		{
++			del_timer( &microliss_synctimer);
++		}
++		write_unlock_irqrestore( &microliss_lock, irqflags);
++
++		lock_kernel();
++
++		while (cnt-- > 0)
++		{
++			dev = devices[cnt];
++
++			if (NULL != (sb = get_super( dev)))
++			{
++				/* There is a fs mounted from current device */
++#ifdef CONFIG_MICROLISS_DEBUG
++				printk( KERN_DEBUG "Trying to remount (%#x) ro\n", dev);
++#endif
++				if (sb->s_flags & MS_RDONLY)
++				{
++#ifdef CONFIG_MICROLISS_DEBUG
++					printk( KERN_DEBUG "Device (%#x) is already mounted ro\n", dev);
++#endif
++				}
++				else
++				{
++					/* Do remount ... */
++					if (sb->s_op && sb->s_op->remount_fs)
++					{
++						/* ... via the superblock remount command first, if available */
++						lock_super( sb);
++						rc = sb->s_op->remount_fs( sb, &flags, NULL);
++						unlock_super( sb);
++						if (rc)
++						{
++							printk( KERN_ERR "Error remounting device %d ro: %d\n", dev, rc);
++						}
++						else
++						{
++							/* Alas, remounting dirties a buffer again,
++							 * wait for it to be synced
++							 */
++							needSync = 1;
++
++#ifdef CONFIG_MICROLISS_DEBUG
++							printk( KERN_DEBUG "Successfully remounted %#x ro\n", dev);
++#endif
++						}
++					}
++#ifdef CONFIG_MICROLISS_DEBUG
++					else
++					{
++						printk( KERN_DEBUG
++										"Remount cmd undefined for vfs mounted from (%#x)\n", dev);
++					}
++#endif
++					/* ... then set r/o bits in the superblock and vfs flags */
++					sb->s_flags = (sb->s_flags & ~MS_RMT_MASK) | (flags & MS_RMT_MASK);
++				}
++				drop_super(sb);
++			}
++		}
++
++		unlock_kernel();
++
++		if (needSync)
++		{
++			write_lock_irqsave( &microliss_lock, irqflags);
++			microliss_synctimer.data = SYNC_STATE;
++			microliss_synctimer.expires = (jiffies +
++																		 CONFIG_MICROLISS_TIMEOUT_SYNC * HZ);
++			add_timer( &microliss_synctimer);
++			write_unlock_irqrestore( &microliss_lock, irqflags);
++		}
++		else
++		{
++			atomic_set( &state, atomic_read( &state) & ~SYNC_STATE);
++		}
++
++		if (atomic_read( &state) & ANNOY_STATE)
++		{
++			/* Reenable networking */
++			netUp();
++		}
++}
++
++
++static void task_reboot( void * unused)
++{
++		unsigned long irqflags;
++
++		write_lock_irqsave( &microliss_lock, irqflags);
++		/* Cancel all timers except heartbeat and reboot_timer */
++		if (microliss_synctimer.list.prev) { del_timer( &microliss_synctimer); }
++		if (microliss_timer0.list.prev) { del_timer( &microliss_timer0); }
++		if (microliss_timer1.list.prev) { del_timer( &microliss_timer1); }
++		if (microliss_timer2.list.prev) { del_timer( &microliss_timer2); }
++
++		/* Tell init CTRL-ALT-DEL had been pressed. It isn't true but init won't
++		 * notice ;-)
++		 */
++		kill_proc( 1, SIGINT, 1);
++		write_unlock_irqrestore( &microliss_lock, irqflags);
++}
++
++
++/**
++ * foreman - decides which routine should be run on a task queue event.
++ */
++static void foreman( void * data)
++{
++		if (data == NULL)
++		{
++			panic( "microliss_tq.data is undefined!\n");
++		}
++		else
++		{
++#ifdef CONFIG_MICROLISS_DEBUG
++			printk( KERN_DEBUG "DEBUG: microliss_tq(%lu) run from %s interrupt\n",
++							*((unsigned long *)data),
++							in_interrupt() ? "within" : "outside");
++#endif
++
++			switch (*((unsigned long *)data))
++			{
++				case 0:
++					task_readonly( UNUSED_PTR);
++					break;
++				case 1:
++					task_reboot( UNUSED_PTR);
++					break;
++				case 2:
++					emergency_remount();
++					break;
++				default:
++					printk( KERN_ERR "Illegal value %ld in microliss_tq.data!\n",
++									*((unsigned long *)data));
++			}
++		}
++}
++
++
++/*** External functions ***/
++
++/**
++ * Used from the proc filesystem.
++ */
++int microliss_proc_init( struct file *file, const char *buffer,
++													 unsigned long count, void *data)
++{
++		int rc = count, st = atomic_read( &state);
++		unsigned long irqflags;
++
++#ifdef CONFIG_MICROLISS_DEBUG
++		extern int console_loglevel;
++		int prev_loglevel = console_loglevel;
++		console_loglevel = 8;
++		if (count > 1)
++		{
++			printk( KERN_NOTICE "%.*s was written to /proc/"MICROLISS_PROCF_INIT"\n",
++							((int)count)-1, buffer);
++		}
++		// #ifdef MICROLISS_PARANOID_PROC
++		else
++		{
++			printk( KERN_NOTICE "Nothing was written to /proc/"MICROLISS_PROCF_INIT"\n");
++		}
++		// #endif
++#endif
++
++		switch (*buffer)
++		{
++			case 'B': /* Writing part of boot process finished */
++				if (st == BOOT_STATE)
++				{
++#ifdef CONFIG_MICROLISS_DEBUG
++					printk( KERN_NOTICE
++									"Boot time initialization complete: setting readonly\n");
++#endif
++					write_lock_irqsave( &microliss_lock, irqflags);
++					/* ! BOOT_STATE flag is cleared from microliss_read_status ! */
++					/* ! just set the timer that will call it ! */
++					if (microliss_heartbeat.list.prev == NULL)
++					{
++						microliss_heartbeat.expires = jiffies + MICROLISS_POLL_INTERVAL * HZ;
++						add_timer( &microliss_heartbeat);
++					}
++					write_unlock_irqrestore( &microliss_lock, irqflags);
++				}
++#ifdef CONFIG_MICROLISS_DEBUG
++				else
++				{
++					printk( KERN_ERR
++									"Init reported end of booting in state %c%c%c+%c%c%c+%c%c!\n",
++									(st & RO_STATE) ? 'r' : '-',
++									(st & SYNC_STATE) ? 's' : '-',
++									(st & ANNOY_STATE) ? 'a' : '-',
++									(st & BOOT_STATE) ? 'b' : '-',
++									(st & INIT_STATE) ? 'i' : '-',
++									(st & INITED_STATE) ? 'I' : '-',
++									(st & PLUGGED_STATE) ? 'p' : '-',
++									(st & WRITTEN_STATE) ? 'w' : '-');
++				}
++#endif			
++				break;
++			case 'I': /* Reinitialization complete */
++				if (st & INIT_STATE)
++				{
++#ifdef CONFIG_MICROLISS_DEBUG
++					printk( KERN_NOTICE "Initialization complete: setting readonly\n");
++#endif
++					write_lock_irqsave( &microliss_lock, irqflags);
++					/* ! INIT_STATE flag is cleared from microliss_read_status ! */
++					/* ! just set the timer that will call it ! */
++					if (microliss_heartbeat.list.prev == NULL)
++					{
++						microliss_heartbeat.expires = jiffies + MICROLISS_POLL_INTERVAL * HZ;
++						add_timer( &microliss_heartbeat);
++					}
++					write_unlock_irqrestore( &microliss_lock, irqflags);
++				}
++#ifdef CONFIG_MICROLISS_DEBUG
++				else
++				{
++					printk( KERN_ERR "Init reported end of initialization"
++									" in state %c%c%c+%c%c%c+%c%c!\n",
++									(st & RO_STATE) ? 'r' : '-',
++									(st & SYNC_STATE) ? 's' : '-',
++									(st & ANNOY_STATE) ? 'a' : '-',
++									(st & BOOT_STATE) ? 'b' : '-',
++									(st & INIT_STATE) ? 'i' : '-',
++									(st & INITED_STATE) ? 'I' : '-',
++									(st & PLUGGED_STATE) ? 'p' : '-',
++									(st & WRITTEN_STATE) ? 'w' : '-');
++				}
++#endif			
++				break;
++			default:
++				// #ifdef MICROLISS_PARANOID_PROC
++				printk( KERN_ERR "Illegal data written to "MICROLISS_PROCF_INIT": %c\n",
++								*buffer);
++				// #endif
++				break;
++		}
++
++#ifdef CONFIG_MICROLISS_DEBUG
++		console_loglevel = prev_loglevel;
++#endif
++
++		return rc;
++}
++
++
++static unsigned long taskID;
++/**
++ *
++ */
++int __init microliss_init( void)
++{
++		printk( KERN_NOTICE "Initializing microLiSS block device driver.\n");
++#ifdef CONFIG_MICROLISS_DEBUG
++		printk( KERN_NOTICE "  Monitoring bit %#2x and %d device%s: %d:%d"
++#ifdef MICROLISS_RODEV1
++						", %d:%d"
++#ifdef MICROLISS_RODEV2
++						", %d:%d"
++#ifdef MICROLISS_RODEV3
++						", %d,%d"
++#endif
++#endif
++						"\n", MICROLISS_RO_BITMASK, DEVCNT, "s",
++#else
++						"\n", MICROLISS_RO_BITMASK, DEVCNT, "",
++#endif
++						MICROLISS_RODEV_MAJOR0, MICROLISS_RODEV_MINOR0
++#ifdef MICROLISS_RODEV1
++						, MICROLISS_RODEV_MAJOR1, MICROLISS_RODEV_MINOR1
++#ifdef MICROLISS_RODEV2
++						, MICROLISS_RODEV_MAJOR2, MICROLISS_RODEV_MINOR2
++#ifdef MICROLISS_RODEV3
++						, MICROLISS_RODEV_MAJOR3, MICROLISS_RODEV_MINOR3
++#endif
++#endif
++#endif
++						);
++#endif
++
++		atomic_set( &state, BOOT_STATE);
++		/* Check status byte from the parallel port (Bits are active low !) */
++		if (! (inb( STATUS( CONFIG_MICROLISS_PARPORT_ADDRESS)) & MICROLISS_INIT_BITMASK))
++		{
++			atomic_set( &state, atomic_read( &state) | INIT_STATE);
++		}
++
++		init_timer( &microliss_heartbeat);
++		microliss_heartbeat.data = 0L;
++		microliss_heartbeat.function = microliss_read_status;
++
++		init_timer( &microliss_timer0);
++		microliss_timer0.data = 0L;
++		microliss_timer0.function = process_timeout0;
++
++		init_timer( &microliss_timer1);
++		microliss_timer1.function = process_timeout1;
++
++		init_timer( &microliss_timer2);
++		microliss_timer2.function = process_timeout2;
++
++		init_timer( &microliss_synctimer);
++		microliss_synctimer.data = 0;
++		microliss_synctimer.function = process_synctimeout;
++
++		init_timer( &reboot_timer);
++		reboot_timer.function = process_reboot_timeout;
++
++		microliss_tq.list.next = NULL;
++		microliss_tq.sync = 0L;
++		microliss_tq.routine = foreman;
++		microliss_tq.data = &taskID;
++
++		return 0;
++}
+--- linux-2.4.25/init/md5.c.microliss	2004-03-04 13:55:49.000000000 +0100
++++ linux-2.4.25/init/md5.c	2004-03-04 13:55:49.000000000 +0100
+@@ -0,0 +1,256 @@
++/*
++ * $Id: md5.c,v 1.1.1.2 1999/07/24 00:13:39 gafton Exp $
++ *
++ * This code implements the MD5 message-digest algorithm.
++ * The algorithm is due to Ron Rivest.  This code was
++ * written by Colin Plumb in 1993, no copyright is claimed.
++ * This code is in the public domain; do with it what you wish.
++ *
++ * Equivalent code is available from RSA Data Security, Inc.
++ * This code has been tested against that, and is equivalent,
++ * except that you don't need to include two pages of legalese
++ * with every copy.
++ *
++ * To compute the message digest of a chunk of bytes, declare an
++ * MD5Context structure, pass it to MD5Init, call MD5Update as
++ * needed on buffers full of bytes, and then call MD5Final, which
++ * will fill a supplied 16-byte array with the digest.
++ *
++ */
++
++#include <string.h>
++#include "md5.h"
++
++#ifndef HIGHFIRST
++#define byteReverse(buf, len)	/* Nothing */
++#else
++static void byteReverse(unsigned char *buf, unsigned longs);
++
++#ifndef ASM_MD5
++/*
++ * Note: this code is harmless on little-endian machines.
++ */
++static void byteReverse(unsigned char *buf, unsigned longs)
++{
++	unsigned int t;
++	do {
++		t = (unsigned int) ((unsigned) buf[3] << 8 | buf[2]) << 16 |
++		    ((unsigned) buf[1] << 8 | buf[0]);
++		*(unsigned int *) buf = t;
++		buf += 4;
++	} while (--longs);
++}
++#endif
++#endif
++
++/*
++ * Start MD5 accumulation.  Set bit count to 0 and buffer to mysterious
++ * initialization constants.
++ */
++void MD5Init(struct MD5Context *ctx)
++{
++	ctx->buf[0] = 0x67452301U;
++	ctx->buf[1] = 0xefcdab89U;
++	ctx->buf[2] = 0x98badcfeU;
++	ctx->buf[3] = 0x10325476U;
++
++	ctx->bits[0] = 0;
++	ctx->bits[1] = 0;
++}
++
++/*
++ * Update context to reflect the concatenation of another buffer full
++ * of bytes.
++ */
++void MD5Update(struct MD5Context *ctx, unsigned const char *buf, unsigned len)
++{
++	unsigned int t;
++
++	/* Update bitcount */
++
++	t = ctx->bits[0];
++	if ((ctx->bits[0] = t + ((unsigned int) len << 3)) < t)
++		ctx->bits[1]++;	/* Carry from low to high */
++	ctx->bits[1] += len >> 29;
++
++	t = (t >> 3) & 0x3f;	/* Bytes already in shsInfo->data */
++
++	/* Handle any leading odd-sized chunks */
++
++	if (t) {
++		unsigned char *p = (unsigned char *) ctx->in + t;
++
++		t = 64 - t;
++		if (len < t) {
++			memcpy(p, buf, len);
++			return;
++		}
++		memcpy(p, buf, t);
++		byteReverse(ctx->in, 16);
++		MD5Transform(ctx->buf, (unsigned int *) ctx->in);
++		buf += t;
++		len -= t;
++	}
++	/* Process data in 64-byte chunks */
++
++	while (len >= 64) {
++		memcpy(ctx->in, buf, 64);
++		byteReverse(ctx->in, 16);
++		MD5Transform(ctx->buf, (unsigned int *) ctx->in);
++		buf += 64;
++		len -= 64;
++	}
++
++	/* Handle any remaining bytes of data. */
++
++	memcpy(ctx->in, buf, len);
++}
++
++/*
++ * Final wrapup - pad to 64-byte boundary with the bit pattern 
++ * 1 0* (64-bit count of bits processed, MSB-first)
++ */
++void MD5Final(unsigned char digest[16], struct MD5Context *ctx)
++{
++	unsigned count;
++	unsigned char *p;
++
++	/* Compute number of bytes mod 64 */
++	count = (ctx->bits[0] >> 3) & 0x3F;
++
++	/* Set the first char of padding to 0x80.  This is safe since there is
++	   always at least one byte free */
++	p = ctx->in + count;
++	*p++ = 0x80;
++
++	/* Bytes of padding needed to make 64 bytes */
++	count = 64 - 1 - count;
++
++	/* Pad out to 56 mod 64 */
++	if (count < 8) {
++		/* Two lots of padding:  Pad the first block to 64 bytes */
++		memset(p, 0, count);
++		byteReverse(ctx->in, 16);
++		MD5Transform(ctx->buf, (unsigned int *) ctx->in);
++
++		/* Now fill the next block with 56 bytes */
++		memset(ctx->in, 0, 56);
++	} else {
++		/* Pad block to 56 bytes */
++		memset(p, 0, count - 8);
++	}
++	byteReverse(ctx->in, 14);
++
++	/* Append length in bits and transform */
++	((unsigned int *) ctx->in)[14] = ctx->bits[0];
++	((unsigned int *) ctx->in)[15] = ctx->bits[1];
++
++	MD5Transform(ctx->buf, (unsigned int *) ctx->in);
++	byteReverse((unsigned char *) ctx->buf, 4);
++	memcpy(digest, ctx->buf, 16);
++	memset(ctx, 0, sizeof(ctx));	/* In case it's sensitive */
++}
++
++#ifndef ASM_MD5
++
++/* The four core functions - F1 is optimized somewhat */
++
++/* #define F1(x, y, z) (x & y | ~x & z) */
++#define F1(x, y, z) (z ^ (x & (y ^ z)))
++#define F2(x, y, z) F1(z, x, y)
++#define F3(x, y, z) (x ^ y ^ z)
++#define F4(x, y, z) (y ^ (x | ~z))
++
++/* This is the central step in the MD5 algorithm. */
++#define MD5STEP(f, w, x, y, z, data, s) \
++	( w += f(x, y, z) + data,  w = w<<s | w>>(32-s),  w += x )
++
++/*
++ * The core of the MD5 algorithm, this alters an existing MD5 hash to
++ * reflect the addition of 16 longwords of new data.  MD5Update blocks
++ * the data and converts bytes into longwords for this routine.
++ */
++void MD5Transform(unsigned int buf[4], unsigned int const in[16])
++{
++	register unsigned int a, b, c, d;
++
++	a = buf[0];
++	b = buf[1];
++	c = buf[2];
++	d = buf[3];
++
++	MD5STEP(F1, a, b, c, d, in[0] + 0xd76aa478U, 7);
++	MD5STEP(F1, d, a, b, c, in[1] + 0xe8c7b756U, 12);
++	MD5STEP(F1, c, d, a, b, in[2] + 0x242070dbU, 17);
++	MD5STEP(F1, b, c, d, a, in[3] + 0xc1bdceeeU, 22);
++	MD5STEP(F1, a, b, c, d, in[4] + 0xf57c0fafU, 7);
++	MD5STEP(F1, d, a, b, c, in[5] + 0x4787c62aU, 12);
++	MD5STEP(F1, c, d, a, b, in[6] + 0xa8304613U, 17);
++	MD5STEP(F1, b, c, d, a, in[7] + 0xfd469501U, 22);
++	MD5STEP(F1, a, b, c, d, in[8] + 0x698098d8U, 7);
++	MD5STEP(F1, d, a, b, c, in[9] + 0x8b44f7afU, 12);
++	MD5STEP(F1, c, d, a, b, in[10] + 0xffff5bb1U, 17);
++	MD5STEP(F1, b, c, d, a, in[11] + 0x895cd7beU, 22);
++	MD5STEP(F1, a, b, c, d, in[12] + 0x6b901122U, 7);
++	MD5STEP(F1, d, a, b, c, in[13] + 0xfd987193U, 12);
++	MD5STEP(F1, c, d, a, b, in[14] + 0xa679438eU, 17);
++	MD5STEP(F1, b, c, d, a, in[15] + 0x49b40821U, 22);
++
++	MD5STEP(F2, a, b, c, d, in[1] + 0xf61e2562U, 5);
++	MD5STEP(F2, d, a, b, c, in[6] + 0xc040b340U, 9);
++	MD5STEP(F2, c, d, a, b, in[11] + 0x265e5a51U, 14);
++	MD5STEP(F2, b, c, d, a, in[0] + 0xe9b6c7aaU, 20);
++	MD5STEP(F2, a, b, c, d, in[5] + 0xd62f105dU, 5);
++	MD5STEP(F2, d, a, b, c, in[10] + 0x02441453U, 9);
++	MD5STEP(F2, c, d, a, b, in[15] + 0xd8a1e681U, 14);
++	MD5STEP(F2, b, c, d, a, in[4] + 0xe7d3fbc8U, 20);
++	MD5STEP(F2, a, b, c, d, in[9] + 0x21e1cde6U, 5);
++	MD5STEP(F2, d, a, b, c, in[14] + 0xc33707d6U, 9);
++	MD5STEP(F2, c, d, a, b, in[3] + 0xf4d50d87U, 14);
++	MD5STEP(F2, b, c, d, a, in[8] + 0x455a14edU, 20);
++	MD5STEP(F2, a, b, c, d, in[13] + 0xa9e3e905U, 5);
++	MD5STEP(F2, d, a, b, c, in[2] + 0xfcefa3f8U, 9);
++	MD5STEP(F2, c, d, a, b, in[7] + 0x676f02d9U, 14);
++	MD5STEP(F2, b, c, d, a, in[12] + 0x8d2a4c8aU, 20);
++
++	MD5STEP(F3, a, b, c, d, in[5] + 0xfffa3942U, 4);
++	MD5STEP(F3, d, a, b, c, in[8] + 0x8771f681U, 11);
++	MD5STEP(F3, c, d, a, b, in[11] + 0x6d9d6122U, 16);
++	MD5STEP(F3, b, c, d, a, in[14] + 0xfde5380cU, 23);
++	MD5STEP(F3, a, b, c, d, in[1] + 0xa4beea44U, 4);
++	MD5STEP(F3, d, a, b, c, in[4] + 0x4bdecfa9U, 11);
++	MD5STEP(F3, c, d, a, b, in[7] + 0xf6bb4b60U, 16);
++	MD5STEP(F3, b, c, d, a, in[10] + 0xbebfbc70U, 23);
++	MD5STEP(F3, a, b, c, d, in[13] + 0x289b7ec6U, 4);
++	MD5STEP(F3, d, a, b, c, in[0] + 0xeaa127faU, 11);
++	MD5STEP(F3, c, d, a, b, in[3] + 0xd4ef3085U, 16);
++	MD5STEP(F3, b, c, d, a, in[6] + 0x04881d05U, 23);
++	MD5STEP(F3, a, b, c, d, in[9] + 0xd9d4d039U, 4);
++	MD5STEP(F3, d, a, b, c, in[12] + 0xe6db99e5U, 11);
++	MD5STEP(F3, c, d, a, b, in[15] + 0x1fa27cf8U, 16);
++	MD5STEP(F3, b, c, d, a, in[2] + 0xc4ac5665U, 23);
++
++	MD5STEP(F4, a, b, c, d, in[0] + 0xf4292244U, 6);
++	MD5STEP(F4, d, a, b, c, in[7] + 0x432aff97U, 10);
++	MD5STEP(F4, c, d, a, b, in[14] + 0xab9423a7U, 15);
++	MD5STEP(F4, b, c, d, a, in[5] + 0xfc93a039U, 21);
++	MD5STEP(F4, a, b, c, d, in[12] + 0x655b59c3U, 6);
++	MD5STEP(F4, d, a, b, c, in[3] + 0x8f0ccc92U, 10);
++	MD5STEP(F4, c, d, a, b, in[10] + 0xffeff47dU, 15);
++	MD5STEP(F4, b, c, d, a, in[1] + 0x85845dd1U, 21);
++	MD5STEP(F4, a, b, c, d, in[8] + 0x6fa87e4fU, 6);
++	MD5STEP(F4, d, a, b, c, in[15] + 0xfe2ce6e0U, 10);
++	MD5STEP(F4, c, d, a, b, in[6] + 0xa3014314U, 15);
++	MD5STEP(F4, b, c, d, a, in[13] + 0x4e0811a1U, 21);
++	MD5STEP(F4, a, b, c, d, in[4] + 0xf7537e82U, 6);
++	MD5STEP(F4, d, a, b, c, in[11] + 0xbd3af235U, 10);
++	MD5STEP(F4, c, d, a, b, in[2] + 0x2ad7d2bbU, 15);
++	MD5STEP(F4, b, c, d, a, in[9] + 0xeb86d391U, 21);
++
++	buf[0] += a;
++	buf[1] += b;
++	buf[2] += c;
++	buf[3] += d;
++}
++
++#endif
+--- linux-2.4.25/init/md5.h.microliss	2004-03-04 13:55:49.000000000 +0100
++++ linux-2.4.25/init/md5.h	2004-03-04 13:55:49.000000000 +0100
+@@ -0,0 +1,23 @@
++#ifndef MD5_H
++#define MD5_H
++
++#include <features.h>
++
++struct MD5Context {
++    unsigned int  buf[4];
++    unsigned int  bits[2];
++    unsigned char in[64];
++};
++
++void MD5Init( struct MD5Context *);
++void MD5Update( struct MD5Context *, unsigned const char *, unsigned);
++void MD5Final( unsigned char digest[16], struct MD5Context *);
++void MD5Transform( unsigned int buf[4], const unsigned int in[16]);
++
++/*
++* This is needed to make RSAREF happy on some MS-DOS compilers.
++*/
++
++typedef struct MD5Context MD5_CTX;
++
++#endif /* MD5_H */
+--- linux-2.4.25/init/main.c.microliss	2003-12-17 09:58:00.000000000 +0100
++++ linux-2.4.25/init/main.c	2004-03-04 13:55:49.000000000 +0100
+@@ -64,6 +64,13 @@
+ #ifdef CONFIG_ISAPNP
+ #include <linux/isapnp.h>
+ #endif
++ 
++#ifdef CONFIG_MICROLISS_INIT
++#include <asm/io.h>							/* for inb */
++#include "md5.h"								/* dito */
++#include <linux/microliss.h>
++#include "init-chksum.h"
++#endif
+ 
+ #ifdef CONFIG_IRDA
+ extern int irda_proto_init(void);
+@@ -553,8 +560,32 @@
+ 
+ extern void prepare_namespace(void);
+ 
++#ifdef CONFIG_MICROLISS_INIT
++#define FIRST_LED 0x80
++void microliss_panic( void)
++{
++	unsigned char byte = (unsigned char) FIRST_LED;
++
++	do
++	{
++		while (byte)
++		{
++			outb( byte, CONFIG_MICROLISS_PARPORT_ADDRESS);
++			byte >>= 4;
++			mdelay( 250);
++		}
++		byte = FIRST_LED;
++	}
++	while( 1);
++	/* NOTREACHED */
++}
++#endif
++
+ static int init(void * unused)
+ {
++#ifdef CONFIG_MICROLISS_INIT
++	int initfd;
++#endif
+ 	struct files_struct *files;
+ 	lock_kernel();
+ 	do_basic_setup();
+@@ -592,6 +623,7 @@
+ 	 * trying to recover a really broken machine.
+ 	 */
+ 
++#ifndef CONFIG_MICROLISS_INIT
+ 	if (execute_command)
+ 		run_init_process(execute_command);
+ 
+@@ -601,4 +633,67 @@
+ 	run_init_process("/bin/sh");
+ 
+ 	panic("No init found.  Try passing init= option to kernel.");
++#else	 /* defined CONFIG_MICROLISS */
++#ifndef MICROLISS_INIT_MD5SUM
++#error Checksum for init program is not defined!\
++ You may have to build the sysvinit rpm first!
++#endif
++	/* Check the checksum of the init program */
++	if (! (initfd = open( INIT_PATH, O_RDONLY, 0)))
++	{
++		printk( KERN_CRIT "Can't find init!\n");
++		microliss_panic();
++		/* Currently this does not return, but it might some day */
++	}
++	else
++	{
++		int len;
++		unsigned char buf[513], tbuf[16], *tchr, ochr;
++		unsigned char *ostr = MICROLISS_INIT_MD5SUM;
++		struct MD5Context md5ctxt;
++
++		MD5Init( &md5ctxt);
++		buf[512] = '\0';
++
++		lock_kernel();
++		
++		while (0 < (len = read( initfd, buf, 512)))
++		{
++			MD5Update( &md5ctxt, buf, len);
++		}
++		MD5Final( tbuf, &md5ctxt);
++
++		unlock_kernel();
++
++		len = 17;
++		ostr--;
++		tchr = tbuf;
++		while (--len > 0)
++		{
++			ochr = *++ostr > '9' ? *ostr - 'a' + 10 : *ostr - '0';
++			ochr <<= 4;
++			ochr |= *++ostr > '9' ? *ostr - 'a' + 10 : *ostr - '0';
++			if (ochr != *tchr++) { break; }
++		}
++
++		if (! len)
++		{
++			execve( INIT_PATH, argv_init, envp_init);
++			printk( KERN_EMERG "Error starting init process: %m\n");
++		}
++		else
++		{
++			printk( KERN_EMERG "Wrong init! md5 checksum is "
++			        "%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x"
++							"\nPlease call the hotline at TELCO TECH GmbH Teltow Germany\n",
++			        tbuf[0], tbuf[1], tbuf[2], tbuf[3], 
++			        tbuf[4], tbuf[5], tbuf[6], tbuf[7],
++			        tbuf[8], tbuf[9], tbuf[10], tbuf[11],
++			        tbuf[12], tbuf[13], tbuf[14], tbuf[15]);
++		}
++		microliss_panic();
++	}
++	printk( KERN_EMERG "All options failed, unable to start init!");
++	microliss_panic();
++#endif
+ }
+--- linux-2.4.25/fs/proc/root.c.microliss	2002-08-08 12:54:12.000000000 +0200
++++ linux-2.4.25/fs/proc/root.c	2004-03-04 13:55:49.000000000 +0100
+@@ -68,6 +68,9 @@
+ 	proc_rtas_init();
+ #endif
+ 	proc_bus = proc_mkdir("bus", 0);
++#ifdef CONFIG_MICROLISS
++	proc_microliss_init();
++#endif
+ }
+ 
+ static struct dentry *proc_root_lookup(struct inode * dir, struct dentry * dentry)
+@@ -101,6 +104,10 @@
+ 	return proc_pid_readdir(filp, dirent, filldir);
+ }
+ 
++#ifdef CONFIG_MICROLISS
++	extern void proc_microliss_init( void);
++#endif
++
+ /*
+  * The root /proc directory is special, as it has the
+  * <pid> directories. Thus we don't use the generic
+--- linux-2.4.25/fs/proc/Makefile.microliss	2001-05-09 01:41:32.000000000 +0200
++++ linux-2.4.25/fs/proc/Makefile	2004-03-04 13:55:49.000000000 +0100
+@@ -18,4 +18,8 @@
+ obj-y += proc_devtree.o
+ endif
+ 
++ifeq ($(CONFIG_MICROLISS),y)
++obj-y += microliss.o
++endif
++
+ include $(TOPDIR)/Rules.make
+--- linux-2.4.25/fs/proc/microliss.c.microliss	2004-03-04 13:55:49.000000000 +0100
++++ linux-2.4.25/fs/proc/microliss.c	2004-03-04 13:55:49.000000000 +0100
+@@ -0,0 +1,101 @@
++/*
++ * Write protectable block device driver routines for microLiSS(TM) TELCO TECH.
++ *
++ * Copyright (C) 2001 Manfred Waﬂmann 
++ *
++ * microLiSS is a registered trademark of TELCO TECH GmbH Teltow Germany
++ *
++ *		This program is free software; you can redistribute it and/or
++ *		modify it under the terms of the GNU General Public License
++ *		as published by the Free Software Foundation; either version
++ *		2 of the License, or (at your option) any later version.
++ *
++ */
++#include <linux/init.h>
++#include <linux/proc_fs.h>
++#include <linux/microliss.h>
++
++
++/**
++ *
++ */
++static int microliss_proc_next_timeout( char *page, char **start, off_t off,
++                                        int size, int *eof, void *data)
++{
++	int len = 0;
++	long timeout = microliss_next_timeout();
++
++	if (timeout < 0)
++	{
++		len += sprintf( page + len, "%c:0\n", (char)((-timeout) >> 16));
++	}
++	else
++	{
++		len += sprintf( page + len, "%ld:%ld\n", timeout >> 16, timeout & 0xffff);
++	}
++
++	*start = 0; /* we print less than 4k, cf. fs/proc/generic.c */
++	*eof = 1;
++	return len;
++}
++
++
++/**
++ *
++ */
++static int microliss_proc_timeouts( char *page, char **start, off_t off,
++                                    int size, int *eof, void *data)
++{
++	int len = 0;
++
++	len += sprintf( page + len, "%ld %ld %ld\n",
++	                microliss_time_left( 0),
++	                microliss_time_left( 1),
++	                microliss_time_left( 2));
++
++	*start = 0; /* we print less than 4k, cf. fs/proc/generic.c */
++	*eof = 1;
++	return len;
++}
++
++
++/**
++ *
++ */
++static int microliss_proc_port( char *page, char **start, off_t off,
++																int size, int *eof, void *data)
++{
++	int len = 0;
++
++	len += sprintf( page + len, "%#x\n", CONFIG_MICROLISS_PARPORT_ADDRESS);
++
++	*start = 0; /* we print less than 4k, cf. fs/proc/generic.c */
++	*eof = 1;
++	return len;
++}
++
++
++/**
++ * Called by proc_root_init() to initialize the /proc/microliss subtree
++ */
++void __init proc_microliss_init(void)
++{
++	struct proc_dir_entry *ent;
++
++	ent = create_proc_entry( MICROLISS_PROCDIR, S_IFDIR, 0);
++	if (!ent) { return; }
++
++	ent = create_proc_entry( MICROLISS_PROCF_NEXT_TIMEOUT, 0, 0);
++	ent->read_proc = microliss_proc_next_timeout;
++
++	ent = create_proc_entry( MICROLISS_PROCF_TIMEOUTS, 0, 0);
++	ent->read_proc = microliss_proc_timeouts;
++
++	ent = create_proc_entry( MICROLISS_PROCF_PORT, 0, 0);
++	ent->read_proc = microliss_proc_port;
++
++#ifdef MICROLISS_PROCF_INIT
++	ent = create_proc_entry( MICROLISS_PROCF_INIT, 0200, 0);
++	ent->write_proc = microliss_proc_init;
++#endif
++}
+--- linux-2.4.25/Makefile.microliss	2004-02-19 14:24:11.000000000 +0100
++++ linux-2.4.25/Makefile	2004-03-04 14:07:55.233121688 +0100
+@@ -1,7 +1,7 @@
+ VERSION = 2
+ PATCHLEVEL = 4
+ SUBLEVEL = 25
+-EXTRAVERSION =
++EXTRAVERSION = -test-i386
+ 
+ KERNELRELEASE=$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
+ 
+@@ -266,7 +266,8 @@
+ # 'kbuild_2_4_nostdinc :=' or -I/usr/include for kernel code and you are not UML
+ # then your code is broken!  KAO.
+ 
+-kbuild_2_4_nostdinc	:= -nostdinc -iwithprefix include
++# kbuild_2_4_nostdinc	:= -nostdinc -iwithprefix include
++kbuild_2_4_nostdinc	:= -iwithprefix include
+ export kbuild_2_4_nostdinc
+ 
+ export	CPPFLAGS CFLAGS CFLAGS_KERNEL AFLAGS AFLAGS_KERNEL
+@@ -284,8 +285,8 @@
+ boot: vmlinux
+ 	@$(MAKE) CFLAGS="$(CFLAGS) $(CFLAGS_KERNEL)" -C arch/$(ARCH)/boot
+ 
+-vmlinux: include/linux/version.h $(CONFIGURATION) init/main.o init/version.o init/do_mounts.o linuxsubdirs
+-	$(LD) $(LINKFLAGS) $(HEAD) init/main.o init/version.o init/do_mounts.o \
++vmlinux: include/linux/version.h $(CONFIGURATION) init/main.o init/md5.o init/version.o init/do_mounts.o linuxsubdirs
++	$(LD) $(LINKFLAGS) $(HEAD) init/main.o init/md5.o init/version.o init/do_mounts.o \
+ 		--start-group \
+ 		$(CORE_FILES) \
+ 		$(DRIVERS) \
+@@ -363,7 +364,7 @@
+ comma	:= ,
+ 
+ init/version.o: init/version.c include/linux/compile.h include/config/MARKER
+-	$(CC) $(CFLAGS) $(CFLAGS_KERNEL) -DUTS_MACHINE='"$(ARCH)"' -DKBUILD_BASENAME=$(subst $(comma),_,$(subst -,_,$(*F))) -c -o init/version.o init/version.c
++	$(CC) -I$(TOPDIR)/init $(CFLAGS) $(CFLAGS_KERNEL) -DUTS_MACHINE='"$(ARCH)"' -DKBUILD_BASENAME=$(subst $(comma),_,$(subst -,_,$(*F))) -c -o init/version.o init/version.c
+ 
+ init/main.o: init/main.c include/config/MARKER
+ 	$(CC) $(CFLAGS) $(CFLAGS_KERNEL) $(PROFILING) -DKBUILD_BASENAME=$(subst $(comma),_,$(subst -,_,$(*F))) -c -o $@ $<
+--- linux-2.4.25/arch/i386/kernel/process.c.microliss	2004-02-19 14:24:12.000000000 +0100
++++ linux-2.4.25/arch/i386/kernel/process.c	2004-03-04 13:55:49.730414864 +0100
+@@ -33,6 +33,9 @@
+ #include <linux/reboot.h>
+ #include <linux/init.h>
+ #include <linux/mc146818rtc.h>
++#ifdef CONFIG_MICROLISS
++#include <linux/microliss.h>
++#endif
+ 
+ #include <asm/uaccess.h>
+ #include <asm/pgtable.h>
+@@ -367,6 +370,11 @@
+ 
+ void machine_restart(char * __unused)
+ {
++#ifdef CONFIG_MICROLISS
++	/* switch off the lights */
++	outb( 0x0, CONFIG_MICROLISS_PARPORT_ADDRESS);
++#endif
++
+ #if CONFIG_SMP
+ 	int cpuid;
+ 	
+@@ -434,12 +442,31 @@
+ 
+ void machine_halt(void)
+ {
++#ifdef CONFIG_MICROLISS
++    /* On MicroLiSSen we start blinking some LED's to show we're shut down */
++#define FIRST_LEDS 0xA8
++#define SECND_LEDS 0x00
++    {
++	unsigned char byte = FIRST_LEDS;
++	cli();
++	do
++	{
++	    outb( byte, CONFIG_MICROLISS_PARPORT_ADDRESS);
++	    byte = (byte == FIRST_LEDS) ? SECND_LEDS : FIRST_LEDS;
++	    mdelay( 250);
++	}
++	while( 1);    
++	/* NOTREACHED */
++	sti();
++    }
++#endif
+ }
+ 
+ void machine_power_off(void)
+ {
+ 	if (pm_power_off)
+ 		pm_power_off();
++	machine_halt();
+ }
+ 
+ extern void show_trace(unsigned long* esp);
+--- linux-2.4.25/Documentation/Configure.help.microliss	2004-02-19 14:24:11.000000000 +0100
++++ linux-2.4.25/Documentation/Configure.help	2004-03-04 13:55:55.000000000 +0100
+@@ -652,6 +652,53 @@
+ 
+   If unsure, say Y.
+ 
++MicroLiSS support
++CONFIG_MICROLISS
++  If you say Y here, you will enable MicroLiSS readonly block
++  devices and maybe other features.
++
++
++MicroLiSS Debugging support
++CONFIG_MICROLISS_DEBUG
++  If you say Y here, you will enable lots of debugging messages
++  from MicroLiSS specific code.  So you better use this only for
++  testing.
++
++Parallel port address used by MicroLiSS
++CONFIG_MICROLISS_PARPORT_ADDRESS
++  I/O address of the parallel port which is connected to the
++  status LED's and R/W and Init jacks. Defaults to 0x378.
++
++Disable hardware write protection forcing timeouts
++CONFIG_MICROLISS_NO_TIMEOUT
++  Disable the timeouts which reenable MicroLiSS hardware write protection.
++
++Panic on write to r/o device
++CONFIG_MICROLISS_PANIC_ONWRITE2RODEV
++  With this option enabled an attempt to write a buffer to a
++	readonly device will casuse the kernel to panic.
++
++MicroLiSS readonly timeout
++CONFIG_MICROLISS_TIMEOUT_RO
++  Amount of time in minutes after which the MicroLiSS is reset to
++  R/O state. Defaults to 120.
++
++MicroLiSS net down timeout
++CONFIG_MICROLISS_TIMEOUT_NET_SOFT
++  Amount of time in minutes after which the network is shut down if
++  the R/W pin is not timely removed. Defaults to 30.
++
++MicroLiSS net down period
++CONFIG_MICROLISS_TIMEOUT_NET_HARD
++  Amount of time in minutes for which the network will be disabled if
++  the R/W pin is not timely removed. Defaults to 10.
++
++MicroLiSS sync timeout
++CONFIG_MICROLISS_TIMEOUT_SYNC
++  Amount of time in seconds for which the block device allows dirty
++  buffers to be written to disk after setting R/O. Defaults to 45.
++
++
+ Enhanced IDE/MFM/RLL disk/cdrom/tape/floppy support
+ CONFIG_BLK_DEV_IDE
+   If you say Y here, you will use the full-featured IDE driver to
+--- linux-2.4.25/net/ipv4/netfilter/ipchains_core.c.microliss	2003-06-27 14:01:48.000000000 +0200
++++ linux-2.4.25/net/ipv4/netfilter/ipchains_core.c	2004-03-04 13:55:49.000000000 +0100
+@@ -98,6 +98,7 @@
+ #include <net/checksum.h>
+ #include <linux/proc_fs.h>
+ #include <linux/stat.h>
++#include <linux/microliss.h>
+ 
+ /* Understanding locking in this code: (thanks to Alan Cox for using
+  * little words to explain this to me). -- PR
+@@ -277,6 +278,20 @@
+ 	else return (port >= min && port <= max) ^ invert;
+ }
+ 
++#ifdef CONFIG_MICROLISS
++/* Returns whether a rule is write protected through the write-enable pin */
++inline int microliss_ro_chain( struct ip_chain *chainptr)
++{
++    if ((chainptr == IP_FW_INPUT_CHAIN) ||
++	(chainptr == IP_FW_FORWARD_CHAIN) ||
++	(chainptr == IP_FW_OUTPUT_CHAIN))
++    {
++	return microliss_is_readonly();
++    }
++    return 0;
++}
++#endif
++
+ /* Returns whether matches rule or not. */
+ static int ip_rule_match(struct ip_fwkernel *f,
+ 			 const char *ifname,
+@@ -820,6 +835,9 @@
+ {
+ 	struct ip_fwkernel *i;
+ 
++#ifdef CONFIG_MICROLISS
++	if (microliss_ro_chain( chainptr)) { return EINVAL; }
++#endif
+ 	FWC_HAVE_LOCK(fwc_wlocks);
+ 	for (i = chainptr->chain; i; i = i->next)
+ 		memset(i->counters, 0, sizeof(struct ip_counters)*NUM_SLOTS);
+@@ -830,6 +848,10 @@
+ {
+ 	struct ip_fwkernel *i= chainptr->chain;
+ 
++#ifdef CONFIG_MICROLISS
++	if (microliss_ro_chain( chainptr)) { return EINVAL; }
++#endif
++	
+ 	FWC_HAVE_LOCK(fwc_wlocks);
+ 	chainptr->chain=NULL;
+ 
+@@ -850,6 +872,9 @@
+ {
+ 	struct ip_fwkernel *f = chainptr->chain;
+ 
++#ifdef CONFIG_MICROLISS
++	if (microliss_ro_chain( chainptr)) { return EINVAL; }
++#endif
+ 	FWC_HAVE_LOCK(fwc_wlocks);
+ 
+ 	while (--position && f != NULL) f = f->next;
+@@ -869,6 +894,9 @@
+ {
+ 	struct ip_fwkernel *i;
+ 
++#ifdef CONFIG_MICROLISS
++	if (microliss_ro_chain( chainptr)) { return EINVAL; }
++#endif
+ 	FWC_HAVE_LOCK(fwc_wlocks);
+ 	/* Special case if no rules already present */
+ 	if (chainptr->chain == NULL) {
+@@ -899,6 +927,9 @@
+ {
+ 	struct ip_fwkernel *f = chainptr->chain;
+ 
++#ifdef CONFIG_MICROLISS
++	if (microliss_ro_chain( chainptr)) { return EINVAL; }
++#endif
+ 	FWC_HAVE_LOCK(fwc_wlocks);
+ 	/* special case if the position is number 1 */
+ 	if (position == 1) {
+@@ -928,6 +959,9 @@
+ {
+ 	struct ip_fwkernel *i=chainptr->chain,*tmp;
+ 
++#ifdef CONFIG_MICROLISS
++	if (microliss_ro_chain( chainptr)) { return EINVAL; }
++#endif
+ 	FWC_HAVE_LOCK(fwc_wlocks);
+ 
+ 	if (!chainptr->chain)
+@@ -965,6 +999,9 @@
+ 	struct ip_fwkernel *ltmp,*ftmp = chainptr->chain ;
+ 	int was_found;
+ 
++#ifdef CONFIG_MICROLISS
++	if (microliss_ro_chain( chainptr)) { return EINVAL; }
++#endif
+ 	FWC_HAVE_LOCK(fwc_wlocks);
+ 
+ 	/* Sure, we should compare marks, but since the `ipfwadm'
+@@ -1163,6 +1200,9 @@
+  * chainptr is pointing to one of the three possible chains */
+ static int change_policy(struct ip_chain *chainptr, int policy)
+ {
++#ifdef CONFIG_MICROLISS
++	if (microliss_ro_chain( chainptr)) { return EINVAL; }
++#endif
+ 	FWC_HAVE_LOCK(fwc_wlocks);
+ 	chainptr->policy = policy;
+ 	return 0;
+--- linux-2.4.25/net/ipv4/devinet.c.microliss	2004-02-19 14:24:27.000000000 +0100
++++ linux-2.4.25/net/ipv4/devinet.c	2004-03-04 13:55:49.714417296 +0100
+@@ -1009,7 +1009,6 @@
+ #endif
+ };
+ 
+-
+ #ifdef CONFIG_SYSCTL
+ 
+ void inet_forward_change()
+@@ -1034,6 +1033,35 @@
+ 	rt_cache_flush(0);
+ }
+ 
++
++#ifdef CONFIG_MICROLISS
++static int microliss_is_blocked = 0;
++
++void inet_forward_set( int on)
++{
++#ifdef CONFIG_MICROLISS_DEBUG
++	printk( KERN_DEBUG "Setting IP forwarding flag %d -> %d\n",
++					ipv4_devconf.forwarding, on);
++#endif
++
++	microliss_is_blocked = !on;
++
++	if (on != ipv4_devconf.forwarding)
++	{
++		ipv4_devconf.forwarding = on;
++		inet_forward_change();
++	}
++
++	if (on != ipv4_devconf.forwarding)
++	{
++		printk( KERN_ERR "IP forwarding flag could not be changed! %d -> %d\n",
++						ipv4_devconf.forwarding, on);
++	}
++}
++
++#endif /* CONFIG_MICROLISS */
++
++
+ static
+ int devinet_sysctl_forward(ctl_table *ctl, int write, struct file * filp,
+ 			   void *buffer, size_t *lenp)
+@@ -1042,6 +1070,13 @@
+ 	int val = *valp;
+ 	int ret;
+ 
++#ifdef CONFIG_MICROLISS
++	if (microliss_is_blocked && val)
++	{
++		val = *valp = 0;
++	}
++#endif
++
+ 	ret = proc_dointvec(ctl, write, filp, buffer, lenp);
+ 
+ 	if (write && *valp != val) {
+--- linux-2.4.25/include/linux/inet.h.microliss	2002-08-08 12:54:18.000000000 +0200
++++ linux-2.4.25/include/linux/inet.h	2004-03-04 13:57:02.881294240 +0100
+@@ -47,5 +47,11 @@
+ extern void		inet_proto_init(struct net_proto *pro);
+ extern __u32		in_aton(const char *str);
+ 
++#ifdef CONFIG_MICROLISS
++
++extern void inet_forward_set( int on);
++
++#endif /* CONFIG_MICROLISS */
++
+ #endif
+ #endif	/* _LINUX_INET_H */
+--- linux-2.4.25/include/linux/microliss.h.microliss	2004-03-04 13:55:49.000000000 +0100
++++ linux-2.4.25/include/linux/microliss.h	2004-03-04 13:56:59.610791432 +0100
+@@ -0,0 +1,158 @@
++/*
++ * Write protectable block device driver routines for microLiSS(TM) TELCO TECH.
++ *
++ * Copyright (C) 2001 Manfred Waﬂmann 
++ *
++ * microLiSS is a registered trademark of TELCO TECH GmbH Teltow Germany
++ *
++ *		This program is free software; you can redistribute it and/or
++ *		modify it under the terms of the GNU General Public License
++ *		as published by the Free Software Foundation; either version
++ *		2 of the License, or (at your option) any later version.
++ *
++ */
++#ifndef MICROLISS_H
++#define MICROLISS_H
++
++#ifndef _LINUX_LP_H
++#include <linux/lp.h>
++#endif
++#ifdef CONFIG_MICROLISS_NO_TIMEOUT
++#define CONFIG_MICROLISS_TIMEOUT_RO 167
++#define CONFIG_MICROLISS_TIMEOUT_NET_SOFT 168
++#define CONFIG_MICROLISS_TIMEOUT_NET_HARD 0
++#endif
++
++/* Define this to make sure that net down time is limited to the difference of
++ * NET_TIMEOUT_HARD and RO_TIMEOUT
++ */
++#define MICROLISS_SHORTEN_TIMEOUT0
++
++/* Masks of the selected status bits (see linux/lp.h) */
++#define MICROLISS_RO_BITMASK LP_PERRORP
++#define MICROLISS_INIT_BITMASK LP_POUTPA
++/* IO address of the parallel port 0x3bc, 0x378 or 0x278 */
++#define MICROLISS_PARPORT_ADDRESS 0x378
++/* Length of timeout before the devices are set readonly */
++#define MICROLISS_TIMEOUT_RO (CONFIG_MICROLISS_TIMEOUT_RO * 60)
++/* Length of hard limit timeout before IP forwarding is disabled */
++#define MICROLISS_TIMEOUT_NET_HARD \
++	 (MICROLISS_TIMEOUT_RO - (CONFIG_MICROLISS_TIMEOUT_NET_HARD * 60))
++/* Length of soft limit timeout before IP forwarding is disabled */
++#define MICROLISS_TIMEOUT_NET_SOFT (CONFIG_MICROLISS_TIMEOUT_NET_SOFT * 60)
++/* Seconds between parport status polls */
++#define MICROLISS_POLL_INTERVAL 1
++/* Retry interval for unsuccessful remount attempts (currently unused) */
++#define MICROLISS_RETRY_INTERVAL (30)
++
++
++/* How much time to give init to reboot before a fast reboot is initiated */
++#define MICROLISS_REBOOT_TIMEOUT (1.5 * 60)
++
++#ifdef MICROLISS_TEST
++
++#define MICROLISS_RODEV_MAJOR0 8
++#define MICROLISS_RODEV_MINOR0 1
++
++#define MICROLISS_RODEV_MAJOR1 8
++#define MICROLISS_RODEV_MINOR1 2
++
++#define MICROLISS_RODEV_MAJOR2 8
++#define MICROLISS_RODEV_MINOR2 4
++
++#else
++
++#define MICROLISS_RODEV_MAJOR0 3
++#define MICROLISS_RODEV_MINOR0 1
++
++#define MICROLISS_RODEV_MAJOR1 1
++#define MICROLISS_RODEV_MINOR1 0
++
++#endif
++
++#define INIT_PATH "/sbin/init"
++#define MICROLISS_PROCDIR "microliss"
++#define MICROLISS_PROCF_NEXT_TIMEOUT "microliss/next_timeout"
++#define MICROLISS_PROCF_TIMEOUTS "microliss/timeouts"
++#define MICROLISS_PROCF_PORT "microliss/port"
++#define MICROLISS_PROCF_INIT "microliss/init"
++
++#define MICROLISS_DB_DIR "/etc/db"
++#define MICROLISS_DB_DEFAULT "/etc/db.default"
++
++#define MICROLISS_LOG_ATTACK
++
++/*******************************************************
++ * End of user configurable section. Do not edit below *
++ *******************************************************/
++
++#define MICROLISS_RODEV0 (MKDEV(MICROLISS_RODEV_MAJOR0,MICROLISS_RODEV_MINOR0))
++#ifdef MICROLISS_RODEV_MAJOR1
++#define MICROLISS_RODEV1 (MKDEV(MICROLISS_RODEV_MAJOR1,MICROLISS_RODEV_MINOR1))
++#ifdef MICROLISS_RODEV_MAJOR2
++#define MICROLISS_RODEV2 (MKDEV(MICROLISS_RODEV_MAJOR2,MICROLISS_RODEV_MINOR2))
++#ifdef MICROLISS_RODEV_MAJOR3
++#define MICROLISS_RODEV3 (MKDEV(MICROLISS_RODEV_MAJOR3,MICROLISS_RODEV_MINOR3))
++#endif
++#endif
++#endif
++
++
++#ifdef MICROLISS_RODEV3
++#define MICROLISS_DEV_MASK (MICROLISS_RODEV0|MICROLISS_RODEV1\
++|MICROLISS_RODEV2|MICROLISS_RODEV3)
++#else
++#ifdef MICROLISS_RODEV2
++#define MICROLISS_DEV_MASK (MICROLISS_RODEV0|MICROLISS_RODEV1|MICROLISS_RODEV2)
++#else
++#ifdef MICROLISS_RODEV1
++#define MICROLISS_DEV_MASK (MICROLISS_RODEV0|MICROLISS_RODEV1)
++#else
++#define MICROLISS_DEV_MASK MICROLISS_RODEV0
++#endif
++#endif
++#endif
++
++/* Flags used for defining debug levels */
++#define MICROLISS_DBGFL_TIMEOUT 0x8
++
++/*** The following definitions are only needed inside the kernel ***/
++#ifdef __KERNEL__
++
++/**
++ * Check if this is a microliss (ro-) device.
++ */
++static inline int is_microliss_dev( kdev_t dev)
++{
++	 return (dev == (MICROLISS_DEV_MASK
++#ifdef MICROLISS_RODEV1
++					 & dev) ? (((dev == MICROLISS_RODEV0)||(dev == MICROLISS_RODEV1))
++#ifdef MICROLISS_RODEV2
++					 ? 1 : (dev == MICROLISS_RODEV2
++#ifdef MICROLISS_RODEV3
++					 ? 1 : dev == MICROLISS_RODEV3 )));
++#else
++	 )) : 0 );
++#endif
++#else
++	 ) : 0 );
++#endif
++#else
++	 ));
++#endif
++}
++
++#define UNUSED_PTR NULL
++
++extern int microliss_proc_init( struct file *file, const char *buffer,
++				 unsigned long count, void *data);
++
++extern void microliss_start_timer2_conditionally( kdev_t dev);
++extern int microliss_is_readonly( void);
++extern long microliss_time_left( int timer);
++extern long microliss_next_timeout( void);
++
++#endif /* __KERNEL__ */
++
++
++#endif /* MICROLISS_H */
+--- linux-2.4.25/include/linux/proc_fs.h.microliss	2003-12-17 09:57:59.000000000 +0100
++++ linux-2.4.25/include/linux/proc_fs.h	2004-03-04 13:56:50.936110184 +0100
+@@ -122,6 +122,13 @@
+ extern void proc_tty_register_driver(struct tty_driver *driver);
+ extern void proc_tty_unregister_driver(struct tty_driver *driver);
+ 
++#ifdef CONFIG_MICROLISS
++/*
++ * microliss.c
++ */
++extern void proc_microliss_init( void);
++#endif
++
+ /*
+  * proc_devtree.c
+  */
+--- linux-2.4.25/include/linux/fs.h.microliss	2004-02-19 14:24:27.000000000 +0100
++++ linux-2.4.25/include/linux/fs.h	2004-03-04 13:56:41.986470736 +0100
+@@ -65,7 +65,7 @@
+ 
+ #define NR_FILE  8192	/* this can well be larger on a larger system */
+ #define NR_RESERVED_FILES 10 /* reserved for root */
+-#define NR_SUPER 256
++#define NR_SUPER 8
+ 
+ #define MAY_EXEC 1
+ #define MAY_WRITE 2

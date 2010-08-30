@@ -1,0 +1,29 @@
+--- matrixssl-1-7-1c-open/src/os/debug.c.dbg	2005-10-06 23:45:30.000000000 +0200
++++ matrixssl-1-7-1c-open/src/os/debug.c	2005-10-06 23:46:36.000000000 +0200
+@@ -38,22 +38,22 @@
+ void matrixStrDebugMsg(char *message, char *value)
+ {
+ 	if (value) {
+-		printf(message, value);
++		fprintf(stderr, message, value);
+ 	} else {
+-		printf(message);
++		fprintf(stderr, message);
+ 	}
+ }
+ 
+ /* message should contain one %d */
+ void matrixIntDebugMsg(char *message, int32 value)
+ {
+-	printf(message, value);
++	fprintf(stderr, message, value);
+ }
+ 
+ /* message should contain one %p */
+ void matrixPtrDebugMsg(char *message, void *value)
+ {
+-	printf(message, value);
++	fprintf(stderr, message, value);
+ }
+ 
+ #endif /* DEBUG */

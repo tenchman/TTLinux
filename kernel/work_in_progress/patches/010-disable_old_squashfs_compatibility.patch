@@ -1,0 +1,22 @@
+--- linux-2.6.26.2/fs/squashfs/Makefile.010-disable_old_squashfs_compatibility	2008-08-20 15:11:27.000000000 +0200
++++ linux-2.6.26.2/fs/squashfs/Makefile	2008-08-20 15:13:12.000000000 +0200
+@@ -9,7 +9,6 @@ endif
+ 
+ obj-$(CONFIG_SQUASHFS) += squashfs.o sqlzma.o unlzma.o
+ squashfs-y += inode.o
+-squashfs-y += squashfs2_0.o
+ 
+ sqlzma-y += uncomp.o sqlzmamod.o
+ 
+--- linux-2.6.26.2/fs/squashfs/squashfs.h.010-disable_old_squashfs_compatibility	2008-08-20 15:11:27.000000000 +0200
++++ linux-2.6.26.2/fs/squashfs/squashfs.h	2008-08-20 15:11:27.000000000 +0200
+@@ -24,6 +24,9 @@
+ #ifdef CONFIG_SQUASHFS_1_0_COMPATIBILITY
+ #undef CONFIG_SQUASHFS_1_0_COMPATIBILITY
+ #endif
++#ifdef CONFIG_SQUASHFS_2_0_COMPATIBILITY
++#undef CONFIG_SQUASHFS_2_0_COMPATIBILITY
++#endif
+ 
+ #ifdef SQUASHFS_TRACE
+ #define TRACE(s, args...)	printk(KERN_NOTICE "SQUASHFS: "s, ## args)

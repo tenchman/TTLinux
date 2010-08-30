@@ -1,0 +1,273 @@
+--- dietlibc-0.30/libpthread/thread_internal.h.iosubsys	2008-05-16 00:29:20.000000000 +0200
++++ dietlibc-0.30/libpthread/thread_internal.h	2008-05-16 00:29:21.000000000 +0200
+@@ -112,6 +112,14 @@ int __pthread_unlock(struct _pthread_fas
+ #define TRYLOCK(td) __pthread_trylock(&((td)->lock))
+ #define UNLOCK(td)  __pthread_unlock(&((td)->lock))
+ 
++#define CHECKSTREAM(__s,__r) \
++  do {			      \
++    if (!__s) {	      \
++      errno = EBADF;	      \
++      return __r;	      \
++    }			      \
++  } while(0)
++
+ int __pthread_mutex_lock(pthread_mutex_t*mutex,_pthread_descr this);
+ int __pthread_mutex_unlock(pthread_mutex_t*mutex,_pthread_descr this);
+ 
+--- dietlibc-0.30/libpthread/pthread_readdir.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_readdir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,14 @@
++#include <errno.h>
++#include "dietdirent.h"
++#include "thread_internal.h"
++
++__attribute__((weak)) struct dirent* readdir(DIR *d) {
++  struct dirent* dir;
++  _pthread_descr this;
++  CHECKSTREAM(d,NULL);
++  this=__thread_self();
++  __pthread_mutex_lock(&d->m, this);
++  dir = __readdir(d);
++  __pthread_mutex_unlock(&d->m, this);
++  return dir;
++}
+--- dietlibc-0.30/libpthread/pthread_opendir.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_opendir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,10 @@
++#include <pthread.h>
++#include <dietdirent.h>
++
++__attribute__((weak)) DIR* opendir(const char* name) {
++  DIR *dir;
++  if ((dir = __opendir(name)))
++    pthread_mutex_init(&dir->m, NULL);
++  return dir;
++}
++
+--- dietlibc-0.30/libpthread/pthread_rewinddir.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_rewinddir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,11 @@
++#include "dietdirent.h"
++#include "thread_internal.h"
++
++__attribute__((weak)) void rewinddir(DIR *dir) {
++  if (dir) {
++    _pthread_descr this=__thread_self();
++    __pthread_mutex_lock(&dir->m, this);
++    __rewinddir(dir);
++    __pthread_mutex_unlock(&dir->m, this);
++  }
++}
+--- dietlibc-0.30/libpthread/pthread_telldir.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_telldir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,14 @@
++#include <errno.h>
++#include "dietdirent.h"
++#include "thread_internal.h"
++
++__attribute__((weak)) off_t telldir(DIR *dir) {
++  off_t ret;
++  _pthread_descr this;
++  CHECKSTREAM(dir, -1);
++  this=__thread_self();
++  __pthread_mutex_lock(&dir->m, this);
++  ret=__telldir(dir);
++  __pthread_mutex_unlock(&dir->m, this);
++  return ret;
++}
+--- dietlibc-0.30/libpthread/pthread_freopen.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_freopen.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,15 @@
++#include <pthread.h>
++#include "thread_internal.h"
++#include <dietstdio.h>
++
++__attribute__((weak))
++FILE* freopen(const char* filename, const char* mode, FILE* stream)
++{
++  _pthread_descr this;
++  CHECKSTREAM(stream,NULL);
++  this=__thread_self();
++  __pthread_mutex_lock(&stream->m, this);
++  stream = freopen_unlocked(filename, mode, stream);
++  __pthread_mutex_unlock(&stream->m, this);
++  return stream;
++}
+--- dietlibc-0.30/libpthread/pthread_readdir64.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_readdir64.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,14 @@
++#include <errno.h>
++#include "dietdirent.h"
++#include "thread_internal.h"
++
++__attribute__((weak)) struct dirent64* readdir64(DIR *d) {
++  struct dirent64* dir;
++  _pthread_descr this;
++  CHECKSTREAM(d,NULL);
++  this=__thread_self();
++  __pthread_mutex_lock(&d->m, this);
++  dir = __readdir64(d);
++  __pthread_mutex_unlock(&d->m, this);
++  return dir;
++}
+--- dietlibc-0.30/libpthread/pthread_seekdir.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_seekdir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,11 @@
++#include "dietdirent.h"
++#include "thread_internal.h"
++
++__attribute__((weak)) void seekdir(DIR *dir, off_t offset) {
++  if (dir) {
++    _pthread_descr this=__thread_self();
++    __pthread_mutex_lock(&dir->m, this);
++    __seekdir(dir, offset);
++    __pthread_mutex_unlock(&dir->m, this);
++  }
++}
+--- dietlibc-0.30/dietdirent.h.iosubsys	2002-07-03 22:33:37.000000000 +0200
++++ dietlibc-0.30/dietdirent.h	2008-05-16 00:29:21.000000000 +0200
+@@ -1,8 +1,32 @@
++#ifndef __DIETDIRENT_H
++#define __DIETDIRENT_H 1
+ #include <sys/shm.h>
++#include <dirent.h>
++#include "dietfeatures.h"
++#ifdef WANT_THREAD_SAFE
++#include <pthread.h>
++#endif
+ 
+ struct __dirstream {
+   int fd;
++#ifdef WANT_THREAD_SAFE
++  char buf[PAGE_SIZE-((sizeof (int)*3)+sizeof(pthread_mutex_t))];
++#else
+   char buf[PAGE_SIZE-(sizeof (int)*3)];
++#endif
+   unsigned int num;
+   unsigned int cur;
++#ifdef WANT_THREAD_SAFE
++  pthread_mutex_t m;
++#endif
+ };				/* stream data from opendir() */
++
++DIR*  __opendir(const char* name);
++int   __closedir(DIR *dir);
++void  __rewinddir(DIR *d);
++void  __seekdir(DIR *d,off_t offset);
++off_t __telldir(DIR *d);
++
++struct dirent*   __readdir(DIR *d);
++struct dirent64* __readdir64(DIR *d);
++#endif
+--- dietlibc-0.30/lib/seekdir.c.iosubsys	2006-04-04 05:47:21.000000000 +0200
++++ dietlibc-0.30/lib/seekdir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -2,9 +2,10 @@
+ #include <unistd.h>
+ #include <dirent.h>
+ 
+-void seekdir(DIR *d,off_t offset) {
++void __seekdir(DIR *d,off_t offset) {
+   if (lseek(d->fd,offset,SEEK_SET) != (off_t)-1) {
+     d->num=d->cur=0;
+     ((struct dirent *)(d->buf))->d_off = offset;
+   }
+ }
++void seekdir(DIR *d,off_t offset) __attribute__((weak, alias("__seekdir")));
+--- dietlibc-0.30/lib/telldir.c.iosubsys	2006-04-04 05:47:21.000000000 +0200
++++ dietlibc-0.30/lib/telldir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -2,9 +2,10 @@
+ #include <unistd.h>
+ #include <dirent.h>
+ 
+-off_t telldir(DIR *d) {
++off_t __telldir(DIR *d) {
+   off_t result = 0;
+   if (lseek(d->fd,0,SEEK_CUR))
+     result=((struct dirent*)(d->buf+d->cur))->d_off;
+   return result;
+ }
++off_t telldir(DIR *d) __attribute__((weak, alias("__telldir")));
+--- dietlibc-0.30/lib/readdir64.c.iosubsys	2004-03-02 22:27:19.000000000 +0100
++++ dietlibc-0.30/lib/readdir64.c	2008-05-16 00:29:21.000000000 +0200
+@@ -12,7 +12,7 @@
+ #endif
+ 
+ #ifndef WANT_LARGEFILE_BACKCOMPAT
+-struct dirent64* readdir64(DIR *d) {
++struct dirent64* __readdir64(DIR *d) {
+   if (!d->num || (d->cur += ((struct dirent64*)(d->buf+d->cur))->d_reclen)>=d->num) {
+     int res=getdents64(d->fd,(struct dirent64*)d->buf, sizeof (d->buf)-1);
+     if (res<=0) return 0;
+@@ -21,7 +21,7 @@ struct dirent64* readdir64(DIR *d) {
+   return (struct dirent64*)(d->buf+d->cur);
+ }
+ #else
+-struct dirent64* readdir64(DIR *d) {
++struct dirent64* __readdir64(DIR *d) {
+ #ifdef __NR_getdents64
+   static int trygetdents64=1;
+ #endif
+@@ -60,3 +60,4 @@ again:
+ #endif
+ }
+ #endif
++struct dirent64* readdir64(DIR *d) __attribute__((weak, alias("__readdir64")));
+--- dietlibc-0.30/lib/opendir.c.iosubsys	2002-07-03 22:33:38.000000000 +0200
++++ dietlibc-0.30/lib/opendir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -5,7 +5,7 @@
+ #include <stdlib.h>
+ #include <fcntl.h>
+ 
+-DIR*  opendir ( const char* name ) {
++DIR* __opendir ( const char* name ) {
+   int   fd = open (name, O_RDONLY | O_DIRECTORY);
+   DIR*  t  = NULL;
+ 
+@@ -24,3 +24,4 @@ lose:
+ 
+   return t;
+ }
++DIR* opendir(const char* name) __attribute__((weak, alias("__opendir")));
+--- dietlibc-0.30/lib/rewinddir.c.iosubsys	2001-02-03 21:41:12.000000000 +0100
++++ dietlibc-0.30/lib/rewinddir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -2,7 +2,8 @@
+ #include <unistd.h>
+ #include <dirent.h>
+ 
+-void rewinddir(DIR *d) {
++void __rewinddir(DIR *d) {
+   if (lseek(d->fd,0,SEEK_SET) != (off_t)-1)
+     d->num=d->cur=0;
+ }
++void rewinddir(DIR *d) __attribute__((weak, alias("__rewinddir")));
+--- dietlibc-0.30/lib/closedir.c.iosubsys	2002-07-03 22:33:37.000000000 +0200
++++ dietlibc-0.30/lib/closedir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -4,8 +4,9 @@
+ #include <dirent.h>
+ #include <stdlib.h>
+ 
+-int closedir (DIR* d) {
++int __closedir (DIR* d) {
+   int res=close(d->fd);
+   munmap (d, PAGE_SIZE);
+   return res;
+ }
++int closedir (DIR* d) __attribute__((weak, alias("__closedir")));
+--- dietlibc-0.30/lib/readdir.c.iosubsys	2002-07-03 22:33:38.000000000 +0200
++++ dietlibc-0.30/lib/readdir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -3,7 +3,7 @@
+ #include <dirent.h>
+ #include <stdlib.h>
+ 
+-struct dirent* readdir(DIR *d) {
++struct dirent* __readdir(DIR *d) {
+   if (!d->num || (d->cur += ((struct dirent*)(d->buf+d->cur))->d_reclen)>=d->num) {
+     int res=getdents(d->fd,(struct dirent*)d->buf,sizeof (d->buf)-1);
+     if (res<=0) return 0;
+@@ -11,3 +11,5 @@ struct dirent* readdir(DIR *d) {
+   }
+   return (struct dirent*)(d->buf+d->cur);
+ }
++
++struct dirent* readdir(DIR *d) __attribute__((weak, alias("__readdir")));

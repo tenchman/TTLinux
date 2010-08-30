@@ -1,0 +1,76 @@
+--- gnutls-0.9.7/src/crypt.c.diet	2003-10-02 13:38:38.000000000 +0200
++++ gnutls-0.9.7/src/crypt.c	2003-10-02 13:43:20.000000000 +0200
+@@ -212,7 +212,7 @@
+ 		}
+ 		if (strncmp(username, line, _MAX(i,strlen(username)) )  == 0) {
+ 			/* find the index */
+-			pos = rindex(line, ':');
++			pos = strrchr(line, ':');
+ 			pos++;
+ 			fclose(fd);
+ 			return atoi(pos);
+@@ -535,7 +535,7 @@
+ 
+ 	index = atoi(str);
+ 
+-	p = rindex(str, ':');	/* we have g */
++	p = strrchr(str, ':');	/* we have g */
+ 	if (p == NULL) {
+ 		return -1;
+ 	}
+@@ -557,7 +557,7 @@
+ 	}
+ 
+ 	/* now go for n - modulo */
+-	p = rindex(str, ':');	/* we have n */
++	p = strrchr(str, ':');	/* we have n */
+ 	if (p == NULL) {
+ 		return -1;
+ 	}
+--- gnutls-0.9.7/libextra/auth_srp_passwd.c.diet	2003-10-02 13:39:25.000000000 +0200
++++ gnutls-0.9.7/libextra/auth_srp_passwd.c	2003-10-02 13:39:59.000000000 +0200
+@@ -49,7 +49,7 @@
+ size_t verifier_size;
+ int indx;
+ 
+-	p = rindex( str, ':'); /* we have index */
++	p = strrchr( str, ':'); /* we have index */
+ 	if (p==NULL) {
+ 		gnutls_assert();
+ 		return GNUTLS_E_SRP_PWD_PARSING_ERROR;
+@@ -66,7 +66,7 @@
+ 	}
+ 	
+ 	/* now go for salt */
+-	p = rindex( str, ':'); /* we have salt */
++	p = strrchr( str, ':'); /* we have salt */
+ 	if (p==NULL) {
+ 		gnutls_assert();
+ 		return GNUTLS_E_SRP_PWD_PARSING_ERROR;
+@@ -85,7 +85,7 @@
+ 	}
+ 
+ 	/* now go for verifier */
+-	p = rindex( str, ':'); /* we have verifier */
++	p = strrchr( str, ':'); /* we have verifier */
+ 	if (p==NULL) {
+ 		_gnutls_free_datum(&entry->salt);
+ 		return GNUTLS_E_SRP_PWD_PARSING_ERROR;
+@@ -131,7 +131,7 @@
+ opaque * tmp;
+ int ret;
+ 
+-	p = rindex( str, ':'); /* we have g */
++	p = strrchr( str, ':'); /* we have g */
+ 	if (p==NULL) {
+ 		gnutls_assert();
+ 		return GNUTLS_E_SRP_PWD_PARSING_ERROR;
+@@ -154,7 +154,7 @@
+ 	entry->g.size = ret;
+ 
+ 	/* now go for n - modulo */
+-	p = rindex( str, ':'); /* we have n */
++	p = strrchr( str, ':'); /* we have n */
+ 	if (p==NULL) {
+ 		_gnutls_free_datum( &entry->g);
+ 		gnutls_assert();

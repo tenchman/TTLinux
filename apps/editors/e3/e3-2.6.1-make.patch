@@ -1,0 +1,24 @@
+--- e3-2.6.1/Makefile.make	2004-12-27 11:34:14.000000000 +0100
++++ e3-2.6.1/Makefile	2005-10-29 21:41:31.000000000 +0200
+@@ -187,13 +187,15 @@
+ 	ln -sf $(BINDIR)/e3 $(BINDIR)/e3vi
+ 	ln -sf $(BINDIR)/e3 $(BINDIR)/e3ne
+ else
+-	install -d $(PREFIX) $(BINDIR) $(MANDIR)
++	install -d $(BINDIR) $(MANDIR)
+ 	install -m 755 e3 $(BINDIR)
+-	ln -sf $(BINDIR)/e3 $(BINDIR)/e3ws
+-	ln -sf $(BINDIR)/e3 $(BINDIR)/e3em
+-	ln -sf $(BINDIR)/e3 $(BINDIR)/e3pi
+-	ln -sf $(BINDIR)/e3 $(BINDIR)/e3vi
+-	ln -sf $(BINDIR)/e3 $(BINDIR)/e3ne
++	(cd $(BINDIR); \
++	  ln -sf e3 e3ws; \
++	  ln -sf e3 e3em; \
++	  ln -sf e3 e3pi; \
++	  ln -sf e3 e3vi; \
++	  ln -sf e3 e3ne; \
++	);
+ 	install -m 644 e3.man $(MANDIR)/e3.$(MANSEC)
+ endif
+ 

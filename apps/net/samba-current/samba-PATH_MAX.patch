@@ -1,0 +1,10 @@
+--- source/client/mount.cifs.c.PATH_MAX	2006-09-13 22:43:28.000000000 +0200
++++ source/client/mount.cifs.c	2006-09-13 22:43:53.000000000 +0200
+@@ -38,6 +38,7 @@
+ #include <string.h>
+ #include <mntent.h>
+ #include <fcntl.h>
++#include <limits.h>
+ 
+ #define MOUNT_CIFS_VERSION_MAJOR "1"
+ #define MOUNT_CIFS_VERSION_MINOR "10"

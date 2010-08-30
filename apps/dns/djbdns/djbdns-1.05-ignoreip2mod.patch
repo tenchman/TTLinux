@@ -1,0 +1,69 @@
+--- djbdns-1.05/dnscache.c.ignoreip	Fri Sep 19 08:58:13 2003
++++ djbdns-1.05/dnscache.c	Fri Sep 19 08:59:38 2003
+@@ -24,6 +24,8 @@
+ #include "okclient.h"
+ #include "droproot.h"
+ 
++stralloc ignoreip = {0};
++
+ static int packetquery(char *buf,unsigned int len,char **q,char qtype[2],char qclass[2],char id[2])
+ {
+   unsigned int pos;
+@@ -414,6 +416,7 @@
+   char iperr[IP4_FMT];
+   struct interf *inter;
+   struct interf *itmp;
++  unsigned int i, j, k;
+   unsigned long cachesize;
+ 
+   x = env_get("IP");
+@@ -484,6 +487,20 @@
+   scan_ulong(x,&cachesize);
+   if (!cache_init(cachesize))
+     strerr_die3x(111,FATAL,"not enough memory for cache of size ",x);
++
++  if (openreadclose("ignoreip",&ignoreip,64) < 0) 
++    strerr_die2x(111,FATAL,"trouble reading ignoreip");
++  for(j = k = i = 0; i < ignoreip.len; i++)
++    if (ignoreip.s[i] == '\n')  {
++      ignoreip.s[i] = '\0';
++      if (j + 4 > i)
++        strerr_die3x(111,FATAL,"badly malformed ip4 address ",ignoreip.s+k);
++      if (!ip4_scan(ignoreip.s+k,ignoreip.s+j))
++        strerr_die3x(111,FATAL,"unable to parse address in ignoreip ",ignoreip.s+k);
++      j += 4;
++      k = i + 1;
++    }
++  ignoreip.len = j;
+ 
+   if (env_get("HIDETTL"))
+     response_hidettl();
+--- djbdns-1.05/query.c.ignoreip	Sun Feb 11 22:11:45 2001
++++ djbdns-1.05/query.c	Fri Sep 19 08:58:13 2003
+@@ -13,6 +13,8 @@
+ #include "response.h"
+ #include "query.h"
+ 
++extern stralloc ignoreip;
++
+ static int flagforwardonly = 0;
+ 
+ void query_forwardonly(void)
+@@ -193,6 +195,7 @@
+   int k;
+   int p;
+   int q;
++  unsigned int ii;
+ 
+   errno = error_io;
+   if (state == 1) goto HAVEPACKET;
+@@ -643,6 +646,9 @@
+         pos = dns_packet_copy(buf,len,pos,header,10); if (!pos) goto DIE;
+         if (byte_equal(header + 8,2,"\0\4")) {
+           pos = dns_packet_copy(buf,len,pos,header,4); if (!pos) goto DIE;
++          if (ignoreip.len)
++	    for(ii = 0; ii < ignoreip.len; ii+= 4)
++	      if (byte_equal(header,4,ignoreip.s+ii)) goto NXDOMAIN;
+           save_data(header,4);
+           log_rr(whichserver,t1,DNS_T_A,header,4,ttl);
+         }

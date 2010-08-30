@@ -1,0 +1,257 @@
+--- util-linux-2.11u/login-utils/agetty.c.agetty	2003-09-22 23:42:49.000000000 +0200
++++ util-linux-2.11u/login-utils/agetty.c	2003-09-22 23:47:56.000000000 +0200
+@@ -36,7 +36,7 @@
+ #ifdef __linux__
+ #include "pathnames.h"
+ #include <sys/param.h>
+-#define USE_SYSLOG
++// #define USE_SYSLOG
+ #endif
+ 
+  /* If USE_SYSLOG is undefined all diagnostics go directly to /dev/console. */
+@@ -67,7 +67,7 @@
+   */
+ 
+ #ifdef	SYSV_STYLE
+-#define	ISSUE "/etc/issue"		/* displayed before the login prompt */
++// #define	ISSUE "/etc/issue"		/* displayed before the login prompt */
+ #include <sys/utsname.h>
+ #include <time.h>
+ #endif
+@@ -232,6 +232,7 @@
+ int bcode P_((char *s));
+ void usage P_((void));
+ void error P_((const char *, ...));
++unsigned int fmt_ulong(register char *s,register unsigned long u);
+ #undef P_
+ 
+ /* The following is used for understandable diagnostics. */
+@@ -242,12 +243,19 @@
+ char *fakehost = NULL;
+ 
+ /* ... */
+-#ifdef DEBUGGING
+-#define debug(s) fprintf(dbf,s); fflush(dbf)
+-FILE *dbf;
+-#else
+ #define debug(s) /* nothing */
+-#endif
++
++unsigned int fmt_ulong(register char *s,register unsigned long u)
++{
++  register unsigned int len; register unsigned long q;
++  len = 1; q = u;
++  while (q > 9) { ++len; q /= 10; }
++  if (s) {
++    s += len;
++    do { *--s = '0' + (u % 10); u /= 10; } while(u); /* handles u == 0 */
++  }
++  return len;
++}
+ 
+ int
+ main(argc, argv)
+@@ -263,7 +271,9 @@
+ 	_PATH_LOGIN,			/* default login program */
+ 	"tty1",				/* default tty line */
+ 	"",				/* modem init string */
++#ifdef ISSUE
+ 	ISSUE,				/* default issue file */
++#endif
+ 	0,				/* no baud rates known yet */
+     };
+ 
+@@ -284,17 +294,6 @@
+        progname = "agetty";
+ #endif
+ 
+-#ifdef DEBUGGING
+-	dbf = fopen("/dev/ttyp0", "w");
+-
+-	{	int i;
+-	
+-		for(i = 1; i < argc; i++) {
+-			debug(argv[i]);
+-		}
+-	}
+-#endif
+-
+     /* Parse command-line arguments. */
+ 
+     parse_args(argc, argv, &options);
+@@ -352,9 +351,6 @@
+ 	debug(_("waiting for cr-lf\n"));
+ 	while(read(0, &ch, 1) == 1) {
+ 	    ch &= 0x7f;   /* strip "parity bit" */
+-#ifdef DEBUGGING
+-	    fprintf(dbf, _("read %c\n"), ch);
+-#endif
+ 	    if (ch == '\n' || ch == '\r') break;
+ 	}
+     }
+@@ -846,26 +842,11 @@
+ 		
+ 		switch (c)
+ 		  {
+-		  case 's':
+-		    (void) printf ("%s", uts.sysname);
+-		    break;
+-		    
+-		  case 'n':
+-		    (void) printf ("%s", uts.nodename);
+-		    break;
+-		    
+-		  case 'r':
+-		    (void) printf ("%s", uts.release);
+-		    break;
+-		    
+-		  case 'v':
+-		    (void) printf ("%s", uts.version);
+-		    break;
+-		    
+-		  case 'm':
+-		    (void) printf ("%s", uts.machine);
+-		    break;
+-
++		  case 's': write(1,uts.sysname,strlen(uts.sysname)); break;
++		  case 'n': write(1,uts.nodename,strlen(uts.nodename)); break;
++		  case 'r': write(1,uts.release,strlen(uts.release)); break;
++		  case 'v': write(1,uts.version,strlen(uts.version)); break;
++		  case 'm': write(1,uts.machine,strlen(uts.machine)); break;
+ 		  case 'o':
+ 		   {
+ 		     char domainname[256];
+@@ -875,49 +856,54 @@
+ 		     strcpy(domainname, "unknown_domain");
+ #endif
+ 		     domainname[sizeof(domainname)-1] = '\0';
+-		     printf ("%s", domainname);
++		     write (1, domainname, strlen(domainname));
+ 		   }
+ 		  break;
+ 
+ 		  case 'd':
+ 		  case 't':
+ 		    {
+-		      char *weekday[] = { "Sun", "Mon", "Tue", "Wed", "Thu",
+-					  "Fri", "Sat" };
+-		      char *month[] = { "Jan", "Feb", "Mar", "Apr", "May",
+-					"Jun", "Jul", "Aug", "Sep", "Oct",
+-					"Nov", "Dec" };
+ 		      time_t now;
+ 		      struct tm *tm;
+-
++		      char buf[30];
++		      char *tmp;
+ 		      (void) time (&now);
+ 		      tm = localtime(&now);
+ 
+-		      if (c == 'd')
+-			(void) printf ("%s %s %d  %d",
+-				weekday[tm->tm_wday], month[tm->tm_mon],
+-				tm->tm_mday, 
+-				tm->tm_year < 70 ? tm->tm_year + 2000 :
+-				tm->tm_year + 1900);
+-		      else
+-			(void) printf ("%02d:%02d:%02d",
+-				tm->tm_hour, tm->tm_min, tm->tm_sec);
+-		      
++		      if (c == 'd') {
++			tmp=buf+fmt_ulong(buf,tm->tm_year+1900);
++			*tmp++='-';
++			tm->tm_mon++;
++			*tmp++=tm->tm_mon/10+'0';
++			*tmp++=tm->tm_mon%10+'0';
++			*tmp++='-';
++			*tmp++=tm->tm_mday/10+'0';
++			*tmp++=tm->tm_mday%10+'0';
++			*tmp++=0;
++			write(1,buf,strlen(buf));
++		      } else {
++			buf[0]=tm->tm_hour/10+'0';
++			buf[1]=tm->tm_hour%10+'0';
++			buf[2]=':';
++			buf[3]=tm->tm_min/10+'0';
++			buf[4]=tm->tm_min%10+'0';
++			buf[5]=':';
++			buf[6]=tm->tm_sec/10+'0';
++			buf[7]=tm->tm_sec%10+'0';
++			write(1,buf,8);
++		      }
+ 		      break;
+ 		    }
+ 
+-		  case 'l':
+-		      (void) printf ("%s", op->tty);
+-		      break;
+-
++		  case 'l': write (1, op->tty, strlen(op->tty)); break;
+ 		  case 'b':
+ 		    {
+ 			int i;
+-
++			char buf[20];
+ 			for (i = 0; speedtab[i].speed; i++) {
+ 			    if (speedtab[i].code == (tp->c_cflag & CBAUD)) {
+-				printf("%ld", speedtab[i].speed);
+-				break;
++			      write(1,buf,fmt_ulong(buf, speedtab[i].speed));	
++			      break;
+ 			    }
+ 			}
+ 			break;
+@@ -927,24 +913,27 @@
+ 		    {
+ 		      int users = 0;
+ 		      struct utmp *ut;
++		      char buf[20];
+ 		      setutent();
+ 		      while ((ut = getutent()))
+ 		        if (ut->ut_type == USER_PROCESS)
+ 			  users++;
+ 		      endutent();
+-		      printf ("%d ", users);
++		      write(1,buf,fmt_ulong(buf,users));
+ 		      if (c == 'U')
+-		        printf ((users == 1) ? _("user") : _("users"));
++		        if (users==1)
++			  write(1," user",5);
++			else
++			  write(1," users",6);
+ 		      break;
+ 		    }
+ 		  default:
+-		    (void) putchar(c);
++		    write(1,&c,1);
+ 		  }
+ 	      }
+ 	    else
+-	      (void) putchar(c);
++	      write(1,&c,1);
+ 	}
+-	fflush(stdout);
+ 
+ 	tp->c_oflag = oflag;			/* restore settings */
+ 	(void) ioctl(0, TCSETAW, tp);		/* wait till output is gone */
+@@ -1192,7 +1181,7 @@
+ void
+ usage()
+ {
+-    fprintf(stderr, _("Usage: %s [-hiLmw] [-l login_program] [-t timeout] [-I initstring] [-H login_host] baud_rate,... line [termtype]\nor\t[-hiLmw] [-l login_program] [-t timeout] [-I initstring] [-H login_host] line baud_rate,... [termtype]\n"), progname);
++    write(2, "Usage: agetty [options]\n", 24);
+     exit(1);
+ }
+ 
+@@ -1238,10 +1227,12 @@
+ 	    xstrncpy(bp, va_arg(ap, char *), &buf[BUFSIZ-1] - bp);
+ 	    bp += strlen(bp);
+ 	    fmt += 2;
++/* #if 0 */
+ 	} else if (strncmp(fmt, "%m", 2) == 0) {
+ 	    xstrncpy(bp, strerror(errno), &buf[BUFSIZ-1] - bp);
+ 	    bp += strlen(bp);
+ 	    fmt += 2;
++/* #endif */
+ 	} else {
+ 	    *bp++ = *fmt++;
+ 	}

@@ -1,0 +1,252 @@
+diff -up ./arch/arm/mach-ixp4xx/ixdp425-setup.c.990-pico_setup ./arch/arm/mach-ixp4xx/ixdp425-setup.c
+--- ./arch/arm/mach-ixp4xx/ixdp425-setup.c.990-pico_setup	2008-08-06 18:19:01.000000000 +0200
++++ ./arch/arm/mach-ixp4xx/ixdp425-setup.c	2008-08-22 10:31:25.000000000 +0200
+@@ -11,16 +11,31 @@
+ #include <linux/kernel.h>
+ #include <linux/init.h>
+ #include <linux/device.h>
++#include <linux/if_ether.h>
+ #include <linux/serial.h>
+ #include <linux/tty.h>
+ #include <linux/serial_8250.h>
+ #include <linux/slab.h>
+ #include <linux/i2c-gpio.h>
++#include <linux/leds.h>
++#include <linux/reboot.h>
+ #include <linux/io.h>
++#include <linux/gpio.h>
+ #include <linux/mtd/mtd.h>
+ #include <linux/mtd/nand.h>
+ #include <linux/mtd/partitions.h>
+ 
++#ifdef CONFIG_SENSORS_EEPROM
++# include <linux/i2c.h>
++# include <linux/eeprom.h>
++#endif
++
++#include <linux/syscalls.h>
++#include <linux/fcntl.h>
++#include <linux/file.h>
++#include <linux/fs.h>
++#include <linux/delay.h>
++
+ #include <asm/types.h>
+ #include <asm/setup.h>
+ #include <asm/memory.h>
+@@ -31,6 +46,8 @@
+ #include <asm/mach/flash.h>
+ #include <asm/delay.h>
+ 
++int irqcount=0;
++
+ static struct flash_platform_data ixdp425_flash_data = {
+ 	.map_name	= "cfi_probe",
+ 	.width		= 2,
+@@ -50,6 +67,12 @@ static struct platform_device ixdp425_fl
+ 	.resource	= &ixdp425_flash_resource,
+ };
+ 
++static struct i2c_board_info __initdata ixdp425_i2c_board_info [] = {
++	{
++		I2C_BOARD_INFO("x1205", 0x6f),
++	},
++};
++
+ #if defined(CONFIG_MTD_NAND_PLATFORM) || \
+     defined(CONFIG_MTD_NAND_PLATFORM_MODULE)
+ 
+@@ -134,6 +157,27 @@ static struct platform_device ixdp425_i2
+ 	},
+ };
+ 
++static struct gpio_led ixdp425_led_pins[] = {
++	{
++		.name		= "ready", /* green led */
++		.default_trigger  = "heartbeat",
++		.gpio		= 0,  /* pin0 = ready-led */
++		.active_low	= true,
++	},
++};
++
++
++static struct gpio_led_platform_data ixdp425_led_data = {
++	.num_leds		= ARRAY_SIZE(ixdp425_led_pins),
++	.leds			= ixdp425_led_pins,
++};
++
++static struct platform_device ixdp425_leds = {
++	.name			= "leds-gpio",
++	.id			= -1,
++	.dev.platform_data	= &ixdp425_led_data,
++};
++
+ static struct resource ixdp425_uart_resources[] = {
+ 	{
+ 		.start		= IXP4XX_UART1_BASE_PHYS,
+@@ -178,30 +221,72 @@ static struct platform_device ixdp425_ua
+ };
+ 
+ /* Built-in 10/100 Ethernet MAC interfaces */
+-static struct eth_plat_info ixdp425_plat_eth[] = {
+-	{
+-		.phy		= 0,
+-		.rxq		= 3,
+-		.txreadyq	= 20,
+-	}, {
+-		.phy		= 1,
+-		.rxq		= 4,
+-		.txreadyq	= 21,
+-	}
++static struct eth_plat_info ixdp425_npeb_data = {
++	.phy		= IXP4XX_ETH_PHY_MAX_ADDR,
++	.phy_mask	= 0x0f,
++	.rxq		= 3,
++	.txreadyq	= 20,
+ };
+ 
+-static struct platform_device ixdp425_eth[] = {
+-	{
+-		.name			= "ixp4xx_eth",
+-		.id			= IXP4XX_ETH_NPEB,
+-		.dev.platform_data	= ixdp425_plat_eth,
+-	}, {
+-		.name			= "ixp4xx_eth",
+-		.id			= IXP4XX_ETH_NPEC,
+-		.dev.platform_data	= ixdp425_plat_eth + 1,
+-	}
++static struct eth_plat_info ixdp425_npec_data = {
++	.phy		= 4,
++	.rxq		= 4,
++	.txreadyq	= 21,
+ };
+ 
++static struct platform_device ixdp425_npeb_device = {
++	.name			= "ixp4xx_eth",
++	.id			= IXP4XX_ETH_NPEB,
++	.dev.platform_data	= &ixdp425_npeb_data,
++};
++
++static struct platform_device ixdp425_npec_device = {
++	.name			= "ixp4xx_eth",
++	.id			= IXP4XX_ETH_NPEC,
++	.dev.platform_data	= &ixdp425_npec_data,
++};
++
++#ifdef CONFIG_SENSORS_EEPROM
++
++struct ixdp425_eeprom_header {
++	unsigned char mac0[ETH_ALEN];
++};
++
++static int __init ixdp425_eeprom_notify(struct notifier_block *self,
++			unsigned long event, void *t) {
++	struct eeprom_data *ee = t;
++	struct ixdp425_eeprom_header hdr;
++
++	dev_info(&ee->client.dev, "Got eeprom notify event @ 0x%04x\n", ee->client.addr);
++	
++	/* The eeprom is at address 0x50 */
++	if (event != EEPROM_REGISTER || ee->client.addr != 0x50)
++		return NOTIFY_DONE;
++	
++	ee->attr->read(&ee->client.dev.kobj, ee->attr, (char *)&hdr,
++							0, sizeof(hdr));
++
++	/* the second mac address is mac0 + 1 */
++	memcpy(&ixdp425_npec_data.hwaddr, hdr.mac0, ETH_ALEN);
++	hdr.mac0[5]++;
++	memcpy(&ixdp425_npeb_data.hwaddr, hdr.mac0, ETH_ALEN);
++
++	return NOTIFY_OK;
++}
++
++static struct notifier_block ixdp425_eeprom_notifier __initdata = {
++       .notifier_call = ixdp425_eeprom_notify
++};
++
++static void __init ixdp425_register_eeprom_notifier(void) {
++	register_eeprom_notifier(&ixdp425_eeprom_notifier);
++}
++
++#else /* CONFIG_SENSORS_EEPROM */
++static inline void ixdp425_register_eeprom_notifier(void) {};
++#endif /* CONFIG_SENSORS_EEPROM */
++
++
+ static struct platform_device *ixdp425_devices[] __initdata = {
+ 	&ixdp425_i2c_gpio,
+ 	&ixdp425_flash,
+@@ -210,10 +295,32 @@ static struct platform_device *ixdp425_d
+ 	&ixdp425_flash_nand,
+ #endif
+ 	&ixdp425_uart,
+-	&ixdp425_eth[0],
+-	&ixdp425_eth[1],
++	&ixdp425_leds,
++	&ixdp425_npeb_device,
++	&ixdp425_npec_device,
+ };
+ 
++static irqreturn_t ixdp425_reset_handler(int irq, void *dev_id)
++{
++	/* Signal init to do the ctrlaltdel action, this will bypass init if
++	 * it hasn't started and do a kernel_restart.
++	 */
++	int fd;
++	mm_segment_t old_fs = get_fs();
++	set_fs(KERNEL_DS);
++
++	irqcount++;
++	mdelay(800);
++	if (irqcount > 2){
++		set_fs(KERNEL_DS);
++		fd = sys_open("/tmp/reset", O_CREAT | O_WRONLY, 0666);
++		sys_close(fd);
++		set_fs(old_fs);	
++		ctrl_alt_del();
++	}
++	return IRQ_HANDLED;
++}
++
+ static void __init ixdp425_init(void)
+ {
+ 	ixp4xx_sys_init();
+@@ -221,6 +328,16 @@ static void __init ixdp425_init(void)
+ 	ixdp425_flash_resource.start = IXP4XX_EXP_BUS_BASE(0);
+ 	ixdp425_flash_resource.end =
+ 		IXP4XX_EXP_BUS_BASE(0) + ixp4xx_exp_bus_size - 1;
++	
++	i2c_register_board_info(0, ixdp425_i2c_board_info,
++				ARRAY_SIZE(ixdp425_i2c_board_info));
++
++	if (request_irq(gpio_to_irq(1), &ixdp425_reset_handler,
++		IRQF_DISABLED | IRQF_TRIGGER_LOW,
++		"Reset button", NULL) < 0) {
++
++		printk(KERN_INFO "Reset Button IRQ not available\n");
++	}
+ 
+ #if defined(CONFIG_MTD_NAND_PLATFORM) || \
+     defined(CONFIG_MTD_NAND_PLATFORM_MODULE)
+@@ -244,6 +361,7 @@ static void __init ixdp425_init(void)
+ 	}
+ 
+ 	platform_add_devices(ixdp425_devices, ARRAY_SIZE(ixdp425_devices));
++	ixdp425_register_eeprom_notifier();
+ }
+ 
+ #ifdef CONFIG_ARCH_IXDP425
+diff -up ./drivers/net/arm/ixp4xx_eth.c.990-pico_setup ./drivers/net/arm/ixp4xx_eth.c
+--- ./drivers/net/arm/ixp4xx_eth.c.990-pico_setup	2008-08-22 10:32:20.000000000 +0200
++++ ./drivers/net/arm/ixp4xx_eth.c	2008-08-22 13:47:59.000000000 +0200
+@@ -401,8 +401,10 @@ static void phy_update_link(struct net_d
+ 		printk(KERN_INFO "%s: link up\n", dev->name);
+ 		netif_carrier_on(dev);
+ 	} else if (prev_link && !link) {
++		if (dev->name[3] == '1'){
+ 		printk(KERN_INFO "%s: link down\n", dev->name);
+ 		netif_carrier_off(dev);
++		}
+ 	}
+ }
+ 

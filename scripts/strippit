@@ -1,0 +1,11 @@
+#!/bin/sh
+# If using normal root, avoid changing anything.
+if [ -z "$TMPDIR" -o "$TMPDIR" = "/" ]; then
+	exit 0
+fi
+
+# Strip ELF binaries
+for f in `find $TMPDIR -type f \( -perm -0100 -or -perm -0010 -or -perm -0001 \) -exec file {} \; | \
+	sed -n -e 's/^\(.*\):[ 	].*ELF.*, not stripped/\1/p'`; do
+	${STRIP} $f -s -R .comment -R .note && echo "stripped $f" || :
+done

@@ -1,0 +1,170 @@
+--- libutf8-0.8/man/Makefile.in.destdir	1999-07-29 10:59:54.000000000 +0200
++++ libutf8-0.8/man/Makefile.in	2005-02-18 18:58:16.140233040 +0100
+@@ -27,18 +27,18 @@
+ all :
+ 
+ install : force
+-	if [ ! -d $(prefix) ] ; then mkdir $(prefix) ; fi
+-	if [ ! -d $(mandir) ] ; then mkdir $(mandir) ; fi
+-	if [ ! -d $(mandir)/man3 ] ; then mkdir $(mandir)/man3 ; fi
+-	cd $(srcdir) && for f in *.3 ; do echo $(INSTALL_DATA) $$f $(mandir)/man3/$$f ; $(INSTALL_DATA) $$f $(mandir)/man3/$$f ; done
++	if [ ! -d $(DESTDIR)$(prefix) ] ; then mkdir -p $(DESTDIR)$(prefix) ; fi
++	if [ ! -d $(DESTDIR)$(mandir) ] ; then mkdir -p $(DESTDIR)$(mandir) ; fi
++	if [ ! -d $(DESTDIR)$(mandir)/man3 ] ; then mkdir -p $(DESTDIR)$(mandir)/man3 ; fi
++	cd $(srcdir) && for f in *.3 ; do echo $(INSTALL_DATA) $$f $(DESTDIR)$(mandir)/man3/$$f ; $(INSTALL_DATA) $$f $(DESTDIR)$(mandir)/man3/$$f ; done
+ 
+ installdirs : force
+-	if [ ! -d $(prefix) ] ; then mkdir $(prefix) ; fi
+-	if [ ! -d $(mandir) ] ; then mkdir $(mandir) ; fi
+-	if [ ! -d $(mandir)/man3 ] ; then mkdir $(mandir)/man3 ; fi
++	if [ ! -d $(DESTDIR)$(prefix) ] ; then mkdir -p $(DESTDIR)$(prefix) ; fi
++	if [ ! -d $(DESTDIR)$(mandir) ] ; then mkdir -p $(DESTDIR)$(mandir) ; fi
++	if [ ! -d $(DESTDIR)$(mandir)/man3 ] ; then mkdir -p $(DESTDIR)$(mandir)/man3 ; fi
+ 
+ uninstall : force
+-	cd $(srcdir) && for f in *.3 ; do echo $(RM) $(mandir)/man3/$$f ; $(RM) $(mandir)/man3/$$f ; done
++	cd $(srcdir) && for f in *.3 ; do echo $(RM) $(DESTDIR)$(mandir)/man3/$$f ; $(RM) $(DESTDIR)$(mandir)/man3/$$f ; done
+ 
+ check :
+ 
+--- libutf8-0.8/src/Makefile.in.destdir	2000-05-01 16:12:18.000000000 +0200
++++ libutf8-0.8/src/Makefile.in	2005-02-18 18:58:16.149231672 +0100
+@@ -7,9 +7,9 @@
+ 
+ # Directories used by "make install":
+ prefix = @prefix@
+-local_prefix = /usr/local
+-exec_prefix = $(prefix)
+-libdir = $(exec_prefix)/lib
++local_prefix = @local_prefix@
++exec_prefix = @exec_prefix@
++libdir = @libdir@
+ 
+ # Programs used by "make":
+ CC = @CC@
+@@ -433,20 +433,20 @@
+ 	$(LIBTOOL_COMPILE) $(CC) $(CFLAGS) $(INCLUDES) -c $(srcdir)/stdio/wprintf-parse.c
+ 
+ install : all force
+-	if [ ! -d $(prefix) ] ; then mkdir $(prefix) ; fi
+-	if [ ! -d $(exec_prefix) ] ; then mkdir $(exec_prefix) ; fi
+-	if [ ! -d $(libdir) ] ; then mkdir $(libdir) ; fi
+-	$(LIBTOOL_INSTALL) $(INSTALL_DATA) libutf8.la $(libdir)/libutf8.la
+-	if test -n "@PLUGLIB@"; then $(INSTALL_DATA) @PLUGLIB@ $(libdir)/@PLUGLIB@.new && mv $(libdir)/@PLUGLIB@.new $(libdir)/@PLUGLIB@ ; fi
++	if [ ! -d $(DESTDIR)$(prefix) ] ; then mkdir -p $(DESTDIR)$(prefix) ; fi
++	if [ ! -d $(DESTDIR)$(exec_prefix) ] ; then mkdir -p $(DESTDIR)$(exec_prefix) ; fi
++	if [ ! -d $(DESTDIR)$(libdir) ] ; then mkdir -p $(DESTDIR)$(libdir) ; fi
++	$(LIBTOOL_INSTALL) $(INSTALL_DATA) libutf8.la $(DESTDIR)$(libdir)/libutf8.la
++	if test -n "@PLUGLIB@"; then $(INSTALL_DATA) @PLUGLIB@ $(DESTDIR)$(libdir)/@PLUGLIB@.new && mv $(DESTDIR)$(libdir)/@PLUGLIB@.new $(DESTDIR)$(libdir)/@PLUGLIB@ ; fi
+ 
+ installdirs : force
+-	if [ ! -d $(prefix) ] ; then mkdir $(prefix) ; fi
+-	if [ ! -d $(exec_prefix) ] ; then mkdir $(exec_prefix) ; fi
+-	if [ ! -d $(libdir) ] ; then mkdir $(libdir) ; fi
++	if [ ! -d $(DESTDIR)$(prefix) ] ; then mkdir -p $(DESTDIR)$(prefix) ; fi
++	if [ ! -d $(DESTDIR)$(exec_prefix) ] ; then mkdir -p $(DESTDIR)$(exec_prefix) ; fi
++	if [ ! -d $(DESTDIR)$(libdir) ] ; then mkdir -p $(DESTDIR)$(libdir) ; fi
+ 
+ uninstall : force
+-	$(LIBTOOL_UNINSTALL) $(RM) $(libdir)/libutf8.la
+-	if test -n "@PLUGLIB@"; then $(RM) $(libdir)/@PLUGLIB@ ; fi
++	$(LIBTOOL_UNINSTALL) $(RM) $(DESTDIR)$(libdir)/libutf8.la
++	if test -n "@PLUGLIB@"; then $(RM) $(DESTDIR)$(libdir)/@PLUGLIB@ ; fi
+ 
+ check : all
+ 
+--- libutf8-0.8/Makefile.in.destdir	1999-11-21 18:01:08.000000000 +0100
++++ libutf8-0.8/Makefile.in	2005-02-18 19:04:24.232274544 +0100
+@@ -7,11 +7,10 @@
+ 
+ # Directories used by "make install":
+ prefix = @prefix@
+-local_prefix = /usr/local
+-exec_prefix = $(prefix)
+-libdir = $(exec_prefix)/lib
+-includedir = $(prefix)/include
+-mandir = $(prefix)/man
++exec_prefix = @exec_prefix@
++libdir = @libdir@
++includedir = @includedir@
++mandir = @mandir@
+ 
+ # Programs used by "make":
+ RM = rm -f
+@@ -31,43 +30,43 @@
+ 	cd man; $(MAKE) -r all
+ 
+ install : force
+-	cd src; $(MAKE) -r install prefix='$(prefix)' exec_prefix='$(exec_prefix)' libdir='$(libdir)'
+-	if [ ! -d $(prefix) ] ; then mkdir $(prefix) ; fi
+-	if [ ! -d $(exec_prefix) ] ; then mkdir $(exec_prefix) ; fi
+-	if [ ! -d $(includedir) ] ; then mkdir $(includedir) ; fi
+-	if [ ! -d $(includedir)/utf8 ] ; then mkdir $(includedir)/utf8 ; fi
+-	$(INSTALL_DATA) $(srcdir)/include/libutf8.h $(includedir)/libutf8.h
+-	$(INSTALL_DATA) include/utf8/config.h $(includedir)/utf8/config.h
+-	$(INSTALL_DATA) include/utf8/types.h $(includedir)/utf8/types.h
+-	$(INSTALL_DATA) include/utf8/wchar.h $(includedir)/utf8/wchar.h
+-	$(INSTALL_DATA) $(srcdir)/include/utf8/stdlib.h $(includedir)/utf8/stdlib.h
+-	$(INSTALL_DATA) $(srcdir)/include/utf8/locale.h $(includedir)/utf8/locale.h
+-	$(INSTALL_DATA) $(srcdir)/include/utf8/limits.h $(includedir)/utf8/limits.h
+-	$(INSTALL_DATA) $(srcdir)/include/utf8/wctype.h $(includedir)/utf8/wctype.h
+-	$(INSTALL_DATA) $(srcdir)/include/utf8/stdio.h $(includedir)/utf8/stdio.h
+-	cd man; $(MAKE) -r install prefix='$(prefix)' exec_prefix='$(exec_prefix)' mandir='$(mandir)'
++	cd src; $(MAKE) -r install DESTDIR='$(DESTDIR)' prefix='$(prefix)' exec_prefix='$(exec_prefix)' libdir='$(libdir)'
++	if [ ! -d $(DESTDIR)$(prefix) ] ; then mkdir -p $(DESTDIR)$(prefix) ; fi
++	if [ ! -d $(DESTDIR)$(exec_prefix) ] ; then mkdir -p $(DESTDIR)$(exec_prefix) ; fi
++	if [ ! -d $(DESTDIR)$(includedir) ] ; then mkdir -p $(DESTDIR)$(includedir) ; fi
++	if [ ! -d $(DESTDIR)$(includedir)/utf8 ] ; then mkdir -p $(DESTDIR)$(includedir)/utf8 ; fi
++	$(INSTALL_DATA) $(srcdir)/include/libutf8.h $(DESTDIR)$(includedir)/libutf8.h
++	$(INSTALL_DATA) include/utf8/config.h $(DESTDIR)$(includedir)/utf8/config.h
++	$(INSTALL_DATA) include/utf8/types.h $(DESTDIR)$(includedir)/utf8/types.h
++	$(INSTALL_DATA) include/utf8/wchar.h $(DESTDIR)$(includedir)/utf8/wchar.h
++	$(INSTALL_DATA) $(srcdir)/include/utf8/stdlib.h $(DESTDIR)$(includedir)/utf8/stdlib.h
++	$(INSTALL_DATA) $(srcdir)/include/utf8/locale.h $(DESTDIR)$(includedir)/utf8/locale.h
++	$(INSTALL_DATA) $(srcdir)/include/utf8/limits.h $(DESTDIR)$(includedir)/utf8/limits.h
++	$(INSTALL_DATA) $(srcdir)/include/utf8/wctype.h $(DESTDIR)$(includedir)/utf8/wctype.h
++	$(INSTALL_DATA) $(srcdir)/include/utf8/stdio.h $(DESTDIR)$(includedir)/utf8/stdio.h
++	cd man; $(MAKE) -r install DESTDIR='$(DESTDIR)' prefix='$(prefix)' exec_prefix='$(exec_prefix)' mandir='$(mandir)'
+ 
+ installdirs : force
+-	cd src; $(MAKE) -r installdirs prefix='$(prefix)' exec_prefix='$(exec_prefix)' libdir='$(libdir)'
+-	if [ ! -d $(prefix) ] ; then mkdir $(prefix) ; fi
+-	if [ ! -d $(exec_prefix) ] ; then mkdir $(exec_prefix) ; fi
+-	if [ ! -d $(includedir) ] ; then mkdir $(includedir) ; fi
+-	if [ ! -d $(includedir)/utf8 ] ; then mkdir $(includedir)/utf8 ; fi
+-	cd man; $(MAKE) -r installdirs prefix='$(prefix)' exec_prefix='$(exec_prefix)' mandir='$(mandir)'
++	cd src; $(MAKE) -r installdirs DESTDIR='$(DESTDIR)' prefix='$(prefix)' exec_prefix='$(exec_prefix)' libdir='$(libdir)'
++	if [ ! -d $(DESTDIR)$(prefix) ] ; then mkdir -p $(DESTDIR)$(prefix) ; fi
++	if [ ! -d $(DESTDIR)$(exec_prefix) ] ; then mkdir -p $(DESTDIR)$(exec_prefix) ; fi
++	if [ ! -d $(DESTDIR)$(includedir) ] ; then mkdir -p $(DESTDIR)$(includedir) ; fi
++	if [ ! -d $(DESTDIR)$(includedir)/utf8 ] ; then mkdir -p $(DESTDIR)$(includedir)/utf8 ; fi
++	cd man; $(MAKE) -r installdirs DESTDIR='$(DESTDIR)' prefix='$(prefix)' exec_prefix='$(exec_prefix)' mandir='$(mandir)'
+ 
+ uninstall : force
+-	cd src; $(MAKE) -r uninstall prefix='$(prefix)' exec_prefix='$(exec_prefix)' libdir='$(libdir)'
+-	$(RM) $(includedir)/libutf8.h
+-	$(RM) $(includedir)/utf8/config.h
+-	$(RM) $(includedir)/utf8/types.h
+-	$(RM) $(includedir)/utf8/wchar.h
+-	$(RM) $(includedir)/utf8/stdlib.h
+-	$(RM) $(includedir)/utf8/locale.h
+-	$(RM) $(includedir)/utf8/limits.h
+-	$(RM) $(includedir)/utf8/wctype.h
+-	$(RM) $(includedir)/utf8/stdio.h
+-	-rmdir $(includedir)/utf8
+-	cd man; $(MAKE) -r uninstall prefix='$(prefix)' exec_prefix='$(exec_prefix)' mandir='$(mandir)'
++	cd src; $(MAKE) -r uninstall DESTDIR='$(DESTDIR)' prefix='$(prefix)' exec_prefix='$(exec_prefix)' libdir='$(libdir)'
++	$(RM) $(DESTDIR)$(includedir)/libutf8.h
++	$(RM) $(DESTDIR)$(includedir)/utf8/config.h
++	$(RM) $(DESTDIR)$(includedir)/utf8/types.h
++	$(RM) $(DESTDIR)$(includedir)/utf8/wchar.h
++	$(RM) $(DESTDIR)$(includedir)/utf8/stdlib.h
++	$(RM) $(DESTDIR)$(includedir)/utf8/locale.h
++	$(RM) $(DESTDIR)$(includedir)/utf8/limits.h
++	$(RM) $(DESTDIR)$(includedir)/utf8/wctype.h
++	$(RM) $(DESTDIR)$(includedir)/utf8/stdio.h
++	-rmdir $(DESTDIR)$(includedir)/utf8
++	cd man; $(MAKE) -r uninstall DESTDIR='$(DESTDIR)' prefix='$(prefix)' exec_prefix='$(exec_prefix)' mandir='$(mandir)'
+ 
+ check : force
+ 	cd src; $(MAKE) -r check

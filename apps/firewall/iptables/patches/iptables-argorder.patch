@@ -1,0 +1,17 @@
+--- iptables-1.4.0/xtables.c.argorder	2008-08-12 19:42:36.000000000 +0200
++++ iptables-1.4.0/xtables.c	2008-08-12 19:43:29.000000000 +0200
+@@ -118,11 +118,12 @@ int xtables_insmod(const char *modname, 
+ 	switch (fork()) {
+ 	case 0:
+ 		argv[0] = (char *)modprobe;
+-		argv[1] = (char *)modname;
+ 		if (quiet) {
+-			argv[2] = "-q";
++			argv[1] = "-q";
++			argv[2] = (char *)modname;
+ 			argv[3] = NULL;
+ 		} else {
++			argv[1] = (char *)modname;
+ 			argv[2] = NULL;
+ 			argv[3] = NULL;
+ 		}

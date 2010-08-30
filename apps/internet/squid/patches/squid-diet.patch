@@ -1,0 +1,20 @@
+--- squid-2.6.STABLE2/src/comm_poll.c.diet	2006-08-14 13:28:35.000000000 +0200
++++ squid-2.6.STABLE2/src/comm_poll.c	2006-08-14 13:28:24.000000000 +0200
+@@ -32,7 +32,7 @@
+  *
+  */
+ 
+-#include "squid.h"
++#include "config.h"
+ 
+ #if HAVE_SYS_POLL_H
+ #include <sys/poll.h>
+@@ -40,6 +40,8 @@
+ #include <poll.h>
+ #endif
+ 
++#include "squid.h"
++
+ static int MAX_POLL_TIME = 1000;	/* see also comm_quick_poll_required() */
+ 
+ /* STATIC */

@@ -1,0 +1,18 @@
+--- keepalived-1.1.11.orig/lib/utils.c	2006-07-23 23:08:24.000000000 +0200
++++ keepalived-1.1.11/lib/utils.c	2006-07-23 23:08:24.000000000 +0200
+@@ -233,12 +233,14 @@
+ {
+ 	struct hostent *host;
+ 	struct utsname name;
++	static char default_hostname[] = "hav.liss.de";
+ 
+ 	if (uname(&name) < 0)
+ 		return NULL;
+ 
+ 	if (!(host = gethostbyname(name.nodename)))
+-		return NULL;
++		//return NULL;
++		return default_hostname;
+ 
+ 	return host->h_name;
+ }

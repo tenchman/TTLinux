@@ -1,0 +1,170 @@
+--- dietlibc-0.28/lib/tdelete.c.search	2005-07-23 21:37:34.000000000 +0200
++++ dietlibc-0.28/lib/tdelete.c	2005-07-23 21:39:51.000000000 +0200
+@@ -0,0 +1,46 @@
++#include <sys/cdefs.h>
++#include <search.h>
++#include <stdlib.h>
++#include "searchprivate.h"
++
++void *tdelete(const void *key, void **rootp, int (*compar)(const void *, const void *))
++{
++  node_t **rp = (node_t **)rootp;
++  node_t *parent, *q, *r;
++  int result;
++
++  if (rp == NULL || (parent = *rp) == NULL)
++    return NULL;
++
++  while ((result = (*compar)(key, (*rp)->key)) != 0) {
++    parent = *rp;		  /* remember the parent */
++    rp = (result < 0) ?
++	&(*rp)->left :
++	&(*rp)->right;
++    if (*rp == NULL)
++      return NULL;
++  }
++
++  r = (*rp)->right;
++
++  if ((q = (*rp)->left) == NULL)
++    q = r;
++  else if (r != NULL) {	
++    if (r->left == NULL) {
++      r->left = q;
++      q = r;
++    } else {
++      for (q = r->left; q->left != NULL; q = r->left)
++	r = q;
++      r->left = q->right;
++      q->left = (*rp)->left;
++      q->right = (*rp)->right;
++    }
++  }
++
++  free(*rp);
++  *rp = q;
++
++  return parent;
++}
++
+--- dietlibc-0.28/lib/searchprivate.h.search	2005-07-23 21:37:34.000000000 +0200
++++ dietlibc-0.28/lib/searchprivate.h	2005-07-23 21:37:34.000000000 +0200
+@@ -0,0 +1,10 @@
++#ifndef __SEARCHPRIVATE_H
++#define __SEARCHPRIVATE_H 1
++
++typedef struct node {
++  char        *key;
++  struct node *left;
++  struct node *right;
++} node_t;
++
++#endif
+--- dietlibc-0.28/lib/tsearch.c.search	2005-07-23 21:37:34.000000000 +0200
++++ dietlibc-0.28/lib/tsearch.c	2005-07-23 21:37:36.000000000 +0200
+@@ -0,0 +1,27 @@
++#include <search.h>
++#include <stdlib.h> /* calloc() */
++#include "searchprivate.h"
++
++void * tsearch(const void *key, void **rootp, int (*compar)(const void *, const void *))
++{
++  node_t **rp = (node_t **)rootp;
++
++  if (rp == NULL)
++    return NULL;
++  
++  while (*rp != NULL) {
++    register int result = (*compar)(key, (*rp)->key);
++    if (result < 0) {
++      rp = &(*rp)->left;
++    } else if (result > 0) {
++      rp = &(*rp)->right;
++    } else
++      goto found;
++  }
++
++  if ((*rp = calloc(1,sizeof(node_t))))
++    (*rp)->key = (void *)key;
++
++found:
++  return *rp;
++}
+--- dietlibc-0.28/lib/tfind.c.search	2005-07-23 21:37:34.000000000 +0200
++++ dietlibc-0.28/lib/tfind.c	2005-07-23 21:37:36.000000000 +0200
+@@ -0,0 +1,24 @@
++#include <search.h>
++#include "searchprivate.h"
++
++void * tfind(const void *key, void *const *rootp, int (*compar)(const void *, const void *))
++{
++  node_t **rp = (node_t **)rootp;
++  
++  if (!rp)
++    return (void *)0;
++  
++  while (*rp) {
++    register int result = (*compar)(key, (*rp)->key);
++    if (result < 0) {
++      rp = &(*rp)->left;
++    } else if (result > 0) {
++      rp = &(*rp)->right;
++    } else
++      break;
++  }
++ 
++  return *rp;
++}
++
++
+--- dietlibc-0.28/lib/twalk.c.search	2005-07-23 21:37:34.000000000 +0200
++++ dietlibc-0.28/lib/twalk.c	2005-07-23 21:37:36.000000000 +0200
+@@ -0,0 +1,23 @@
++#include <search.h>
++#include "searchprivate.h"
++
++static void __walk(const node_t *root,void (*action)(const void *, VISIT, int), int level)
++{
++  if (!root->left && !root->right)
++    (*action)(root, leaf, level);
++  else {
++    (*action)(root, preorder, level);
++    if (root->left)
++      __walk(root->left, action, level + 1);
++    (*action)(root, postorder, level);
++    if (root->right)
++      __walk(root->right, action, level + 1);
++    (*action)(root, endorder, level);
++  }
++}
++
++void twalk(const void *root, void (*action)(const void *, VISIT, int))
++{
++  if (root && action)
++    __walk(root, action, 0);
++}
+--- dietlibc-0.28/include/search.h.search	2005-07-23 21:37:34.000000000 +0200
++++ dietlibc-0.28/include/search.h	2005-07-23 21:37:34.000000000 +0200
+@@ -0,0 +1,22 @@
++#ifndef _SEARCH_H_
++#define _SEARCH_H_
++
++#include <sys/cdefs.h>
++#include <sys/types.h>
++
++typedef struct entry {
++  char *key;
++  void *data;
++} ENTRY;
++
++typedef enum { FIND, ENTER } ACTION;
++typedef enum { preorder, postorder, endorder, leaf } VISIT;
++
++__BEGIN_DECLS
++void *tfind(const void *, void *const *, int (*)(const void *, const void *));
++void *tsearch(const void *, void **, int (*)(const void *, const void *));
++void twalk(const void *, void (*)(const void *, VISIT, int));
++void *tdelete(const void *__restrict__, void **__restrict__, int(*)(const void *, const void *));
++__END_DECLS
++
++#endif

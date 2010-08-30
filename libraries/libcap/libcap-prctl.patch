@@ -1,0 +1,57 @@
+diff -up libcap-2.16/progs/capsh.c.diet libcap-2.16/progs/capsh.c
+--- libcap-2.16/progs/capsh.c.diet	2009-06-02 13:41:08.000000000 +0200
++++ libcap-2.16/progs/capsh.c	2009-06-02 13:42:38.000000000 +0200
+@@ -78,7 +78,7 @@ int main(int argc, char *argv[], char *e
+ 		    perror("unable to raise CAP_SETPCAP for BSET changes");
+ 		    exit(1);
+ 		}
+-		status = prctl(PR_CAPBSET_DROP, cap);
++		status = prctl(PR_CAPBSET_DROP, cap, 0, 0, 0);
+ 		if (cap_set_proc(orig) != 0) {
+ 		    perror("unable to lower CAP_SETPCAP post BSET change");
+ 		    exit(1);
+@@ -204,7 +204,7 @@ int main(int argc, char *argv[], char *e
+ 	    int set;
+ 
+ 	    value = strtoul(argv[i]+7, NULL, 0);
+-	    set = prctl(PR_SET_KEEPCAPS, value);
++	    set = prctl(PR_SET_KEEPCAPS, value, 0, 0, 0);
+ 	    if (set < 0) {
+ 		fprintf(stderr, "prctl(PR_SET_KEEPCAPS, %u) failed: %s\n",
+ 			value, strerror(errno));
+@@ -254,7 +254,7 @@ int main(int argc, char *argv[], char *e
+ 	    int status;
+ 
+ 	    value = strtoul(argv[i]+10, NULL, 0);
+-	    status = prctl(PR_SET_SECUREBITS, value);
++	    status = prctl(PR_SET_SECUREBITS, value, 0, 0, 0);
+ 	    if (status < 0) {
+ 		fprintf(stderr, "failed to set securebits to 0%o/0x%x\n",
+ 			value, value);
+@@ -350,7 +350,7 @@ int main(int argc, char *argv[], char *e
+ 
+ 	    printf("Bounding set =");
+  	    sep = "";
+-	    for (cap=0; (set = prctl(PR_CAPBSET_READ, cap)) >= 0; cap++) {
++	    for (cap=0; (set = prctl(PR_CAPBSET_READ, cap, 0, 0, 0)) >= 0; cap++) {
+ 		const char *ptr;
+ 		if (!set) {
+ 		    continue;
+@@ -365,7 +365,7 @@ int main(int argc, char *argv[], char *e
+ 		sep = ",";
+ 	    }
+ 	    printf("\n");
+-	    set = prctl(PR_GET_SECUREBITS);
++	    set = prctl(PR_GET_SECUREBITS, 0, 0, 0, 0);
+ 	    if (set >= 0) {
+ 		printf("Securebits: 0%o/0x%x\n", set, set);
+ 		printf(" secure-noroot: %s (%s)\n",
+@@ -379,7 +379,7 @@ int main(int argc, char *argv[], char *e
+ 		       (set & 32) ? "locked":"unlocked");
+ 	    } else {
+ 		printf("[Securebits ABI not supported]\n");
+-		set = prctl(PR_GET_KEEPCAPS);
++		set = prctl(PR_GET_KEEPCAPS, 0, 0, 0, 0);
+ 		if (set >= 0) {
+ 		    printf(" prctl-keep-caps: %s (locking not supported)\n",
+ 			   set ? "yes":"no");

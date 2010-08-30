@@ -1,0 +1,22 @@
+--- fnord-1.10/httpd.c.sendfile	2005-11-17 20:34:27.000000000 +0100
++++ fnord-1.10/httpd.c	2005-11-17 20:34:27.000000000 +0100
+@@ -815,7 +815,7 @@
+   if (parsetime(c,&x)) return (time_t)-1;
+ done:
+   x.tm_wday=x.tm_yday=x.tm_isdst=0;
+-  return mktime(&x);
++  return mktime(&x)-timezone;
+ }
+ 
+ static struct stat st;
+@@ -1237,6 +1237,10 @@
+   int len;
+   int in;
+ 
++  struct timezone tz;
++  gettimeofday(0, &tz);
++  timezone=tz.tz_minuteswest*60L;
++
+   if (argc>1) chdir(argv[1]);
+ 
+ #ifdef CHROOT

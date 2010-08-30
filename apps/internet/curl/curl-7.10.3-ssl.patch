@@ -1,0 +1,39 @@
+--- curl-7.10.3/lib/urldata.h.ssl	2003-01-09 17:47:09.000000000 +0100
++++ curl-7.10.3/lib/urldata.h	2004-04-29 15:49:18.861164400 +0200
+@@ -114,9 +114,9 @@
+ };
+ #endif
+ 
+-#ifndef HAVE_OPENSSL_ENGINE_H
+-typedef void ENGINE;
+-#endif
++// #ifndef HAVE_OPENSSL_ENGINE_H
++// typedef void ENGINE;
++// #endif
+ /* struct for data related to SSL and SSL connections */
+ struct ssl_connect_data {
+   bool use;              /* use ssl encrypted communications TRUE/FALSE */
+--- curl-7.10.3/lib/ssluse.c.ssl	2003-01-07 17:33:11.000000000 +0100
++++ curl-7.10.3/lib/ssluse.c	2004-04-29 16:50:16.710250136 +0200
+@@ -63,6 +63,9 @@
+ #undef HAVE_ENGINE_LOAD_FOUR_ARGS
+ #endif
+ 
++#ifdef WITHOUT_ENGINE
++#undef HAVE_OPENSSL_ENGINE_H
++#endif
+ 
+ #ifndef HAVE_USERDATA_IN_PWD_CALLBACK
+ static char global_passwd[64];
+@@ -744,9 +747,11 @@
+   case CURL_SSLVERSION_TLSv1:
+     req_method = TLSv1_client_method();
+     break;
++#ifndef WITHOUT_SSLv2
+   case CURL_SSLVERSION_SSLv2:
+     req_method = SSLv2_client_method();
+     break;
++#endif
+   case CURL_SSLVERSION_SSLv3:
+     req_method = SSLv3_client_method();
+     break;

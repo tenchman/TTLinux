@@ -1,0 +1,125 @@
+diff -up dietlibc-0.30/include/sys/socket.h.socktypes dietlibc-0.30/include/sys/socket.h
+--- dietlibc-0.30/include/sys/socket.h.socktypes	2009-03-10 09:45:49.000000000 +0100
++++ dietlibc-0.30/include/sys/socket.h	2009-03-10 09:46:58.000000000 +0100
+@@ -379,12 +379,12 @@ int socket(int domain, int type, int pro
+ int accept(int s, struct sockaddr *addr, socklen_t *addrlen) __THROW;
+ int connect(int sockfd, const struct sockaddr *serv_addr, socklen_t addrlen) __THROW;
+ int bind(int sockfd, const struct sockaddr *my_addr, socklen_t addrlen) __THROW;
+-int recv(int s, void *buf, size_t len, int flags) __THROW;
+-int recvfrom(int s, void *buf, size_t len, int flags, struct sockaddr *from, socklen_t *fromlen) __THROW;
+-int recvmsg(int s, struct msghdr *msg, int flags) __THROW;
+-int send(int s, const void *msg, size_t len, int flags) __THROW;
+-int sendto(int s, const void *msg, size_t len, int flags, const struct sockaddr *to, socklen_t tolen) __THROW;
+-int sendmsg(int s, const struct msghdr *msg, int flags) __THROW;
++ssize_t recv(int s, void *buf, size_t len, int flags) __THROW;
++ssize_t recvfrom(int s, void *buf, size_t len, int flags, struct sockaddr *from, socklen_t *fromlen) __THROW;
++ssize_t recvmsg(int s, struct msghdr *msg, int flags) __THROW;
++ssize_t send(int s, const void *msg, size_t len, int flags) __THROW;
++ssize_t sendto(int s, const void *msg, size_t len, int flags, const struct sockaddr *to, socklen_t tolen) __THROW;
++ssize_t sendmsg(int s, const struct msghdr *msg, int flags) __THROW;
+ 
+ int getpeername(int s, struct sockaddr *name, socklen_t *namelen) __THROW;
+ int getsockname(int  s , struct sockaddr * name , socklen_t * namelen) __THROW;
+diff -up dietlibc-0.30/lib/recvfrom.c.socktypes dietlibc-0.30/lib/recvfrom.c
+--- dietlibc-0.30/lib/recvfrom.c.socktypes	2009-03-12 16:14:51.000000000 +0100
++++ dietlibc-0.30/lib/recvfrom.c	2009-03-12 16:15:19.000000000 +0100
+@@ -3,11 +3,11 @@
+ 
+ extern int socketcall(int callno,long* args);
+ 
+-int __libc_recvfrom(int a, const void * b, size_t c, int flags, void *to, void *tolen);
+-int __libc_recvfrom(int a, const void * b, size_t c, int flags, void *to, void *tolen) {
++ssize_t __libc_recvfrom(int a, const void * b, size_t c, int flags, void *to, void *tolen);
++ssize_t __libc_recvfrom(int a, const void * b, size_t c, int flags, void *to, void *tolen) {
+   long args[] = { a, (long) b, c, flags, (long) to, (long) tolen };
+   return socketcall(SYS_RECVFROM, args);
+ }
+ 
+-int recvfrom(int a, const void * b, size_t c, int flags, void *to, void *tolen)
++ssize_t recvfrom(int a, const void * b, size_t c, int flags, void *to, void *tolen)
+  __attribute__ ((weak,alias("__libc_recvfrom"))) ;
+diff -up dietlibc-0.30/lib/recvmsg.c.socktypes dietlibc-0.30/lib/recvmsg.c
+--- dietlibc-0.30/lib/recvmsg.c.socktypes	2005-05-20 16:14:56.000000000 +0200
++++ dietlibc-0.30/lib/recvmsg.c	2009-03-12 16:15:28.000000000 +0100
+@@ -3,11 +3,11 @@
+ 
+ extern int socketcall(int callno,long* args);
+ 
+-int __libc_recvmsg(int a, struct msghdr* msg, int flags);
+-int __libc_recvmsg(int a, struct msghdr* msg, int flags) {
++ssize_t __libc_recvmsg(int a, struct msghdr* msg, int flags);
++ssize_t __libc_recvmsg(int a, struct msghdr* msg, int flags) {
+   long args[] = { a, (long) msg, flags };
+   return socketcall(SYS_RECVMSG, args);
+ }
+ 
+-int recvmsg(int a, struct msghdr *msg, int flags)
++ssize_t recvmsg(int a, struct msghdr *msg, int flags)
+  __attribute__ ((weak,alias("__libc_recvmsg"))) ;
+diff -up dietlibc-0.30/lib/sendmsg.c.socktypes dietlibc-0.30/lib/sendmsg.c
+--- dietlibc-0.30/lib/sendmsg.c.socktypes	2009-03-12 16:16:15.000000000 +0100
++++ dietlibc-0.30/lib/sendmsg.c	2009-03-12 16:16:29.000000000 +0100
+@@ -3,11 +3,11 @@
+ 
+ extern int socketcall(int callno,long* args);
+ 
+-int __libc_sendmsg(int a, const struct msghdr* msg, int flags);
+-int __libc_sendmsg(int a, const struct msghdr* msg, int flags) {
++ssize_t __libc_sendmsg(int a, const struct msghdr* msg, int flags);
++ssize_t __libc_sendmsg(int a, const struct msghdr* msg, int flags) {
+   long args[] = { a, (long) msg, flags };
+   return socketcall(SYS_SENDMSG, args);
+ }
+ 
+-int sendmsg(int a, const struct msghdr *msg, int flags)
++ssize_t sendmsg(int a, const struct msghdr *msg, int flags)
+  __attribute__ ((weak,alias("__libc_sendmsg"))) ;
+diff -up dietlibc-0.30/lib/sendto.c.socktypes dietlibc-0.30/lib/sendto.c
+--- dietlibc-0.30/lib/sendto.c.socktypes	2009-03-12 16:15:44.000000000 +0100
++++ dietlibc-0.30/lib/sendto.c	2009-03-12 16:16:01.000000000 +0100
+@@ -3,11 +3,11 @@
+ 
+ extern int socketcall(int callno,long* args);
+ 
+-int __libc_sendto(int a, const void * b, size_t c, int flags, void *to, int tolen);
+-int __libc_sendto(int a, const void * b, size_t c, int flags, void *to, int tolen) {
++ssize_t __libc_sendto(int a, const void * b, size_t c, int flags, void *to, int tolen);
++ssize_t __libc_sendto(int a, const void * b, size_t c, int flags, void *to, int tolen) {
+   long args[] = { a, (long) b, c, flags, (long) to, tolen };
+   return socketcall(SYS_SENDTO, args);
+ }
+ 
+-int sendto(int a, const void * b, size_t c, int flags, const struct sockaddr* to, socklen_t tolen)
++ssize_t sendto(int a, const void * b, size_t c, int flags, const struct sockaddr* to, socklen_t tolen)
+   __attribute__ ((weak, alias("__libc_sendto")));
+diff -up dietlibc-0.30/include/sys/socket.h.dingens dietlibc-0.30/include/sys/socket.h
+--- dietlibc-0.30/include/sys/socket.h.dingens	2010-08-06 13:20:27.438186914 +0200
++++ dietlibc-0.30/include/sys/socket.h	2010-08-06 13:23:44.144061610 +0200
+@@ -178,6 +178,12 @@ __BEGIN_DECLS
+ 					/* level.  For writing rarp and	*/
+ 					/* other similar things on the	*/
+ 					/* user level.			*/
++#ifndef __socklen_t_defined
++typedef uint32_t socklen_t;
++#define __socklen_t_defined
++#endif
++
++typedef uint16_t sa_family_t;
+ 
+ struct sockaddr {
+   sa_family_t sa_family;
+diff -up dietlibc-0.30/include/sys/types.h.dingens dietlibc-0.30/include/sys/types.h
+--- dietlibc-0.30/include/sys/types.h.dingens	2010-08-06 13:20:57.733062060 +0200
++++ dietlibc-0.30/include/sys/types.h	2010-08-06 13:22:57.966187100 +0200
+@@ -116,11 +116,6 @@ typedef int32_t timer_t;
+ 
+ typedef long int fpos_t;
+ 
+-#define __socklen_t_defined
+-typedef uint32_t socklen_t;
+-typedef uint16_t sa_family_t;
+-
+-
+ #ifdef _BSD_SOURCE
+ /* die, BSD, die! */
+ typedef char* caddr_t __attribute_dontuse__;

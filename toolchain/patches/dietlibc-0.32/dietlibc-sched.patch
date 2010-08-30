@@ -1,0 +1,21 @@
+--- dietlibc-0.32/include/sched.h.sched	2008-03-11 20:34:17.000000000 +0100
++++ dietlibc-0.32/include/sched.h	2009-06-10 21:32:10.000000000 +0200
+@@ -69,6 +69,18 @@ int sched_rr_get_interval(pid_t pid, str
+ int clone(void*(*fn)(void*),void*stack,int flags,void*arg);
+ 
+ int unshare(int flags);
++
++#define __CPU_SETSIZE  1024
++#define __NCPUBITS     (8 * sizeof (__cpu_mask))
++typedef unsigned long int __cpu_mask;
++typedef struct {
++  __cpu_mask __bits[__CPU_SETSIZE / __NCPUBITS];
++} cpu_set_t;
++
++int sched_setaffinity(pid_t pid, unsigned int cpusetsize, cpu_set_t *mask);
++int sched_getaffinity(pid_t pid, unsigned int cpusetsize, cpu_set_t *mask);
++
++#endif
+ #endif
+ 
+ __END_DECLS

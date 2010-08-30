@@ -1,0 +1,52 @@
+--- mawk-1.3.3/Makefile.in.misc	1996-02-01 06:05:40.000000000 +0100
++++ mawk-1.3.3/Makefile.in	2004-08-18 13:38:37.607818272 +0200
+@@ -12,9 +12,9 @@
+ YACC = @YACC@ 
+ 
+ # where to put mawk
+-BINDIR = @BINDIR@
++BINDIR = $(bindir)
+ # where to put the man pages
+-MANDIR = @MANDIR@
++MANDIR = $(mandir)
+ MANEXT = @MANEXT@
+ #######################################
+ 
+@@ -74,10 +74,12 @@
+ 
+ MAWKMAN = $(MANDIR)/mawk.$(MANEXT)
+ install :  mawk
+-	cp mawk $(BINDIR)
+-	chmod  0755  $(BINDIR)/mawk
+-	cp  man/mawk.1  $(MAWKMAN)
+-	chmod  0644  $(MAWKMAN)
++	mkdir -p $(bindir)
++	cp mawk $(bindir)
++	chmod  0755  $(bindir)/mawk
++	mkdir -p $(mandir)
++	cp  man/mawk.1  $(mandir)
++	chmod  0644  $(mandir)/mawk.1
+ 
+ clean :
+ 	rm -f *.o rexp/*.o rexp/.done test/mawk core test/core mawk 
+--- mawk-1.3.3/mawk.h.misc	2004-08-18 13:42:45.207177448 +0200
++++ mawk-1.3.3/mawk.h	2004-08-18 13:43:17.585255232 +0200
+@@ -52,6 +52,7 @@
+ 
+ #include  "nstd.h"
+ #include <stdio.h>
++#include <unistd.h>
+ #include "types.h"
+ 
+ #ifdef   DEBUG
+@@ -152,10 +153,6 @@
+ char *PROTO( re_pos_match, (char *, PTR, unsigned *) ) ;
+ int   PROTO( binmode, (void)) ;
+ 
+-
+-int   PROTO( close, (int) ) ;
+-int   PROTO( read, (int , PTR, unsigned) ) ;
+-
+ void PROTO ( parse, (void) ) ;
+ int  PROTO ( yylex, (void) ) ;
+ int  PROTO( yyparse, (void) ) ;

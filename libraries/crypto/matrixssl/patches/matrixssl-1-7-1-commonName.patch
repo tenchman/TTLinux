@@ -1,0 +1,117 @@
+--- matrixssl-1-7-1c-open/matrixCommon.h.commonName	2005-11-08 22:55:26.000000000 +0100
++++ matrixssl-1-7-1c-open/matrixCommon.h	2005-11-08 22:55:26.000000000 +0100
+@@ -153,8 +159,9 @@
+ 	char	*locality;
+ 	char	*organization;
+ 	char	*orgUnit;
+-	char	*commonName;
++	char    **commonNameList;
+ } sslDistinguishedName_t;
++#define commonName commonNameList[0]
+ 
+ typedef struct {
+ 	char	*dns;
+--- matrixssl-1-7-1c-open/src/pki/x509.c.commonName	2005-11-08 22:55:26.000000000 +0100
++++ matrixssl-1-7-1c-open/src/pki/x509.c	2005-11-08 22:55:26.000000000 +0100
+@@ -827,8 +827,11 @@
+ 		if (curr->extensions.sk.id)		psFree(curr->extensions.sk.id);
+ 		if (curr->extensions.ak.keyId)	psFree(curr->extensions.ak.keyId);
+ 		if (curr->extensions.ak.serialNum) psFree(curr->extensions.ak.serialNum);
+-		if (curr->extensions.ak.attribs.commonName)
+-						psFree(curr->extensions.ak.attribs.commonName);
++		if (curr->extensions.ak.attribs.commonNameList) {
++			int x=0;
++			while (curr->extensions.ak.attribs.commonNameList[x])
++						psFree(curr->extensions.ak.attribs.commonNameList[x++]);
++		}
+ 		if (curr->extensions.ak.attribs.country)
+ 						psFree(curr->extensions.ak.attribs.country);
+ 		if (curr->extensions.ak.attribs.state)
+@@ -1447,14 +1450,14 @@
+ 	memset(cert, 0x0, sizeof(sslCertInfo_t));
+ 	while (subjectCert) {
+ 		
+-		current->issuer.commonName = subjectCert->issuer.commonName;
++		current->issuer.commonNameList = subjectCert->issuer.commonNameList;
+ 		current->issuer.country = subjectCert->issuer.country;
+ 		current->issuer.locality = subjectCert->issuer.locality;
+ 		current->issuer.organization = subjectCert->issuer.organization;
+ 		current->issuer.orgUnit = subjectCert->issuer.orgUnit;
+ 		current->issuer.state = subjectCert->issuer.state;
+ 
+-		current->subject.commonName = subjectCert->subject.commonName;
++		current->subject.commonNameList = subjectCert->subject.commonNameList;
+ 		current->subject.country = subjectCert->subject.country;
+ 		current->subject.locality = subjectCert->subject.locality;
+ 		current->subject.organization = subjectCert->subject.organization;
+--- matrixssl-1-7-1c-open/src/pki/rsaPki.c.commonName	2005-11-08 22:55:26.000000000 +0100
++++ matrixssl-1-7-1c-open/src/pki/rsaPki.c	2005-11-08 22:56:32.000000000 +0100
+@@ -432,8 +432,9 @@
+ 	sslSha1Context_t	hash;
+ 	unsigned char		*p = *pp;
+ 	unsigned char		*dnEnd, *dnStart;
+-	int32				llen, setlen, arcLen, id, stringType;
++	int32				llen, setlen, arcLen, id, stringType, count;
+ 	char				*stringOut;
++	char				**listOut;
+ 
+ 	dnStart = p;
+ 	if (getSequence(&p, len, &llen) < 0) {
+@@ -441,6 +442,13 @@
+ 	}
+ 	dnEnd = p + llen;
+ 
++	if (attribs->commonNameList) {
++		count = 0;
++		while (attribs->commonNameList[count])
++			psFree(attribs->commonNameList[count++]);
++	}
++	count = 0;
++
+ 	matrixSha1Init(&hash);
+ 	while (p < dnEnd) {
+ 		if (getSet(&p, (int32)(dnEnd - p), &setlen) < 0) {
+@@ -555,10 +563,15 @@
+ 				attribs->orgUnit = stringOut;
+ 				break;
+ 			case ATTRIB_COMMON_NAME:
+-				if (attribs->commonName) {
+-					psFree(attribs->commonName);
+-				}
+-				attribs->commonName = stringOut;
++				listOut = psRealloc(attribs->commonNameList,
++					(count + 2) * sizeof(char *));
++				
++				if (listOut == NULL)
++					return -8; /* SSL_MEM_ERROR */
++
++				attribs->commonNameList = listOut;
++				attribs->commonNameList[count] = stringOut;
++				attribs->commonNameList[++count] = NULL;
+ 				break;
+  			case ATTRIB_SERIAL_NUMBER:
+  				psFree(stringOut);
+@@ -628,7 +641,11 @@
+ 	if (dn->locality)		psFree(dn->locality);
+ 	if (dn->organization)	psFree(dn->organization);
+ 	if (dn->orgUnit)		psFree(dn->orgUnit);
+-	if (dn->commonName)		psFree(dn->commonName);
++	if (dn->commonNameList) {
++		int32 count = 0;
++		while (dn->commonNameList[count])
++			psFree(dn->commonNameList[count++]);
++	}
+ }
+ 
+ 
+--- matrixssl-1-7-1c-open/src/pki/pkiInternal.h.commonName	2005-11-08 22:55:26.000000000 +0100
++++ matrixssl-1-7-1c-open/src/pki/pkiInternal.h	2005-11-08 22:55:26.000000000 +0100
+@@ -124,7 +124,7 @@
+ 	char	*locality;
+ 	char	*organization;
+ 	char	*orgUnit;
+-	char	*commonName;
++	char	**commonNameList;
+ 	char	hash[SSL_SHA1_HASH_SIZE];
+ } DNattributes_t;
+ 

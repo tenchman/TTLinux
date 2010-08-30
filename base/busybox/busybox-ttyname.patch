@@ -1,0 +1,21 @@
+diff -up ./libbb/xfuncs.c.ttyname ./libbb/xfuncs.c
+--- ./libbb/xfuncs.c.ttyname	2009-09-26 15:14:57.000000000 +0200
++++ ./libbb/xfuncs.c	2009-12-02 16:41:41.000000000 +0100
+@@ -271,7 +271,17 @@ off_t FAST_FUNC fdlength(int fd)
+ char* FAST_FUNC xmalloc_ttyname(int fd)
+ {
+ 	char *buf = xzalloc(128);
++#ifdef __dietlibc__
++	int r = 0;
++	char *tmp = buf;
++	//bb_perror_msg("ttyname in the house");
++	memset(buf, 0, 128);
++	buf = ttyname(fd);
++	if (buf == NULL)
++	        free(tmp);
++#else
+ 	int r = ttyname_r(fd, buf, 127);
++#endif
+ 	if (r) {
+ 		free(buf);
+ 		buf = NULL;

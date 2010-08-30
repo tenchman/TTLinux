@@ -1,0 +1,310 @@
+--- /dev/null	2006-03-01 17:54:10.992613000 +0100
++++ coreutils-5.94/m4/xattr.m4	2006-03-09 21:34:28.000000000 +0100
+@@ -0,0 +1,38 @@
++# xattr.m4 - check for Extended Attributes (Linux)
++
++# Copyright (C) 2003 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2, or (at your option)
++# any later version.
++
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
++
++# Written by Andreas Gruenbacher.
++
++AC_DEFUN([AC_FUNC_XATTR],
++[
++  AC_CHECK_HEADERS(attr/error_context.h attr/libattr.h)
++  if test "$ac_cv_header_attr_libattr_h" = yes \
++     && test "$ac_cv_header_attr_error_context_h" = yes; then
++    use_xattr=1
++  else
++    use_xattr=0
++  fi
++  AC_DEFINE_UNQUOTED(USE_XATTR, $use_xattr,
++		     [Define if you want extended attribute support.])
++  xattr_saved_LIBS=$LIBS
++  AC_SEARCH_LIBS(attr_copy_file, attr,
++  		 [test "$ac_cv_search_attr_copy_file" = "none required" || LIB_XATTR=$ac_cv_search_attr_copy_file])
++  AC_SUBST(LIB_XATTR)
++  AC_CHECK_FUNCS(attr_copy_file)
++  LIBS=$xattr_saved_LIBS
++])
+--- coreutils-5.94/doc/coreutils.texi.xattr	2006-03-09 21:34:28.000000000 +0100
++++ coreutils-5.94/doc/coreutils.texi	2006-03-09 21:34:28.000000000 +0100
+@@ -6350,6 +6350,18 @@
+ directory in a different order).
+ Equivalent to @option{-dpPR}.
+ 
++@itemx @w{@kbd{--attributes}=@var{regex}}
++@opindex --attributes
++Preserve extended attributes whose names match the specified regular
++expression.  The default behavior or @command{cp} if no
++@option{--attributes} option is given is to preserve all extended
++attributes except file permissions.  If @var{regex} is ``@samp{-}'', no
++extended attributes are preserved.
++
++This option does not affect the preservation of file permissions.
++File permission preservation is controlled by the @option{-p} or
++@option{--preserve=mode} options.
++
+ @item -b
+ @itemx @w{@kbd{--backup}[=@var{method}]}
+ @opindex -b
+--- coreutils-5.94/src/Makefile.am.xattr	2005-07-18 09:52:18.000000000 +0200
++++ coreutils-5.94/src/Makefile.am	2006-03-09 21:34:28.000000000 +0100
+@@ -92,6 +92,10 @@
+ 
+ su_LDADD = $(LDADD) $(LIB_CRYPT)
+ 
++cp_LDADD += $(LIB_XATTR)
++mv_LDADD += $(LIB_XATTR)
++ginstall_LDADD += $(LIB_XATTR)
++
+ $(PROGRAMS): ../lib/libcoreutils.a
+ 
+ SUFFIXES = .sh
+--- coreutils-5.94/src/copy.c.xattr	2006-03-09 21:34:28.000000000 +0100
++++ coreutils-5.94/src/copy.c	2006-03-09 21:34:28.000000000 +0100
+@@ -52,6 +52,13 @@
+ #include "yesno.h"
+ #include "acl.h"
+ 
++#if USE_XATTR
++# include "regex.h"
++# include <stdarg.h>
++# include <attr/error_context.h>
++# include <attr/libattr.h>
++#endif
++
+ #ifndef HAVE_FCHMOD
+ # define HAVE_FCHMOD false
+ #endif
+@@ -119,6 +126,104 @@
+   return false;
+ }
+ 
++#if USE_XATTR
++static void
++copy_attr_error (struct error_context *ctx, const char *fmt, ...)
++{
++  int err = errno;
++  va_list ap;
++  int len;
++  char *buffer;
++
++  /* There is no error function that takes a va_list argument,
++     so we print the message in a buffer first.  */
++
++  va_start (ap, fmt);
++  len = vsnprintf (NULL, 0, fmt, ap);
++  if (len > 0)
++    {
++      buffer = xmalloc (len + 1);
++      vsnprintf (buffer, len + 1, fmt, ap);
++      error (0, err, "%s", buffer);
++      free (buffer);
++    }
++  va_end (ap);
++}
++
++static const char *
++copy_attr_quote (struct error_context *ctx, const char *str)
++{
++  return xstrdup (quote (str));
++}
++
++static void
++copy_attr_free (struct error_context *ctx, const char *str)
++{
++  free ((void *) str);
++}
++
++struct copy_attr_context
++  {
++    struct error_context ctx;
++    const char *re_pattern;
++    struct re_pattern_buffer re_compiled;
++  } copy_attr_ctx = {
++    { copy_attr_error,
++      copy_attr_quote,
++      copy_attr_free }
++  };
++
++static int
++copy_attr_filter (const char *name, struct error_context *ctx)
++{
++  struct copy_attr_context *copy_ctx = (struct copy_attr_context *) ctx;
++
++  return (attr_copy_check_permissions (name, ctx)
++	  && copy_ctx->re_pattern != NULL
++	  && re_search (&copy_ctx->re_compiled, name, strlen (name), 0,
++			strlen (name), NULL) >= 0);
++}
++#endif  /* USE_XATTR */
++
++static bool
++copy_extended_attributes (const char *src_path, const char *dst_path,
++			  const struct cp_options *x)
++{
++#if USE_XATTR
++  if (x->attr_pattern == NULL)
++    return true;
++
++  if (copy_attr_ctx.re_pattern != x->attr_pattern)
++    {
++      struct re_pattern_buffer *c = &copy_attr_ctx.re_compiled;
++      size_t len = strlen (x->attr_pattern);
++      const char *err;
++
++      free (c->fastmap);
++      free (c->buffer);
++
++      copy_attr_ctx.re_pattern = x->attr_pattern;
++      c->allocated = 2 * len;
++      c->buffer = xmalloc (c->allocated);
++      c->fastmap = xmalloc (256);
++      c->translate = 0;
++      err = re_compile_pattern (x->attr_pattern, len, c);
++      if (err)
++	{
++	  free (c->fastmap);
++	  free (c->buffer);
++	  copy_attr_ctx.re_pattern = NULL;
++	  error (EXIT_FAILURE, 0, _("%s: invalid regular expression: %s"),
++	  	 x->attr_pattern, err);
++	}
++    }
++  return attr_copy_file (src_path, dst_path,
++			 copy_attr_filter, &copy_attr_ctx.ctx) == 0;
++#else  /* USE_XATTR */
++  return true;
++#endif  /* USE_XATTR */
++}
++
+ /* Read the contents of the directory SRC_NAME_IN, and recursively
+    copy the contents to DST_NAME_IN.  NEW_DST is true if
+    DST_NAME_IN is a directory that was created previously in the
+@@ -1669,6 +1774,9 @@
+   }
+ #endif
+ 
++  if (! copy_extended_attributes (src_name, dst_name, x))
++    delayed_ok = false;
++
+   if (x->preserve_mode || x->move_mode)
+     {
+       if (copy_acl (src_name, dst_name, src_mode) && x->require_preserve)
+--- coreutils-5.94/src/copy.h.xattr	2006-03-09 21:34:28.000000000 +0100
++++ coreutils-5.94/src/copy.h	2006-03-09 21:34:28.000000000 +0100
+@@ -128,6 +128,10 @@
+   bool preserve_mode;
+   bool preserve_timestamps;
+ 
++  /* Regular expression pattern that specifies which extended attributes to
++     copy.  NULL stands for copying no extended attributes.  */
++  const char *attr_pattern;
++
+   /* Enabled for mv, and for cp by the --preserve=links option.
+      If true, attempt to preserve in the destination files any
+      logical hard links between the source files.  If used with cp's
+--- coreutils-5.94/src/cp.c.xattr	2006-03-09 21:34:28.000000000 +0100
++++ coreutils-5.94/src/cp.c	2006-03-09 21:34:28.000000000 +0100
+@@ -74,7 +74,8 @@
+   REPLY_OPTION,
+   SPARSE_OPTION,
+   STRIP_TRAILING_SLASHES_OPTION,
+-  UNLINK_DEST_BEFORE_OPENING
++  UNLINK_DEST_BEFORE_OPENING,
++  PRESERVE_XATTRS_OPTION
+ };
+ 
+ /* Initial number of entries in each hash table entry's table of inodes.  */
+@@ -131,6 +132,7 @@
+   {"parents", no_argument, NULL, PARENTS_OPTION},
+   {"path", no_argument, NULL, PARENTS_OPTION},   /* Deprecated.  */
+   {"preserve", optional_argument, NULL, PRESERVE_ATTRIBUTES_OPTION},
++  {"attributes", required_argument, NULL, PRESERVE_XATTRS_OPTION},
+   {"recursive", no_argument, NULL, 'R'},
+   {"remove-destination", no_argument, NULL, UNLINK_DEST_BEFORE_OPENING},
+   {"reply", required_argument, NULL, REPLY_OPTION}, /* Deprecated 2005-07-03,
+@@ -221,6 +223,13 @@
+   -v, --verbose                explain what is being done\n\
+   -x, --one-file-system        stay on this file system\n\
+ "), stdout);
++      fputs(_("\n\
++      --attributes=regex       preserve extended attributes whose name\n\
++                               matches the specified regular expression\n\
++                               (defaults to preserving all extended\n\
++                                attributes except file permissions;\n\
++                                regex=`-' preserves no extended attributes).\n\
++"), stdout);
+       fputs (HELP_OPTION_DESCRIPTION, stdout);
+       fputs (VERSION_OPTION_DESCRIPTION, stdout);
+       fputs (_("\
+@@ -751,6 +760,8 @@
+   x->verbose = false;
+   x->dest_info = NULL;
+   x->src_info = NULL;
++
++  x->attr_pattern = "";  /* all extended attributes */
+ }
+ 
+ /* Given a string, ARG, containing a comma-separated list of arguments
+@@ -938,6 +949,13 @@
+ 	  x.require_preserve = true;
+ 	  break;
+ 
++	case PRESERVE_XATTRS_OPTION:
++	  if (strcmp (optarg, "-") == 0)
++	    x.attr_pattern = NULL;
++	  else
++	    x.attr_pattern = optarg;
++	  break;
++
+ 	case PARENTS_OPTION:
+ 	  parents_option = true;
+ 	  break;
+--- coreutils-5.94/src/install.c.xattr	2006-03-09 21:34:28.000000000 +0100
++++ coreutils-5.94/src/install.c	2006-03-09 21:34:28.000000000 +0100
+@@ -157,6 +157,8 @@
+   x->verbose = false;
+   x->dest_info = NULL;
+   x->src_info = NULL;
++
++  x->attr_pattern = NULL;  /* no extended attributes */
+ }
+ 
+ /* FILE is the last operand of this command.  Return true if FILE is a
+--- coreutils-5.94/src/mv.c.xattr	2006-03-09 21:34:28.000000000 +0100
++++ coreutils-5.94/src/mv.c	2006-03-09 21:34:28.000000000 +0100
+@@ -139,6 +139,8 @@
+   x->verbose = false;
+   x->dest_info = NULL;
+   x->src_info = NULL;
++
++  x->attr_pattern = "";  /* all extended attributes */
+ }
+ 
+ /* FILE is the last operand of this command.  Return true if FILE is a
+--- coreutils-5.94/configure.ac.xattr	2006-02-13 13:48:39.000000000 +0100
++++ coreutils-5.94/configure.ac	2006-03-09 21:34:28.000000000 +0100
+@@ -248,6 +248,9 @@
+ 
+ cu_LIB_CHECK
+ 
++# Extended attribute copying.
++AC_FUNC_XATTR
++
+ AM_GNU_GETTEXT([external], [need-ngettext])
+ AM_GNU_GETTEXT_VERSION(0.13.1)
+ 

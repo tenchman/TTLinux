@@ -1,0 +1,43 @@
+--- sysvinit-2.84/src/shutdown.c.autofsck	Wed Sep  5 06:46:30 2001
++++ sysvinit-2.84/src/shutdown.c	Thu Mar 14 14:50:44 2002
+@@ -293,6 +294,7 @@
+ {
+   char *args[8];
+   int argp = 0;
++  int do_halt = (down_level[0] == '0');
+ 
+   /* Warn for the last time (hehe) */
+   warn(0);
+@@ -300,6 +302,12 @@
+ 	hardsleep(1);
+ 	stopit();
+   }
++  openlog("shutdown",LOG_ODELAY, LOG_USER);
++  if (do_halt)
++  	syslog(LOG_NOTICE,"shutting down for system halt");
++  else
++	syslog(LOG_NOTICE,"shutting down for system reboot");
++  closelog();
+ 
+   /* See if we have to do it ourself. */
+   if (doself) fastdown();
+@@ -324,6 +332,9 @@
+   fprintf(stderr, "\rshutdown: cannot execute %s\r\n", INIT);
+   unlink(FASTBOOT);
+   unlink(FORCEFSCK);
++  openlog("shutdown",LOG_ODELAY, LOG_USER);
++  syslog(LOG_NOTICE,"shutdown failed");
++  closelog();
+   exit(1);
+ }
+ 
+--- sysvinit-2.84/src/shutdown.c.foo	Thu Mar 14 15:04:42 2002
++++ sysvinit-2.84/src/shutdown.c	Thu Mar 14 15:04:58 2002
+@@ -25,6 +25,7 @@
+  */
+ #include <sys/types.h>
+ #include <sys/stat.h>
++#include <syslog.h>
+ #include <sys/wait.h>
+ #include <time.h>
+ #include <string.h>

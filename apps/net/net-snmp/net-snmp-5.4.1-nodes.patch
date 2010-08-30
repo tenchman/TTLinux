@@ -1,0 +1,16 @@
+--- net-snmp-5.4.1/snmplib/scapi.c.nodes	2006-09-15 14:47:01.000000000 +0200
++++ net-snmp-5.4.1/snmplib/scapi.c	2007-09-17 21:53:44.000000000 +0200
+@@ -70,12 +70,12 @@
+ #include <openssl/hmac.h>
+ #include <openssl/evp.h>
+ #include <openssl/rand.h>
+-#include <openssl/des.h>
+ #ifdef HAVE_AES
+ #include <openssl/aes.h>
+ #endif
+ 
+ #ifndef NETSNMP_DISABLE_DES
++#include <openssl/des.h>
+ #ifdef STRUCT_DES_KS_STRUCT_HAS_WEAK_KEY
+ /* these are older names for newer structures that exist in openssl .9.7 */
+ #define DES_key_schedule    des_key_schedule 

@@ -1,0 +1,11 @@
+--- libedit-0.3/makelist.awkpath	Wed Apr 27 15:14:49 2005
++++ libedit-0.3/makelist	Wed Apr 27 15:15:17 2005
+@@ -39,7 +39,7 @@
+ 
+ # makelist.sh: Automatically generate header files...
+ 
+-AWK=/usr/bin/awk
++AWK=awk
+ USAGE="Usage: $0 -h|-e|-fc|-fh|-bc|-bh|-m <filenames>"
+ 
+ if [ "x$1" = "x" ]

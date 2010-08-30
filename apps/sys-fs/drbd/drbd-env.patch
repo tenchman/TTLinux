@@ -1,0 +1,28 @@
+diff -up drbd-8.2.5/drbd/drbd_main.c.env drbd-8.2.5/drbd/drbd_main.c
+--- drbd-8.2.5/drbd/drbd_main.c.env	2008-02-13 11:20:10.000000000 +0100
++++ drbd-8.2.5/drbd/drbd_main.c	2008-06-12 11:08:37.000000000 +0200
+@@ -122,7 +122,7 @@ module_param(trace_devs, int, 0644);
+ 
+ /* Module parameter for setting the user mode helper program
+  * to run. Default is /sbin/drbdadm */
+-char usermode_helper[80] = "/sbin/drbdadm";
++char usermode_helper[80] = "/opt/diet/sbin/drbdadm";
+ 
+ module_param_string(usermode_helper, usermode_helper,
+ 	sizeof(usermode_helper), 0644);
+diff -up drbd-8.2.5/drbd.spec.in.env drbd-8.2.5/drbd.spec.in
+--- drbd-8.2.5/drbd.spec.in.env	2008-06-12 11:11:10.000000000 +0200
++++ drbd-8.2.5/drbd.spec.in	2008-06-12 11:12:06.000000000 +0200
+@@ -117,9 +117,9 @@ ___
+ 
+ %files -f %{_builddir}/%{name}-%{version}/file.list
+ %defattr(755,root,root)
+-/sbin/drbdsetup
+-/sbin/drbdadm
+-/sbin/drbdmeta
++/opt/diet/sbin/drbdsetup
++/opt/diet/sbin/drbdadm
++/opt/diet/sbin/drbdmeta
+ /usr/lib/drbd/outdate-peer.sh
+ /etc/ha.d/resource.d/drbddisk
+ /etc/xen/scripts/block-drbd

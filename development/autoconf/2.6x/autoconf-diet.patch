@@ -1,0 +1,77 @@
+--- autoconf-2.63/lib/autoconf/libs.m4.diet	2008-08-22 14:05:31.000000000 +0200
++++ autoconf-2.63/lib/autoconf/libs.m4	2009-06-05 23:15:10.000000000 +0200
+@@ -213,11 +213,11 @@ _ACEOF
+     # bogus both because they are the default anyway, and because
+     # using them would break gcc on systems where it needs fixed includes.
+     case $ac_im_incroot in
+-	/usr/include) ac_x_includes= ;;
++	/opt/diet/include) ac_x_includes= ;;
+ 	*) test -f "$ac_im_incroot/X11/Xos.h" && ac_x_includes=$ac_im_incroot;;
+     esac
+     case $ac_im_usrlibdir in
+-	/usr/lib | /usr/lib64 | /lib | /lib64) ;;
++	/opt/diet/lib) ;
+ 	*) test -d "$ac_im_usrlibdir" && ac_x_libraries=$ac_im_usrlibdir ;;
+     esac
+   fi
+@@ -235,39 +235,27 @@ m4_define([_AC_PATH_X_DIRECT],
+ [# Standard set of common directories for X headers.
+ # Check X11 before X11Rn because it is often a symlink to the current release.
+ ac_x_header_dirs='
+-/usr/X11/include
+-/usr/X11R6/include
+-/usr/X11R5/include
+-/usr/X11R4/include
+-
+-/usr/include/X11
+-/usr/include/X11R6
+-/usr/include/X11R5
+-/usr/include/X11R4
+-
+-/usr/local/X11/include
+-/usr/local/X11R6/include
+-/usr/local/X11R5/include
+-/usr/local/X11R4/include
+-
+-/usr/local/include/X11
+-/usr/local/include/X11R6
+-/usr/local/include/X11R5
+-/usr/local/include/X11R4
+-
+-/usr/X386/include
+-/usr/x386/include
+-/usr/XFree86/include/X11
+-
+-/usr/include
+-/usr/local/include
+-/usr/unsupported/include
+-/usr/athena/include
+-/usr/local/x11r5/include
+-/usr/lpp/Xamples/include
+-
+-/usr/openwin/include
+-/usr/openwin/share/include'
++/opt/diet/X11/include
++/opt/diet/X11R6/include
++/opt/diet/X11R5/include
++/opt/diet/X11R4/include
++
++/opt/diet/include/X11
++/opt/diet/include/X11R6
++
++/opt/diet/local/X11/include
++/opt/diet/local/X11R6/include
++
++/opt/diet/local/include/X11
++/opt/diet/local/include/X11R6
++
++/opt/diet/X386/include
++/opt/diet/x386/include
++/opt/diet/XFree86/include/X11
++
++/opt/diet/include
++/opt/diet/local/include
++/opt/diet/unsupported/include
+ 
+ if test "$ac_x_includes" = no; then
+   # Guess where to find include files, by looking for Xlib.h.

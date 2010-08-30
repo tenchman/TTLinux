@@ -1,0 +1,86 @@
+--- qmail-1.03/qmail-smtpd.c.smtpd_size	2004-03-23 20:35:20.000000000 +0100
++++ qmail-1.03/qmail-smtpd.c	2004-03-23 20:38:57.000000000 +0100
+@@ -113,6 +113,7 @@
+ void err_nogwcert() { out("553 no valid cert for gatewaying (#5.7.1)\r\n"); }
+ #endif
+ void err_unimpl() { out("502 unimplemented (#5.5.1)\r\n"); }
++void err_size() { out("552 sorry, that message size exceeds my databytes limit (#5.3.4)\r\n"); }
+ void err_syntax() { out("555 syntax error (#5.5.4)\r\n"); }
+ void err_wantmail() { out("503 MAIL first (#5.5.1)\r\n"); }
+ void err_wantrcpt() { out("503 RCPT first (#5.5.1)\r\n"); }
+@@ -295,6 +296,45 @@
+   return 1;
+ }
+ 
++int sizelimit(arg) /* modified SIZELIMIT function by Erwin Hoffmann (tx Uwe Ohse) */
++char *arg;   
++{
++  int i;
++  long r;
++  char terminator;
++  unsigned long sizebytes = 0;
++
++  terminator = '>';
++  i = str_chr(arg,'<');
++  if (arg[i])
++    arg += i + 1;
++  else {
++    terminator = ' ';
++    arg += str_chr(arg,':');
++    if (*arg == ':') ++arg;
++    while (*arg == ' ') ++arg;
++  }
++
++  arg += str_chr(arg,terminator);
++  if (*arg && terminator == '>' ) ++arg; /* end of adddress */
++
++  while (*++arg) {
++    i = str_chr(arg,'=');
++    arg[i] = 0;
++    if (case_equals(arg,"SIZE")) {
++      arg += i;
++      while (*++arg && *arg > 47 && *arg < 58) {
++        sizebytes *= 10;
++        sizebytes += *arg - 48; }
++      r = databytes - sizebytes;
++      if (r < 0) return 0;
++    }
++    else
++      ++arg;
++  }
++  return 1;
++}
++
+ int bmfcheck()
+ {
+   int j;
+@@ -327,6 +367,13 @@
+   smtp_greet("250 "); out("\r\n");
+   seenmail = 0; dohelo(arg);
+ }
++
++char size_buf[FMT_ULONG];
++void smtp_size()
++{
++  size_buf[fmt_ulong(size_buf,(unsigned long) databytes)] = 0;
++  out("250 SIZE "); out(size_buf); out("\r\n");
++}
+ void smtp_ehlo(arg) char *arg;
+ {
+   smtp_greet("250-");
+@@ -342,6 +389,7 @@
+       "\r\n250-AUTH=LOGIN PLAIN");
+ #endif
+   out("\r\n250-PIPELINING\r\n250 8BITMIME\r\n");
++  smtp_size();
+   seenmail = 0; dohelo(arg);
+ }
+ void smtp_rset()
+@@ -352,6 +400,7 @@
+ void smtp_mail(arg) char *arg;
+ {
+   if (!addrparse(arg)) { err_syntax(); return; }
++  if (databytes && !sizelimit(arg)) { err_size(); return; }
+   flagbarf = bmfcheck();
+   seenmail = 1;
+   if (!stralloc_copys(&rcptto,"")) die_nomem();

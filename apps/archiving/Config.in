@@ -1,0 +1,7 @@
+# vim set syntax=sh
+
+menu "Archiving"
+source "apps/archiving/bzip2"
+source "apps/archiving/lzma"
+source "apps/archiving/tar"
+endmenu

@@ -1,0 +1,124 @@
+--- source/Makefile.in.sharedlibs	2008-02-19 19:54:54.000000000 +0100
++++ source/Makefile.in	2008-02-19 20:17:16.000000000 +0100
+@@ -507,8 +507,7 @@
+             nmbd/nmbd_subnetdb.o nmbd/nmbd_winsproxy.o nmbd/nmbd_winsserver.o \
+             nmbd/nmbd_workgroupdb.o nmbd/nmbd_synclists.o
+ 
+-NMBD_OBJ = $(NMBD_OBJ1) $(PARAM_OBJ) $(LIBSMB_OBJ) $(KRBCLIENT_OBJ) \
+-           $(PROFILE_OBJ) $(LIB_NONSMBD_OBJ) $(SECRETS_OBJ) $(POPT_LIB_OBJ)
++NMBD_OBJ = $(NMBD_OBJ1) $(PARAM_OBJ) $(PROFILE_OBJ) $(POPT_LIB_OBJ)
+ 
+ SWAT_OBJ1 = web/cgi.o web/diagnose.o web/startstop.o web/statuspage.o \
+            web/swat.o web/neg_lang.o
+@@ -623,12 +622,9 @@
+ 	   utils/net_util.o utils/net_rpc_sh_acct.o utils/net_rpc_audit.o \
+ 	   $(PASSWD_UTIL_OBJ) utils/net_dns.o utils/net_ads_gpo.o
+ 
+-NET_OBJ = $(NET_OBJ1) $(PARAM_OBJ) $(SECRETS_OBJ) $(LIBSMB_OBJ) \
+-	  $(RPC_PARSE_OBJ) $(PASSDB_OBJ) $(GROUPDB_OBJ) \
+-	  $(KRBCLIENT_OBJ) $(LIB_NONSMBD_OBJ) $(LIBADDNS_OBJ0) \
+-	  $(LIBMSRPC_OBJ) $(LIBMSRPC_GEN_OBJ) \
++NET_OBJ = $(NET_OBJ1) $(LIBADDNS_OBJ0) \
+ 	  $(LIBADS_OBJ) $(LIBADS_SERVER_OBJ) $(POPT_LIB_OBJ) \
+-	  $(SMBLDAP_OBJ) $(DCUTIL_OBJ) $(SERVER_MUTEX_OBJ) \
++	  $(DCUTIL_OBJ) $(SERVER_MUTEX_OBJ) \
+ 	  $(AFS_OBJ) $(AFS_SETTOKEN_OBJ) $(REGFIO_OBJ) $(READLINE_OBJ) \
+ 	  $(LIBGPO_OBJ) $(INIPARSER_OBJ) $(DISPLAY_SEC_OBJ)
+ 
+@@ -783,17 +779,15 @@
+ 		nsswitch/winbindd_ccache_access.o
+ 
+ WINBINDD_OBJ = \
+-		$(WINBINDD_OBJ1) $(PASSDB_OBJ) $(GROUPDB_OBJ) \
+-		$(PARAM_OBJ) $(LIB_NONSMBD_OBJ) \
+-		$(LIBSMB_OBJ) $(LIBMSRPC_OBJ) $(LIBMSRPC_GEN_OBJ) $(RPC_PARSE_OBJ) \
+-		$(PROFILE_OBJ) $(SLCACHE_OBJ) $(SMBLDAP_OBJ) \
+-		$(SECRETS_OBJ) $(LIBADS_OBJ) $(KRBCLIENT_OBJ) $(POPT_LIB_OBJ) \
++		$(WINBINDD_OBJ1) \
++		$(PROFILE_OBJ) $(SLCACHE_OBJ) \
++		$(LIBADS_OBJ) $(POPT_LIB_OBJ) \
+ 		$(DCUTIL_OBJ) $(IDMAP_OBJ) $(NSS_INFO_OBJ) \
+ 		$(AFS_OBJ) $(AFS_SETTOKEN_OBJ) \
+ 		$(LIBADS_SERVER_OBJ) $(SERVER_MUTEX_OBJ)
+ 
+-WBINFO_OBJ = nsswitch/wbinfo.o nsswitch/sambagroups.o $(LIBSAMBA_OBJ) $(PARAM_OBJ) $(LIB_NONSMBD_OBJ) \
+-		$(SECRETS_OBJ) $(POPT_LIB_OBJ) $(AFS_SETTOKEN_OBJ) $(RPC_PARSE_OBJ1) $(DOSERR_OBJ)
++WBINFO_OBJ = nsswitch/wbinfo.o nsswitch/sambagroups.o \
++		$(POPT_LIB_OBJ) $(AFS_SETTOKEN_OBJ)
+ 
+ WINBIND_NSS_OBJ = $(WBCOMMON_OBJ) $(LIBREPLACE_OBJ) $(SOCKET_WRAPPER_OBJ) @WINBIND_NSS_EXTRA_OBJS@
+ 
+@@ -818,11 +812,10 @@
+ 
+ NTLM_AUTH_OBJ1 = utils/ntlm_auth.o utils/ntlm_auth_diagnostics.o
+ 
+-NTLM_AUTH_OBJ = ${NTLM_AUTH_OBJ1} $(LIBSAMBA_OBJ) $(POPT_LIB_OBJ) \
++NTLM_AUTH_OBJ = ${NTLM_AUTH_OBJ1} $(POPT_LIB_OBJ) \
+ 		libsmb/asn1.o libsmb/spnego.o libsmb/clikrb5.o libads/kerberos.o \
+-		libads/kerberos_verify.o $(SECRETS_OBJ) $(SERVER_MUTEX_OBJ) \
+-		libads/authdata.o $(RPC_PARSE_OBJ1) $(PASSDB_OBJ) $(GROUPDB_OBJ) \
+-		$(SMBLDAP_OBJ) $(DOSERR_OBJ) rpc_parse/parse_net.o $(LIBNMB_OBJ) \
++		libads/kerberos_verify.o $(SERVER_MUTEX_OBJ) \
++		libads/authdata.o rpc_parse/parse_net.o \
+ 		$(LDB_OBJ) libsmb/errormap.o
+ 
+ ######################################################################
+@@ -967,9 +960,9 @@
+ 		$(KRB5LIBS) $(DYNEXP) $(PRINT_LIBS) $(AUTH_LIBS) \
+ 		$(ACL_LIBS) $(PASSDB_LIBS) $(LIBS) @POPTLIBS@ @SMBD_LIBS@
+ 
+-bin/nmbd@EXEEXT@: proto_exists $(NMBD_OBJ) @BUILD_POPT@ bin/.dummy
++bin/nmbd@EXEEXT@: proto_exists $(NMBD_OBJ) $(LIBSMBCLIENT) @BUILD_POPT@ bin/.dummy
+ 	@echo Linking $@
+-	@$(CC) $(FLAGS) -o $@ $(NMBD_OBJ) $(LDFLAGS) $(DYNEXP) $(LIBS) @POPTLIBS@ $(KRB5LIBS) $(LDAP_LIBS)
++	@$(CC) $(FLAGS) -o $@ $(NMBD_OBJ) $(LDFLAGS) $(DYNEXP) $(LIBS) @POPTLIBS@ $(KRB5LIBS) $(LDAP_LIBS) bin/libsmbclient.a
+ 
+ bin/swat@EXEEXT@: proto_exists $(SWAT_OBJ) @BUILD_POPT@ bin/.dummy
+ 	@echo Linking $@
+@@ -990,9 +983,9 @@
+ 	@echo Linking $@
+ 	@$(CC) $(FLAGS) -o $@ $(TOOL_OBJ) $(LDFLAGS) $(DYNEXP) $(TERMLDFLAGS) $(TERMLIBS) $(LIBS) @POPTLIBS@ $(KRB5LIBS) $(LDAP_LIBS) -Lbin -lsmbclient
+ 
+-bin/net@EXEEXT@: proto_exists $(NET_OBJ) @BUILD_POPT@ @BUILD_INIPARSER@ bin/.dummy
++bin/net@EXEEXT@: proto_exists $(NET_OBJ) $(LIBSMBCLIENT) @BUILD_POPT@ @BUILD_INIPARSER@ bin/.dummy
+ 	@echo Linking $@
+-	@$(CC) $(FLAGS) -o $@ $(NET_OBJ) $(DYNEXP) $(LDFLAGS) $(LIBS) @POPTLIBS@ $(KRB5LIBS) $(UUID_LIBS) $(LDAP_LIBS) $(PASSDB_LIBS) $(TERMLDFLAGS) $(TERMLIBS) $(NSCD_LIBS) @INIPARSERLIBS@
++	@$(CC) $(FLAGS) -o $@ $(NET_OBJ) $(DYNEXP) $(LDFLAGS) $(LIBS) @POPTLIBS@ $(KRB5LIBS) $(UUID_LIBS) $(LDAP_LIBS) $(PASSDB_LIBS) $(TERMLDFLAGS) $(TERMLIBS) $(NSCD_LIBS) @INIPARSERLIBS@ bin/libsmbclient.a
+ 
+ bin/profiles@EXEEXT@: proto_exists $(PROFILES_OBJ) @BUILD_POPT@ bin/.dummy
+ 	@echo Linking $@
+@@ -1274,10 +1267,10 @@
+ 	@$(SHLD) $(LDSHFLAGS) -o $@ $(RPC_ECHO_OBJ) -lc \
+ 		@SONAMEFLAG@`basename $@`
+ 
+-bin/winbindd@EXEEXT@: proto_exists $(WINBINDD_OBJ) @BUILD_POPT@ bin/.dummy
++bin/winbindd@EXEEXT@: proto_exists $(WINBINDD_OBJ) $(LIBSMBCLIENT) @BUILD_POPT@ bin/.dummy
+ 	@echo "Linking $@"
+ 	@$(CC) $(FLAGS) -o $@ $(WINBINDD_OBJ) $(LDFLAGS) $(DYNEXP) $(LIBS) \
+-		@POPTLIBS@ $(KRB5LIBS) $(LDAP_LIBS) $(PASSDB_LIBS)
++		@POPTLIBS@ $(KRB5LIBS) $(LDAP_LIBS) $(PASSDB_LIBS) bin/libsmbclient.a
+ 
+ @WINBIND_NSS@: $(WINBIND_NSS_OBJ)
+ 	@echo "Linking $@"
+@@ -1533,16 +1526,14 @@
+ ## None here right now
+ #########################################################
+ 
+-bin/wbinfo@EXEEXT@: proto_exists $(WBINFO_OBJ) @BUILD_POPT@ bin/.dummy
++bin/wbinfo@EXEEXT@: proto_exists $(WBINFO_OBJ) $(LIBSMBCLIENT) @BUILD_POPT@ bin/.dummy
+ 	@echo Linking $@
+-	@$(CC) $(FLAGS) -o $@ $(LDFLAGS) $(WBINFO_OBJ) $(DYNEXP) $(LIBS) $(LDAP_LIBS) @POPTLIBS@
++	@$(CC) $(FLAGS) -o $@ $(LDFLAGS) $(WBINFO_OBJ) $(DYNEXP) $(LIBS) $(LDAP_LIBS) @POPTLIBS@ bin/libsmbclient.a
+ 
+-bin/ntlm_auth@EXEEXT@: proto_exists $(NTLM_AUTH_OBJ) $(PARAM_OBJ) $(LIB_NONSMBD_OBJ) \
+-		@BUILD_POPT@ bin/.dummy
++bin/ntlm_auth@EXEEXT@: proto_exists $(NTLM_AUTH_OBJ) $(LIBSMBCLIENT) @BUILD_POPT@ bin/.dummy
+ 	@echo Linking $@
+-	@$(CC) $(FLAGS) -o $@ $(LDFLAGS) $(DYNEXP) $(NTLM_AUTH_OBJ) \
+-		$(PARAM_OBJ) $(LIB_NONSMBD_OBJ) $(LIBS) \
+-		@POPTLIBS@ $(KRB5LIBS) $(LDAP_LIBS) $(NSCD_LIBS)
++	@$(CC) $(FLAGS) -o $@ $(LDFLAGS) $(DYNEXP) $(NTLM_AUTH_OBJ) $(LIBS) \
++		@POPTLIBS@ $(KRB5LIBS) $(LDAP_LIBS) $(NSCD_LIBS) bin/libsmbclient.a
+ 
+ bin/pam_smbpass.@SHLIBEXT@: $(PAM_SMBPASS_OBJ)
+ 	@echo "Linking shared library $@"

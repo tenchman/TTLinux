@@ -1,0 +1,133 @@
+--- polarssl-0.12.0/Makefile.config	2009-07-28 22:29:34.000000000 +0200
++++ polarssl-0.12.0/Makefile	2009-09-07 22:56:21.000000000 +0200
+@@ -6,8 +6,8 @@ PREFIX=polarssl_
+ 
+ all:
+ 	cd library  && make all && cd ..
+-	cd programs && make all && cd ..
+-	cd tests && make all && cd ..
++#	cd programs && make all && cd ..
++#	cd tests && make all && cd ..
+ 
+ install:
+ 	mkdir -p $(DESTDIR)/include/polarssl
+@@ -16,18 +16,18 @@ install:
+ 	mkdir -p $(DESTDIR)/lib
+ 	cp library/libpolarssl.* $(DESTDIR)/lib
+ 	
+-	mkdir -p $(DESTDIR)/bin
+-	for p in programs/*/* ; do              \
+-	    if [ -x $$p ] && [ ! -d $$p ] ;     \
+-	    then                                \
+-	        f=$(PREFIX)`basename $$p` ;     \
+-	        cp $$p $(DESTDIR)/bin/$$f ;     \
+-	    fi                                  \
+-	done
++#	mkdir -p $(DESTDIR)/bin
++#	for p in programs/*/* ; do              \
++#	    if [ -x $$p ] && [ ! -d $$p ] ;     \
++#	    then                                \
++#	        f=$(PREFIX)`basename $$p` ;     \
++#	        cp $$p $(DESTDIR)/bin/$$f ;     \
++#	    fi                                  \
++#	done
+ 
+ clean:
+ 	cd library  && make clean && cd ..
+-	cd programs && make clean && cd ..
++#	cd programs && make clean && cd ..
+ 	cd tests && make clean && cd ..
+ 
+ check:
+--- polarssl-0.12.0/include/polarssl/config.h.config	2009-07-28 22:53:48.000000000 +0200
++++ polarssl-0.12.0/include/polarssl/config.h	2009-09-07 22:50:42.000000000 +0200
+@@ -70,13 +70,13 @@
+ 
+ /*
+  * Enable all SSL/TLS debugging messages.
+- */
+ #define POLARSSL_DEBUG_MSG
++ */
+ 
+ /*
+  * Enable the checkup functions (*_self_test).
+- */
+ #define POLARSSL_SELF_TEST
++ */
+ 
+ /*
+  * Enable the prime-number generation code.
+@@ -137,16 +137,16 @@
+  *      SSL_RSA_CAMELLIA_128_SHA
+  *      SSL_RSA_CAMELLIA_256_SHA
+  *      SSL_EDH_RSA_CAMELLIA_256_SHA
+- */
+ #define POLARSSL_CAMELLIA_C
++ */
+ 
+ /*
+  * Module:  library/certs.c
+  * Caller:
+  *
+  * This module is used for testing (ssl_client/server).
+- */
+ #define POLARSSL_CERTS_C
++ */
+ 
+ /*
+  * Module:  library/debug.c
+@@ -155,8 +155,8 @@
+  *          library/ssl_tls.c
+  *
+  * This module provides debugging functions.
+- */
+ #define POLARSSL_DEBUG_C
++ */
+ 
+ /*
+  * Module:  library/des.c
+@@ -228,8 +228,8 @@
+  * Caller:  library/aes.c
+  *
+  * This modules adds support for the VIA PadLock on x86.
+- */
+ #define POLARSSL_PADLOCK_C
++ */
+ 
+ /*
+  * Module:  library/rsa.c
+@@ -258,16 +258,16 @@
+  * Caller:
+  *
+  * This module adds support for SHA-224 and SHA-256.
+- */
+ #define POLARSSL_SHA2_C
++ */
+ 
+ /*
+  * Module:  library/sha4.c
+  * Caller:
+  *
+  * This module adds support for SHA-384 and SHA-512.
+- */
+ #define POLARSSL_SHA4_C
++ */
+ 
+ /*
+  * Module:  library/ssl_cli.c
+@@ -317,13 +317,13 @@
+  * Caller:
+  *
+  * This module is required for X.509 certificate writing.
+- */
+ #define POLARSSL_X509_WRITE_C
++ */
+ 
+ /*
+  * Module:  library/xtea.c
+  * Caller:
+- */
+ #define POLARSSL_XTEA_C
++ */
+ 
+ #endif /* config.h */

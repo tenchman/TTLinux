@@ -1,0 +1,10 @@
+# vim:set syntax=kconfig:
+config CONFIG_POLARSSL
+  bool "polarssl - a cryptographic library targeted at embedded systems"
+  default n
+  help
+    The aim of the XySSL project is to provide a quality, open-source
+    cryptographic library written in C and targeted at embedded systems;
+    it can be used for free under the LGPL or BSD license.
+
+    http://polarssl.org/

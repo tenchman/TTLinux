@@ -1,0 +1,19 @@
+diff -up hdparm-7.6/hdparm.c.byteorder hdparm-7.6/hdparm.c
+--- hdparm-7.6/hdparm.c.byteorder	2009-07-02 11:08:23.000000000 +0200
++++ hdparm-7.6/hdparm.c	2009-07-02 11:15:59.000000000 +0200
+@@ -46,6 +46,15 @@ extern const char *minor_str[];
+ 	#define ATA_OP_SECURITY_DISABLE		0xF6
+ #endif
+ 
++#ifndef __le16_to_cpus
++#if __BYTE_ORDER == __LITTLE_ENDIAN
++#define __le16_to_cpus(x) do {} while (0)
++#else
++#include <byteswap.h>
++#define __le16_to_cpus(x) __bswab16((x))
++#endif
++#endif
++
+ char *progname;
+ int verbose = 0;
+ static int do_defaults = 0, do_flush = 0, do_ctimings, do_timings = 0;

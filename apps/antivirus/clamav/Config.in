@@ -1,0 +1,15 @@
+config CONFIG_CLAMAV
+  bool "dnsmasq - A GPL virus scanner"
+  select CONFIG_GMP
+  select CONFIG_ZLIB
+  default y
+  help
+    Clam AntiVirus is a GPL anti-virus toolkit for UNIX. The main purpose of
+    this software is the integration with mail servers (attachment scanning).
+    The package provides a flexible and scalable multi-threaded daemon, a
+    command line scanner, and a tool for automatic updating via Internet. The
+    programs are based on a shared library distributed with the Clam AntiVirus
+    package, which you can use with your own software. Most importantly, the
+    virus database is kept up to date .
+
+    http://www.clamav.net/

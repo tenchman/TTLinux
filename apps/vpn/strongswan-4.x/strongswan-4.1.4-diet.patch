@@ -1,0 +1,141 @@
+--- strongswan-4.1.4/src/libfreeswan/pfkey_v2_debug.c.diet	2007-05-23 18:21:41.000000000 +0200
++++ strongswan-4.1.4/src/libfreeswan/pfkey_v2_debug.c	2007-07-06 21:20:13.000000000 +0200
+@@ -28,7 +28,7 @@
+ # else /* MALLOC_SLAB */
+ #  include <linux/malloc.h> /* kmalloc() */
+ # endif /* MALLOC_SLAB */
+-# include <linux/errno.h>  /* error codes */
++# include <errno.h>  /* error codes */
+ # include <linux/types.h>  /* size_t */
+ # include <linux/interrupt.h> /* mark_bh */
+ 
+@@ -40,7 +40,7 @@
+ 
+ # include <sys/types.h>
+ # include <linux/types.h>
+-# include <linux/errno.h>
++# include <errno.h>
+ 
+ #endif /* __KERNEL__ */
+ 
+--- strongswan-4.1.4/src/libfreeswan/pfkey_v2_build.c.diet	2007-04-11 00:53:20.000000000 +0200
++++ strongswan-4.1.4/src/libfreeswan/pfkey_v2_build.c	2007-07-06 21:20:13.000000000 +0200
+@@ -36,7 +36,7 @@
+ # else /* MALLOC_SLAB */
+ #  include <linux/malloc.h> /* kmalloc() */
+ # endif /* MALLOC_SLAB */
+-# include <linux/errno.h>  /* error codes */
++# include <errno.h>  /* error codes */
+ # include <linux/types.h>  /* size_t */
+ # include <linux/interrupt.h> /* mark_bh */
+ 
+@@ -54,7 +54,7 @@
+ 
+ # include <sys/types.h>
+ # include <linux/types.h>
+-# include <linux/errno.h>
++# include <errno.h>
+ # include <malloc.h>
+ # include <string.h> /* memset */
+ 
+--- strongswan-4.1.4/src/libfreeswan/pfkey_v2_parse.c.diet	2007-05-23 18:20:58.000000000 +0200
++++ strongswan-4.1.4/src/libfreeswan/pfkey_v2_parse.c	2007-07-06 21:20:13.000000000 +0200
+@@ -37,7 +37,7 @@
+ # else /* MALLOC_SLAB */
+ #  include <linux/malloc.h> /* kmalloc() */
+ # endif /* MALLOC_SLAB */
+-# include <linux/errno.h>  /* error codes */
++# include <errno.h>  /* error codes */
+ # include <linux/types.h>  /* size_t */
+ # include <linux/interrupt.h> /* mark_bh */
+ 
+@@ -57,7 +57,7 @@
+ 
+ # include <sys/types.h>
+ # include <linux/types.h>
+-# include <linux/errno.h>
++# include <errno.h>
+ 
+ # include <freeswan.h>
+ # include <constants.h>
+--- strongswan-4.1.4/src/libfreeswan/pfkey_v2_ext_bits.c.diet	2007-05-23 18:21:20.000000000 +0200
++++ strongswan-4.1.4/src/libfreeswan/pfkey_v2_ext_bits.c	2007-07-06 21:20:13.000000000 +0200
+@@ -36,7 +36,7 @@
+ # else /* MALLOC_SLAB */
+ #  include <linux/malloc.h> /* kmalloc() */
+ # endif /* MALLOC_SLAB */
+-# include <linux/errno.h>  /* error codes */
++# include <errno.h>  /* error codes */
+ # include <linux/types.h>  /* size_t */
+ # include <linux/interrupt.h> /* mark_bh */
+ 
+@@ -51,7 +51,7 @@
+ 
+ # include <sys/types.h>
+ # include <linux/types.h>
+-# include <linux/errno.h>
++# include <errno.h>
+ #endif
+ 
+ #include <freeswan.h>
+--- strongswan-4.1.4/src/libfreeswan/optionsfrom.c.diet	2007-04-11 00:53:20.000000000 +0200
++++ strongswan-4.1.4/src/libfreeswan/optionsfrom.c	2007-07-06 21:20:13.000000000 +0200
+@@ -31,7 +31,7 @@
+ 
+ static const char *dowork(const char *, int *, char ***, int);
+ static const char *getanarg(FILE *, struct work *, char **);
+-static char *getline(FILE *, char *, size_t);
++static char *ss_getline(FILE *, char *, size_t);
+ 
+ /*
+  - optionsfrom - add some options, taken from a file, to argc/argv
+@@ -149,7 +149,7 @@
+ 	char *endp;
+ 
+ 	while (w->pending == NULL) {	/* no pending line */
+-		if ((w->line = getline(f, w->buf, sizeof(w->buf))) == NULL)
++		if ((w->line = ss_getline(f, w->buf, sizeof(w->buf))) == NULL)
+ 			return "error in line read";	/* caller checks EOF */
+ 		if (w->line[0] != '#' &&
+ 				*(w->line + strspn(w->line, " \t")) != '\0')
+@@ -171,7 +171,7 @@
+ 			if (*linep == NULL)
+ 				return "out of memory for new line";
+ 			strcpy(*linep, p);
+-		} else			/* getline already malloced it */
++		} else			/* ss_getline already malloced it */
+ 			*linep = p;
+ 		return NULL;
+ 	}
+@@ -203,10 +203,10 @@
+ }
+ 
+ /*
+- - getline - read a line from the file, trim newline off
++ - ss_getline - read a line from the file, trim newline off
+  */
+ static char *			/* pointer to line, NULL for eof/error */
+-getline(f, buf, bufsize)
++ss_getline(f, buf, bufsize)
+ FILE *f;
+ char *buf;			/* buffer to use, if convenient */
+ size_t bufsize;			/* size of buf */
+--- strongswan-4.1.4/src/libcrypto/libserpent/serpent.c.diet	2007-07-06 21:31:09.000000000 +0200
++++ strongswan-4.1.4/src/libcrypto/libserpent/serpent.c	2007-07-06 21:31:56.000000000 +0200
+@@ -17,12 +17,15 @@
+ #ifdef __KERNEL__
+ #include <linux/init.h>
+ #include <linux/types.h>
+-
++#ifndef __dietlibc__
+ #include <asm/byteorder.h>
++#endif
+ #else
+ #include <sys/types.h>
++#ifndef __dietlibc__
+ #include <asm/byteorder.h>
+ #endif
++#endif
+ 
+ #include "serpent.h"
+ 

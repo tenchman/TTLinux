@@ -1,0 +1,23 @@
+config CONFIG_STRONGSWAN
+  bool "strongswan - an 'german' Open Source implementation of IPsec for Linux"
+  default n
+  select CONFIG_GMP
+  help
+    strongSwan is an OpenSource IPsec implementation for the Linux operating
+    system. It is based on the discontinued FreeS/WAN project and the X.509
+    patch which we developped over the last three years. In order to have a
+    stable IPsec platform to base our future extensions of the X.509 capability
+    on, we decided to lauch the strongSwan project.
+
+    The focus is on
+      
+      * simplicity of configuration
+      * strong encryption and authentication methods
+      * powerful IPsec policies supporting large and complex VPN networks
+
+    The maintainer of the strongSwan project is Andreas Steffen, who is a
+    professor for security in communications at the University of Applied
+    Sciences Rapperswil in Switzerland and president of the consulting firm
+    strongSec GmbH.
+    
+    http://www.strongswan.org/

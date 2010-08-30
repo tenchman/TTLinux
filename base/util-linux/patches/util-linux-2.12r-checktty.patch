@@ -1,0 +1,95 @@
+--- util-linux-2.12r/login-utils/login.c.checktty	2004-12-05 03:37:12.000000000 +0100
++++ util-linux-2.12r/login-utils/login.c	2006-01-07 14:41:07.000000000 +0100
+@@ -97,8 +97,10 @@
+ #include <sys/file.h>
+ #include <termios.h>
+ #include <string.h>
++#ifndef index
+ #define index strchr
+ #define rindex strrchr
++#endif
+ #include <sys/ioctl.h>
+ #include <sys/wait.h>
+ #include <signal.h>
+@@ -152,7 +154,9 @@
+ #ifndef __linux__
+ #  include <tzfile.h>
+ #endif
++#ifndef __dietlibc__
+ #include <lastlog.h>
++#endif
+ 
+ #define SLEEP_EXIT_TIMEOUT 5
+ 
+@@ -164,15 +168,6 @@
+ #include "setproctitle.h"
+ #endif
+ 
+-#if 0
+-/* from before we had a lastlog.h file in linux */
+-struct  lastlog
+-{ long ll_time;
+-  char ll_line[12];
+-  char ll_host[16];
+-};
+-#endif
+-
+ #ifndef USE_PAM
+ static void getloginname (void);
+ static void checknologin (void);
+@@ -722,12 +717,12 @@
+ 	    salt = pwd->pw_passwd;
+ 	} else
+ 	  salt = "xx";
+-	
++#ifdef WANT_CHECKTTY	
+ 	if (pwd) {
+ 	    initgroups(username, pwd->pw_gid);
+ 	    checktty(username, tty_name, pwd); /* in checktty.c */
+ 	}
+-	
++#endif	
+ 	/* if user not super-user, check for disabled logins */
+ 	if (pwd == NULL || pwd->pw_uid)
+ 	  checknologin();
+--- util-linux-2.12r/login-utils/Makefile.checktty	2004-11-23 17:06:57.000000000 +0100
++++ util-linux-2.12r/login-utils/Makefile	2006-01-07 15:11:29.000000000 +0100
+@@ -80,6 +80,10 @@
+ WHAT_TO_INSTALL:=$(WHAT_TO_INSTALL) install-getty
+ endif
+ 
++ifeq "$(WANT_CHECKTTY)" "yes"
++CHECKTTY_O:=checktty.o
++endif
++
+ all: $(WHAT_TO_BUILD)
+ all-passwd: $(USRBIN.PASSWD)
+ all-putils: $(BIN.PUTILS) $(USRBIN.PUTILS) $(USRSBIN.PUTILS)
+@@ -89,7 +93,7 @@
+ 
+ # Rules for everything else
+ login.o: ../MCONFIG
+-checktty.o login.o: login.h
++$(CHECKTTY_O) login.o: login.h
+ cryptocard.o login.o: cryptocard.h
+ chfn.o chsh.o islocal.o passwd.o: islocal.h
+ chfn.o chsh.o passwd.o setpwnam.o vipw.o: setpwnam.h
+@@ -111,7 +115,7 @@
+ login: login.o $(LIB)/setproctitle.o $(LIB)/xstrncpy.o
+ 	$(CC) $(LDFLAGS) -o $@ $^ $(CRYPT) $(PAM) $(SELINUXLLIB)
+ else
+-login: login.o $(LIB)/xstrncpy.o $(LIB)/setproctitle.o checktty.o 
++login: login.o $(LIB)/xstrncpy.o $(LIB)/setproctitle.o $(CHECKTTY_O) 
+ 	$(CC) $(LDFLAGS) -o $@ $^ $(CRYPT) $(SELINUXLLIB)
+ endif
+ 
+@@ -146,6 +150,9 @@
+ ifeq "$(DO_STAT_MAIL)" "yes"
+ 	LOGINFLAGS += -DDO_STAT_MAIL
+ endif
++ifeq "$(WANT_CHECKTTY)" "yes"
++	LOGINFLAGS += -DWANT_CHECKTTY
++endif
+ 
+ login.o: login.c $(LIB)/pathnames.h $(LIB)/setproctitle.c $(LIB)/setproctitle.h
+ 	$(CC) -c $(CFLAGS) $(PAMFL) $(LOGINFLAGS) login.c

@@ -1,0 +1,7 @@
+# vim:set syntax=kconfig:
+menu "DNS/DHCP"
+  source "apps/dns/djbdns/Config.in"
+  source "apps/dns/dnsmasq/Config.in"
+  source "apps/dns/ez-ipupdate/Config.in"
+  source "apps/dns/dhcp-forwarder/Config.in"
+endmenu

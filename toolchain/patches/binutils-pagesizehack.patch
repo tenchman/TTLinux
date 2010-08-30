@@ -1,0 +1,14 @@
+--- binutils-2.18.50.0.4/bfd/elf32-arm.c.pagesizehack	2008-07-03 11:36:25.000000000 +0200
++++ binutils-2.18.50.0.4/bfd/elf32-arm.c	2008-07-03 11:36:36.000000000 +0200
+@@ -10168,11 +10168,7 @@ const struct elf_size_info elf32_arm_siz
+ 
+ #define ELF_ARCH			bfd_arch_arm
+ #define ELF_MACHINE_CODE		EM_ARM
+-#ifdef __QNXTARGET__
+ #define ELF_MAXPAGESIZE			0x1000
+-#else
+-#define ELF_MAXPAGESIZE			0x8000
+-#endif
+ #define ELF_MINPAGESIZE			0x1000
+ #define ELF_COMMONPAGESIZE		0x1000
+ 

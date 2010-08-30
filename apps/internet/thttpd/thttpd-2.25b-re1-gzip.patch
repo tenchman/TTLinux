@@ -1,0 +1,595 @@
+diff -ur thttpd-2.25b/Makefile.in thttpd-2.25b.rob/Makefile.in
+--- thttpd-2.25b/Makefile.in	2002-04-02 20:49:35.000000000 -0600
++++ thttpd-2.25b.rob/Makefile.in	2004-01-20 00:00:05.672212367 -0600
+@@ -52,7 +52,7 @@
+ INCLS =		-I.
+ CFLAGS =	$(CCOPT) $(DEFS) $(INCLS)
+ LDFLAGS =	@LDFLAGS@
+-LIBS =		@LIBS@
++LIBS =		@LIBS@ -lz
+ NETLIBS =	@V_NETLIBS@
+ INSTALL =	@INSTALL@
+ 
+diff -ur thttpd-2.25b/libhttpd.c thttpd-2.25b.rob/libhttpd.c
+--- thttpd-2.25b/libhttpd.c	2003-12-25 13:06:05.000000000 -0600
++++ thttpd-2.25b.rob/libhttpd.c	2004-01-20 00:02:16.087295842 -0600
+@@ -194,6 +194,7 @@
+ */
+ static int sub_process = 0;
+ 
++int compression_level;
+ 
+ static void
+ check_options( void )
+@@ -618,6 +619,11 @@
+     int partial_content;
+     int s100;
+ 
++    if ( status != 200 )
++        {
++            hc->compression_type = COMPRESSION_NONE;
++        }
++
+     hc->status = status;
+     hc->bytes_to_send = length;
+     if ( hc->mime_flag )
+@@ -632,6 +638,8 @@
+ 	    partial_content = 1;
+ 	    hc->status = status = 206;
+ 	    title = ok206title;
++
++	    hc->compression_type = COMPRESSION_NONE;  /* probably some way to get around this... */
+ 	    }
+ 	else
+ 	    {
+@@ -661,7 +669,15 @@
+ 	if ( encodings[0] != '\0' )
+ 	    {
+ 	    (void) my_snprintf( buf, sizeof(buf),
+-		"Content-Encoding: %s\015\012", encodings );
++		"Content-Encoding: %s%s\015\012",
++		encodings,
++		(hc->compression_type == COMPRESSION_GZIP) ? ", gzip" : "" );
++	    add_response( hc, buf );
++	    }
++	else if ( hc->compression_type == COMPRESSION_GZIP )
++	    {
++	    (void) my_snprintf( buf, sizeof(buf),
++	        "Content-Encoding: gzip\015\012" );
+ 	    add_response( hc, buf );
+ 	    }
+ 	if ( partial_content )
+@@ -673,7 +689,8 @@
+ 		(int64_t) ( hc->last_byte_index - hc->first_byte_index + 1 ) );
+ 	    add_response( hc, buf );
+ 	    }
+-	else if ( length >= 0 )
++	else if ( ( length >= 0 ) &&
++	          ( hc->compression_type == COMPRESSION_NONE ) )
+ 	    {
+ 	    (void) my_snprintf( buf, sizeof(buf),
+ 		"Content-Length: %lld\015\012", (int64_t) length );
+@@ -1756,6 +1773,7 @@
+     hc->last_byte_index = -1;
+     hc->keep_alive = 0;
+     hc->should_linger = 0;
++    hc->compression_type = COMPRESSION_NONE;
+     hc->file_address = (char*) 0;
+     return GC_OK;
+     }
+@@ -2356,6 +2374,32 @@
+ 	    }
+ 	}
+ 
++    if ( ( hc->accepte != '\0' ) && ( compression_level > 0 ) )
++        {
++        /* check to see if the client has send a "gzip" accept-encoding */
++        char *gz_pos_info;
++        gz_pos_info = strstr( hc->accepte, "gzip" );
++        if ( gz_pos_info != (char *)0 )
++            {
++            char *f1, *f2;
++            f1 = strstr( (gz_pos_info + 4), "," );
++            f2 = strstr( (gz_pos_info + 4), "q=" );
++            /* if we have no "q="
++            or comma is before "q="
++            or ( no commas or "q=" is before the comma ) and q>0.0
++            */
++            if ( ( f2 == 0 ) ||
++                 ( f1 < f2 ) ||
++                 ( ( ( f1 == 0 ) || ( f2 < f1 ) ) &&
++                 ( strtof( f2 + 2, 0 ) > (float)0.0 ) )
++               )
++                {
++                hc->compression_type = COMPRESSION_GZIP;
++                }
++            }
++        }
++
++
+     return 0;
+     }
+ 
+@@ -2697,6 +2741,9 @@
+     char* timestr;
+     ClientData client_data;
+ 
++
++    hc->compression_type = COMPRESSION_NONE;
++
+     dirp = opendir( hc->expnfilename );
+     if ( dirp == (DIR*) 0 )
+ 	{
+@@ -3580,6 +3627,52 @@
+ 
+ 
+ static int
++does_exist_compressed_alternate( httpd_conn* hc, char* temp_filename, struct stat* sb )
++    {
++    int rc = 0;
++
++    if ( stat( temp_filename, sb ) == 0 )
++        {
++        /* Is it world-readable or world-executable? */
++        if ( sb->st_mode & ( S_IROTH | S_IXOTH ) )
++            {
++            /* is it's timestamp later than the uncompressed file's */
++            if ( sb->st_mtime >= hc->sb.st_mtime )
++                {
++                /* verify compressed file's date/time/size is good wrt uncompressed */
++                int gz_is_okay = 0;
++                int fd = open( temp_filename, O_RDONLY );
++                if ( fd >= 0 )
++                    {
++                    char buffer[16];
++                    if ( read( fd, buffer, 8 ) == 8 )
++                      {
++                      if ( *(time_t*)(buffer + 4) >= hc->sb.st_mtime )
++                        {
++                        if ( lseek( fd, sb->st_size - 4, SEEK_SET ) == (sb->st_size - 4) )
++                          {
++                          if ( read( fd, buffer, 4 ) == 4 )
++                            {
++                            if ( *(off_t*)(buffer) == hc->sb.st_size )
++                              {
++                              rc = 1;
++                              }
++                            }
++                          }
++                        }
++                      }
++                  close( fd );
++                  }
++               else { /* internal gzip stuff doesn't match uncompressed file */ }
++               } else { /* compressed file is older than uncompressed */ }
++            } else { /* compressed file is not world readable */ }
++        } else { /* compressed file does not exist */ }
++
++    return rc;
++    }
++
++
++static int
+ really_start_request( httpd_conn* hc, struct timeval* nowP )
+     {
+     static char* indexname;
+@@ -3593,6 +3686,13 @@
+     size_t expnlen, indxlen;
+     char* cp;
+     char* pi;
++    static char *filename_with_gz = NULL;
++    static int filename_with_gz_size = 0;
++    int does_exist_compressed_alternate_flag;
++    struct stat alt_file_sb;
++    char *content_location_string = "";
++    static char *alt_header_str = (char *)NULL;
++    static int alt_header_str_size = 0;
+ 
+     expnlen = strlen( hc->expnfilename );
+ 
+@@ -3821,6 +3921,26 @@
+ 
+     figure_mime( hc );
+ 
++    /* setup filename_with_gz */
++    httpd_realloc_str( &filename_with_gz, &filename_with_gz_size, strlen( hc->expnfilename ) + 4 );
++    strcpy( filename_with_gz, hc->expnfilename );
++    strcat( filename_with_gz, ".gz" );
++    does_exist_compressed_alternate_flag = does_exist_compressed_alternate( hc, filename_with_gz, &alt_file_sb );
++
++    /* don't try to compress non-text files */
++    if ( strncmp( hc->type, "text/", 5 ) != 0 )
++        {
++        hc->compression_type = COMPRESSION_NONE;
++        }
++    else
++        {
++        /* don't try to compress really small things */
++        if ( hc->sb.st_size < 256 )
++            {
++            hc->compression_type = COMPRESSION_NONE;
++            }
++        }
++
+     if ( hc->method == METHOD_HEAD )
+ 	{
+ 	send_mime(
+@@ -3836,14 +3956,71 @@
+ 	}
+     else
+ 	{
+-	hc->file_address = mmc_map( hc->expnfilename, &(hc->sb), nowP );
++
++	/* if it's already "encoded", don't try to gzip it. */
++	if ( hc->encodings[0] != '\0' )
++	    {
++	    hc->compression_type = COMPRESSION_NONE;
++	    }
++	else if ( hc->compression_type == COMPRESSION_GZIP )
++	    {
++	    if ( does_exist_compressed_alternate_flag )
++	        {
++		httpd_realloc_str( &hc->expnfilename, &hc->maxexpnfilename,
++		    strlen( filename_with_gz ) + 1 );
++		strcpy( hc->expnfilename, filename_with_gz );
++		hc->sb.st_size = alt_file_sb.st_size;
++		httpd_realloc_str( &hc->encodings, &hc->maxencodings, 5 );
++		strcat( hc->encodings, "gzip" );
++		hc->compression_type = COMPRESSION_NONE; /* so we don't try to compress it more */
++		content_location_string = strrchr( hc->expnfilename, '/' );
++		if ( content_location_string != NULL )
++		    {
++		    content_location_string++;
++		    }
++		else
++		    {
++		    content_location_string = hc->expnfilename;
++		    }
++
++		if ( *content_location_string != '\0' )  /* should never be '\0' */
++		    {
++		    httpd_realloc_str( &alt_header_str, &alt_header_str_size,
++		        strlen( content_location_string ) + 23 );
++	            if ( alt_header_str != (char *)NULL )
++		        {
++			my_snprintf( alt_header_str, alt_header_str_size, "Content-Location: %s\r\n",
++			content_location_string );
++			content_location_string = alt_header_str;
++			}
++	            else  /* ... that's bad */
++			{
++			    syslog(
++			        LOG_ERR, "out of memory reallocating a string to %d bytes",
++			        strlen( alt_header_str ) + strlen( content_location_string ) + 23 );
++			    exit( 1 );
++			}
++		    }
++		else { does_exist_compressed_alternate_flag = 0; }
++	        } else { /* internal gzip stuff doesn't match uncompressed file */ }
++	    } else { /* not even looking for compressed file */ }
++
++        if ( ( does_exist_compressed_alternate_flag ) &&
++	     ( hc->compression_type == COMPRESSION_GZIP ) )
++	    {
++	    hc->file_address = mmc_map( hc->expnfilename, &alt_file_sb, nowP );
++	    }
++	else
++            {
++	    hc->file_address = mmc_map( hc->expnfilename, &(hc->sb), nowP );
++	    }
+ 	if ( hc->file_address == (char*) 0 )
+ 	    {
+ 	    httpd_send_err( hc, 500, err500title, "", err500form, hc->encodedurl );
+ 	    return -1;
+ 	    }
+ 	send_mime(
+-	    hc, 200, ok200title, hc->encodings, "", hc->type, hc->sb.st_size,
++	    hc, 200, ok200title, hc->encodings, content_location_string, hc->type, hc->sb.st_size,
+ 	    hc->sb.st_mtime );
+ 	}
+ 
+diff -ur thttpd-2.25b/libhttpd.h thttpd-2.25b.rob/libhttpd.h
+--- thttpd-2.25b/libhttpd.h	2003-12-08 10:20:51.000000000 -0600
++++ thttpd-2.25b.rob/libhttpd.h	2004-01-19 21:48:29.525382148 -0600
+@@ -141,6 +141,7 @@
+     int should_linger;
+     struct stat sb;
+     int conn_fd;
++    int compression_type;
+     char* file_address;
+     } httpd_conn;
+ 
+@@ -212,6 +213,14 @@
+ #define GR_GOT_REQUEST 1
+ #define GR_BAD_REQUEST 2
+ 
++/* stuff for content-encoding: gzip
++*/
++#define COMPRESSION_NONE 0
++#define COMPRESSION_GZIP 1
++
++extern int compression_level;
++
++
+ /* Parses the request in hc->read_buf.  Fills in lots of fields in hc,
+ ** like the URL and the various headers.
+ **
+Only in thttpd-2.25b.rob/: test.html
+diff -ur thttpd-2.25b/thttpd.c thttpd-2.25b.rob/thttpd.c
+--- thttpd-2.25b/thttpd.c	2003-12-25 13:06:52.000000000 -0600
++++ thttpd-2.25b.rob/thttpd.c	2004-01-20 00:03:59.199044834 -0600
+@@ -68,6 +68,7 @@
+ typedef long long int64_t;
+ #endif
+ 
++#include "zlib.h"
+ 
+ static char* argv0;
+ static int debug;
+@@ -117,6 +118,9 @@
+     off_t bytes;
+     off_t end_byte_index;
+     off_t next_byte_index;
++    z_stream zs;
++    int zs_state;
++    void* zs_output_head;
+     } connecttab;
+ static connecttab* connects;
+ static int num_connects, max_connects, first_free_connect;
+@@ -129,6 +133,10 @@
+ #define CNST_PAUSING 3
+ #define CNST_LINGERING 4
+ 
++/* compression stuff */
++#define ZLIB_OUTPUT_BUF_SIZE 262136
++#define DEFAULT_COMPRESSION 3
++
+ 
+ static httpd_server* hs = (httpd_server*) 0;
+ int terminate = 0;
+@@ -727,6 +735,7 @@
+ 	connects[cnum].conn_state = CNST_FREE;
+ 	connects[cnum].next_free_connect = cnum + 1;
+ 	connects[cnum].hc = (httpd_conn*) 0;
++	connects[cnum].zs_output_head = (void*) 0;
+ 	}
+     connects[max_connects - 1].next_free_connect = -1;	/* end of link list */
+     first_free_connect = 0;
+@@ -878,6 +887,7 @@
+     pidfile = (char*) 0;
+     user = DEFAULT_USER;
+     charset = DEFAULT_CHARSET;
++    compression_level = DEFAULT_COMPRESSION;
+     p3p = "";
+     max_age = -1;
+     argn = 1;
+@@ -888,6 +898,13 @@
+ 	    (void) printf( "%s\n", SERVER_SOFTWARE );
+ 	    exit( 0 );
+ 	    }
++	else if ( strcmp( argv[argn], "-z" ) == 0 && argn + 1 < argc )
++	    {
++	    ++argn;
++	    compression_level = atoi( argv[argn] );
++	    if ( ( compression_level < 0 ) || ( compression_level > 9 ) )
++	        compression_level = DEFAULT_COMPRESSION;
++            }
+ 	else if ( strcmp( argv[argn], "-C" ) == 0 && argn + 1 < argc )
+ 	    {
+ 	    ++argn;
+@@ -990,7 +1007,7 @@
+ usage( void )
+     {
+     (void) fprintf( stderr,
+-"usage:  %s [-C configfile] [-p port] [-d dir] [-r|-nor] [-dd data_dir] [-s|-nos] [-v|-nov] [-g|-nog] [-u user] [-c cgipat] [-t throttles] [-h host] [-l logfile] [-i pidfile] [-T charset] [-P P3P] [-M maxage] [-V] [-D]\n",
++"usage:  %s [-C configfile] [-p port] [-d dir] [-r|-nor] [-dd data_dir] [-s|-nos] [-v|-nov] [-g|-nog] [-u user] [-c cgipat] [-t throttles] [-h host] [-l logfile] [-i pidfile] [-T charset] [-P P3P] [-M maxage] [-z compressionlevel] [-V] [-D]\n",
+ 	argv0 );
+     exit( 1 );
+     }
+@@ -1699,6 +1716,60 @@
+     c->wouldblock_delay = 0;
+     client_data.p = c;
+ 
++    if ( hc->compression_type != COMPRESSION_NONE )
++        {
++	unsigned long a;
++
++        /* setup default zlib memory allocation routines */
++	c->zs.zalloc = Z_NULL;
++	c->zs.zfree = Z_NULL;
++	c->zs.opaque = Z_NULL;
++
++	/* setup zlib input file to mmap'ed location */
++	c->zs.next_in = c->hc->file_address;
++	c->zs.avail_in = c->hc->sb.st_size;
++
++	/* allocate memory for output buffer, if it's not already allocated */
++	if ( c->zs_output_head == (void *) 0 )
++	    {
++	    c->zs_output_head = (void *)malloc( ZLIB_OUTPUT_BUF_SIZE + 8 );
++	    if ( c->zs_output_head == (void *) 0 )
++	        {
++		syslog( LOG_CRIT, "out of memory allocating an zs_output_head" );
++		exit( 1 );
++		}
++	    }
++
++	if ( hc->compression_type == COMPRESSION_GZIP )
++	    {
++            /* add gzip header to output file */
++	    sprintf(c->zs_output_head, "%c%c%c%c%c%c%c%c%c%c",
++	            0x1f,
++		    0x8b,
++		    Z_DEFLATED,
++		    0 /*flags*/,
++		    &c->hc->sb.st_mtime, /*time*/ /* use a more transportable implementation! */
++		    &c->hc->sb.st_mtime + 1,
++		    &c->hc->sb.st_mtime + 2,
++		    &c->hc->sb.st_mtime + 3,
++		    0 /*xflags*/,
++		    0x03);
++
++	    c->zs.next_out = c->zs_output_head + 10 ;
++	    c->zs.avail_out = ZLIB_OUTPUT_BUF_SIZE - 10;
++	    }
++
++	/* call the initialization for zlib with negative window size to
++	** omit the "deflate" prefix */
++	c->zs_state = deflateInit2( &c->zs, compression_level, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY );
++
++	if ( c->zs_state != Z_OK )
++	    {
++	    syslog( LOG_CRIT, "zlib deflateInit failed!" );
++	    exit( 1 );
++	    }
++	}
++
+     fdwatch_del_fd( hc->conn_fd );
+     fdwatch_add_fd( hc->conn_fd, c, FDW_WRITE );
+     }
+@@ -1719,27 +1790,72 @@
+     else
+ 	max_bytes = c->max_limit / 4;	/* send at most 1/4 seconds worth */
+ 
+-    /* Do we need to write the headers first? */
+-    if ( hc->responselen == 0 )
+-	{
+-	/* No, just write the file. */
+-	sz = write(
+-	    hc->conn_fd, &(hc->file_address[c->next_byte_index]),
+-	    MIN( c->end_byte_index - c->next_byte_index, max_bytes ) );
++    if ( hc->compression_type == COMPRESSION_NONE )
++        {
++        /* Do we need to write the headers first? */
++        if ( hc->responselen == 0 )
++	    {
++	    /* No, just write the file. */
++	    sz = write(
++	        hc->conn_fd, &(hc->file_address[c->next_byte_index]),
++	        MIN( c->end_byte_index - c->next_byte_index, max_bytes ) );
++	    }
++        else
++	    {
++	    /* Yes.  We'll combine headers and file into a single writev(),
++	    ** hoping that this generates a single packet.
++	    */
++	    struct iovec iv[2];
++
++	    iv[0].iov_base = hc->response;
++	    iv[0].iov_len = hc->responselen;
++	    iv[1].iov_base = &(hc->file_address[c->next_byte_index]);
++	    iv[1].iov_len = MIN( c->end_byte_index - c->next_byte_index, max_bytes );
++	    sz = writev( hc->conn_fd, iv, 2 );
++	    }
+ 	}
+     else
+-	{
+-	/* Yes.  We'll combine headers and file into a single writev(),
+-	** hoping that this generates a single packet.
+-	*/
++        {
++	int iv_count;
+ 	struct iovec iv[2];
+ 
+-	iv[0].iov_base = hc->response;
+-	iv[0].iov_len = hc->responselen;
+-	iv[1].iov_base = &(hc->file_address[c->next_byte_index]);
+-	iv[1].iov_len = MIN( c->end_byte_index - c->next_byte_index, max_bytes );
+-	sz = writev( hc->conn_fd, iv, 2 );
+-	}
++	/* call deflate only if necessary */
++	if ( ( c->zs_state == Z_OK ) && ( c->zs.avail_out > 0 ) )
++	    {
++	    c->zs_state = deflate( &c->zs, Z_FINISH );
++
++	    if ( c->zs_state == Z_STREAM_END )
++	        {
++		/* when zlib claims to be done, add the suffix info */
++		uLong crc = crc32(0L, Z_NULL, 0);
++		/* crc32 must not be converted into network byte order */
++		crc = crc32(crc, c->hc->file_address, c->hc->sb.st_size );
++		memcpy( c->zs.next_out, &crc, sizeof( uLong ) );
++		memcpy( c->zs.next_out + 4, &(hc->sb.st_size), 4 );
++		c->zs.next_out += 8;
++		}
++            }
++
++	/* Do we need to write the headers first? */
++	iv_count = 1;
++	iv[0].iov_base = c->zs_output_head;
++	iv[0].iov_len = MIN( (void *)c->zs.next_out - (void *)c->zs_output_head,
++	    max_bytes );
++	
++	if ( hc->responselen != 0 )
++	    {
++	    /* Yes.  We'll combine headers and file into a single writev(),
++	    ** hoping that this generates a single packet. */
++	    iv_count = 2;
++	    iv[0].iov_base = hc->response;
++	    iv[0].iov_len = hc->responselen;
++	    iv[1].iov_base = c->zs_output_head;
++	    iv[1].iov_len = MIN(
++	        (void *)c->zs.next_out - (void *)c->zs_output_head,
++		max_bytes );
++	    }
++	sz = writev( hc->conn_fd, iv, iv_count );
++        }
+ 
+     if ( sz < 0 && errno == EINTR )
+ 	return;
+@@ -1819,12 +1935,37 @@
+     for ( tind = 0; tind < c->numtnums; ++tind )
+ 	throttles[c->tnums[tind]].bytes_since_avg += sz;
+ 
+-    /* Are we done? */
+-    if ( c->next_byte_index >= c->end_byte_index )
+-	{
+-	/* This connection is finished! */
+-	finish_connection( c, tvP );
+-	return;
++    if ( c->hc->compression_type == COMPRESSION_NONE )
++        {
++        /* Are we done? */
++        if ( c->next_byte_index >= c->end_byte_index )
++	    {
++	    /* This connection is finished! */
++	    finish_connection( c, tvP );
++	    return;
++	    }
++	}
++    else
++        {
++	/* Are we done? */
++	if ( ( c->zs_state == Z_STREAM_END ) &&
++	     ( c->zs_output_head + sz == c->zs.next_out ) )
++	    {
++	    /* This conection is finished! */
++	    clear_connection( c, tvP );
++	    return;
++	    }
++	else if ( sz > 0 )
++	    {
++	    /* move data to beginning of zlib output buffer
++	    ** and set up pointers so next zlib output goes
++	    ** to where we left off */
++	    /* this can be optimized by using a looping buffer thing */
++	    memcpy( c->zs_output_head, c->zs_output_head + sz,
++	        ZLIB_OUTPUT_BUF_SIZE - sz + 8);
++	    c->zs.next_out -= sz;
++	    c->zs.avail_out = sz;
++	    }
+ 	}
+ 
+     /* Tune the (blockheaded) wouldblock delay. */
+diff -ur thttpd-2.25b/version.h thttpd-2.25b.rob/version.h
+--- thttpd-2.25b/version.h	2003-12-29 11:02:40.000000000 -0600
++++ thttpd-2.25b.rob/version.h	2004-01-19 23:58:26.687229663 -0600
+@@ -3,7 +3,7 @@
+ #ifndef _VERSION_H_
+ #define _VERSION_H_
+ 
+-#define SERVER_SOFTWARE "thttpd/2.25b 29dec2003"
++#define SERVER_SOFTWARE "thttpd/2.25b-re 19jan2004"
+ #define SERVER_ADDRESS "http://www.acme.com/software/thttpd/"
+ 
+ #endif /* _VERSION_H_ */

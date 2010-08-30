@@ -1,0 +1,43 @@
+--- iputils-s20071127/rarpd.c.diet	2008-05-27 20:39:12.000000000 +0200
++++ iputils-s20071127/rarpd.c	2008-05-27 20:42:01.000000000 +0200
+@@ -20,8 +20,8 @@
+ #include <arpa/inet.h>
+ #include <sys/ioctl.h>
+ #include <sys/poll.h>
+-#include <sys/errno.h>
+-#include <sys/fcntl.h>
++#include <errno.h>
++#include <fcntl.h>
+ #include <sys/socket.h>
+ #include <sys/signal.h>
+ #include <linux/if.h>
+@@ -42,7 +42,9 @@ int listen_arp;
+ char *ifname;
+ char *tftp_dir = "/etc/tftpboot";
+ 
++#ifndef __dietlibc__
+ extern int ether_ntohost(char *name, unsigned char *ea);
++#endif
+ void usage(void) __attribute__((noreturn));
+ 
+ struct iflink
+@@ -305,7 +307,10 @@ struct rarp_map *rarp_lookup(int ifindex
+ 				6,
+ 			};
+ 
+-			if (ether_ntohost(ename, lladdr) != 0 ||
++			if (
++#ifndef __dietlibc__
++			    ether_ntohost(ename, lladdr) != 0 ||
++#endif
+ 			    (hp = gethostbyname(ename)) == NULL) {
+ 				if (verbose)
+ 					syslog(LOG_INFO, "not found in /etc/ethers");
+--- iputils-s20071127/ping_common.c.diet	2008-05-27 20:38:00.000000000 +0200
++++ iputils-s20071127/ping_common.c	2008-05-27 20:38:42.000000000 +0200
+@@ -1,4 +1,5 @@
+ #include "ping_common.h"
++#include <termios.h>
+ #include <ctype.h>
+ #include <sched.h>
+ 

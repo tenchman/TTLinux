@@ -1,0 +1,36 @@
+--- dietlibc-0.32/include/asm/types.h.kernel	2007-11-09 20:13:14.000000000 +0100
++++ dietlibc-0.32/include/asm/types.h	2009-06-10 21:59:35.000000000 +0200
+@@ -26,12 +26,6 @@ typedef int32_t __s32;
+ typedef int64_t __s64;
+ #endif
+ 
+-#if defined(__s390__) || (__WORDSIZE==64)
+-typedef unsigned long __kernel_size_t;
+-#else
+-typedef uint32_t __kernel_size_t;
+-#endif
+-
+ #define __force
+ typedef uint16_t __le16;
+ typedef uint16_t __be16;
+@@ -39,6 +33,9 @@ typedef uint32_t __le32;
+ typedef uint32_t __be32;
+ typedef uint64_t __le64;
+ typedef uint64_t __be64;
++typedef uint16_t __sum16;
++typedef uint32_t __wsum;
++
+ 
+ typedef uint16_t __sum16;
+ typedef uint32_t __wsum;
+--- dietlibc-0.32/include/sys/socket.h.kernel	2009-06-10 21:35:50.000000000 +0200
++++ dietlibc-0.32/include/sys/socket.h	2009-06-10 21:59:35.000000000 +0200
+@@ -481,7 +481,7 @@ int socketpair(int d, int type, int prot
+ 
+ #define SIOCDEVPRIVATE	0x89F0		/* to 89FF */
+ 
+-#define _LINUX_SOCKET_H
++// #define _LINUX_SOCKET_H
+ 
+ __END_DECLS
+ 

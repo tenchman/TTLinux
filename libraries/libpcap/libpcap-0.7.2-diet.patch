@@ -1,0 +1,40 @@
+--- libpcap-0.7.2--/pcap-linux.c.diet	2003-09-02 11:09:13.000000000 +0200
++++ libpcap-0.7.2--/pcap-linux.c	2003-09-02 11:10:52.000000000 +0200
+@@ -140,7 +140,7 @@
+ #include <linux/filter.h>
+ #endif
+ 
+-#ifndef __GLIBC__
++#if !defined(__GLIBC__) && !defined(__dietlibc__)
+ typedef int		socklen_t;
+ #endif
+ 
+--- libpcap-0.7.2--/dietit.sh.diet	2003-09-04 09:28:26.000000000 +0200
++++ libpcap-0.7.2--/dietit.sh	2003-09-04 09:49:30.000000000 +0200
+@@ -0,0 +1,26 @@
++DIETINC=/opt/diet/include
++SYSINC=/usr/include
++
++HEADERS="linux/if_ether.h linux/if_packet.h linux/filter.h"
++
++echo "==== linking missing headers ===="
++for h in $HEADERS; do
++  if [ ! -e $DIETINC/$h ]; then
++    ln -sf $SYSINC/$h $DIETINC/$h && echo $h >> .linked
++  fi
++done
++echo "============= done =============="
++
++CC="diet -Os gcc -nostdinc -D_BSD_SOURCE" ./configure --prefix=/opt/diet
++
++make
++
++HEADERS=`cat .linked 2> /dev/null`
++if [ "$HEADERS" != "" ]; then
++  echo "========== cleaning up =========="
++  for h in $HEADERS; do
++    rm -f $DIETINC/$h && echo "$DIETINC/$h removed..."
++  done
++  echo "============= done =============="
++  rm -f .linked
++fi

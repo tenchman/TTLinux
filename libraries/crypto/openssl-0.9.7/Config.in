@@ -1,0 +1,113 @@
+# vim:set syntax=kconfig:
+menu "OpenSSL"
+config CONFIG_OPENSSL
+  bool "OpenSSL"
+  default n
+  help
+    The OpenSSL toolkit provides support for secure communications between
+    machines. OpenSSL includes a certificate management tool and shared
+    libraries which provide various cryptographic algorithms and
+    protocols.
+
+    http://www.openssl.org/
+
+menu "Ciphers"
+  config CONFIG_OPENSSL_AES
+    bool "  AES"
+    default y
+
+  config CONFIG_OPENSSL_BF
+    bool "  BF"
+    default n
+
+  config CONFIG_OPENSSL_CAST
+    bool "  CAST"
+    default n
+
+  config CONFIG_OPENSSL_DES
+    bool "  DES"
+    default n
+
+  config CONFIG_OPENSSL_DSA
+    bool "  DSA"
+    default y
+  
+  config CONFIG_OPENSSL_IDEA
+    bool "  Idea"
+    default n
+  
+  config CONFIG_OPENSSL_RSA
+    bool "  RSA"
+    default n
+  
+  config CONFIG_OPENSSL_RIPEMD
+    bool "  RIPEMD"
+    default n
+
+  config CONFIG_OPENSSL_RC2
+    bool "  RC2"
+    default n
+
+  config CONFIG_OPENSSL_RC5
+    bool "  RC5"
+    default n
+endmenu
+
+menu "Digests (Hash functions)"
+  config CONFIG_OPENSSL_MD2
+    bool "  Md2 digest algorithm"
+    default n
+
+  config CONFIG_OPENSSL_MD4
+    bool "  Md4 digest algorithm"
+    default n
+
+  config CONFIG_OPENSSL_MD5
+    bool "  Md5 digest algorithm"
+    default y
+
+  config CONFIG_OPENSSL_MDC2
+    bool "  MDC2 digest algorithm"
+    default n
+
+  config CONFIG_OPENSSL_RMD160
+    bool "  RMD160 digest algorithm"
+    default n
+  
+  config CONFIG_OPENSSL_SHA
+    bool "  SHA digest algorithm"
+    default y
+endmenu
+
+config CONFIG_OPENSSL_ENGINE
+  bool "  Engine"
+
+config CONFIG_OPENSSL_ERR
+  bool "  Err"
+
+config CONFIG_OPENSSL_HW
+  bool "  HW"
+
+config CONFIG_OPENSSL_THREADS
+  bool "  Build with Threads"
+
+config CONFIG_OPENSSL_KRB5
+  bool "  Kerberos 5 support"
+  default n
+  select CONFIG_KERBEROS5
+
+config CONFIG_OPENSSL_OCSP
+  bool "  OCSP support"
+
+config CONFIG_OPENSSL_PKCS12
+  bool "  PKCS12 support"
+
+config CONFIG_OPENSSL_SSLV2
+  bool "  SSLv2 support"
+
+config CONFIG_OPENSSL_SSLV3
+  bool "  SSLv3 support"
+
+config CONFIG_OPENSSL_TLS1
+  bool "  TLS1 support"
+endmenu

@@ -1,0 +1,11 @@
+--- libtar-1.2.11/lib/append.c.patchit	2008-07-24 11:37:04.000000000 +0200
++++ libtar-1.2.11/lib/append.c	2008-07-24 11:37:33.000000000 +0200
+@@ -191,7 +191,7 @@ tar_append_eof(TAR *t)
+ 	char block[T_BLOCKSIZE];
+ 
+ 	memset(&block, 0, T_BLOCKSIZE);
+-	for (j = 0; j < 2; j++)
++	for (j = 0; j < 4; j++)
+ 	{
+ 		i = tar_block_write(t, &block);
+ 		if (i != T_BLOCKSIZE)

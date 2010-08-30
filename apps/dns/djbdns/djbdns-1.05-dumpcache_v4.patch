@@ -1,0 +1,564 @@
+--- djbdns-1.05/CHANGES.cachedump	2001-02-11 22:11:45.000000000 +0100
++++ djbdns-1.05/CHANGES	2003-09-19 19:09:49.000000000 +0200
+@@ -374,3 +374,5 @@
+ 	ui: servers print starting message.
+ 	internal: some respond() declarations.
+ 	version: djbdns 1.05.
++20010313
++	patch: to dump and reload the cache
+--- djbdns-1.05/Makefile.cachedump	2001-02-11 22:11:45.000000000 +0100
++++ djbdns-1.05/Makefile	2003-09-19 19:09:49.000000000 +0200
+@@ -4,6 +4,8 @@
+ 
+ default: it
+ 
++include Makefile.sig
++
+ alloc.a: \
+ makelib alloc.o alloc_re.o getln.o getln2.o stralloc_cat.o \
+ stralloc_catb.o stralloc_cats.o stralloc_copy.o stralloc_eady.o \
+@@ -149,13 +151,13 @@
+ 
+ cache.o: \
+ compile cache.c alloc.h byte.h uint32.h exit.h tai.h uint64.h cache.h \
+-uint32.h uint64.h
++uint32.h uint64.h env.h error.h open.h openreadclose.h
+ 	./compile cache.c
+ 
+ cachetest: \
+-load cachetest.o cache.o libtai.a buffer.a alloc.a unix.a byte.a
+-	./load cachetest cache.o libtai.a buffer.a alloc.a unix.a \
+-	byte.a 
++load cachetest.o cache.o libtai.a buffer.a alloc.a unix.a byte.a env.a
++	./load cachetest cache.o libtai.a buffer.a unix.a env.a \
++	alloc.a byte.a
+ 
+ cachetest.o: \
+ compile cachetest.c buffer.h exit.h cache.h uint32.h uint64.h str.h
+@@ -320,10 +322,10 @@
+ dnscache: \
+ load dnscache.o droproot.o okclient.o log.o cache.o query.o \
+ response.o dd.o roots.o iopause.o prot.o dns.a env.a alloc.a buffer.a \
+-libtai.a unix.a byte.a socket.lib
++libtai.a unix.a byte.a sig.a socket.lib
+ 	./load dnscache droproot.o okclient.o log.o cache.o \
+ 	query.o response.o dd.o roots.o iopause.o prot.o dns.a \
+-	env.a alloc.a buffer.a libtai.a unix.a byte.a  `cat \
++	env.a alloc.a buffer.a libtai.a unix.a byte.a sig.a  `cat \
+ 	socket.lib`
+ 
+ dnscache-conf: \
+--- djbdns-1.05/Makefile.sig.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/Makefile.sig	2003-09-19 19:09:49.000000000 +0200
+@@ -0,0 +1,27 @@
++sig.o: \
++compile sig.c sig.h
++	./compile sig.c
++
++sig_block.o: \
++compile sig_block.c sig.h hassgprm.h
++	./compile sig_block.c
++
++sig_catch.o: \
++compile sig_catch.c sig.h hassgact.h
++	./compile sig_catch.c
++
++sig_pause.o: \
++compile sig_pause.c sig.h hassgprm.h
++	./compile sig_pause.c
++
++sig.a: \
++makelib sig.o sig_block.o sig_catch.o sig_pause.o
++	./makelib sig.a sig.o sig_block.o sig_catch.o sig_pause.o
++
++hassgact.h: \
++choose compile load trysgact.c hassgact.h1 hassgact.h2
++	./choose cl trysgact hassgact.h1 hassgact.h2 > hassgact.h
++
++hassgprm.h: \
++choose compile load trysgprm.c hassgprm.h1 hassgprm.h2
++	./choose cl trysgprm hassgprm.h1 hassgprm.h2 > hassgprm.h
+--- djbdns-1.05/README.cachedump	2001-02-11 22:11:45.000000000 +0100
++++ djbdns-1.05/README	2003-09-19 19:09:49.000000000 +0200
+@@ -1,3 +1,9 @@
++patchlevel fg1
++20010313
++by Florent Guillaume <florent.guillaume@mail.com>
++patch home page: http://mapage.noos.fr/efgeor/djbdns/index.html
++Uses parts of Felix von Leitner's djb-0.5.2 package: http://www.fefe.de/djb/
++
+ djbdns 1.05
+ 20010211
+ Copyright 2001
+--- djbdns-1.05/SYSDEPS.cachedump	2001-02-11 22:11:45.000000000 +0100
++++ djbdns-1.05/SYSDEPS	2003-09-19 19:09:49.000000000 +0200
+@@ -7,4 +7,6 @@
+ direntry.h
+ hasshsgr.h
+ hasdevtcp.h
++hassgact.h
++hassgprm.h
+ socket.lib
+--- djbdns-1.05/TARGETS.cachedump	2001-02-11 22:11:45.000000000 +0100
++++ djbdns-1.05/TARGETS	2003-09-19 19:09:49.000000000 +0200
+@@ -214,3 +214,10 @@
+ it
+ setup
+ check
++sig.o
++sig.a
++sig_catch.o
++sig_block.o
++hassgact.h
++hassgprm.h
++sig_pause.o
+--- djbdns-1.05/VERSION.cachedump	2001-02-11 22:11:45.000000000 +0100
++++ djbdns-1.05/VERSION	2003-09-19 19:09:49.000000000 +0200
+@@ -1 +1 @@
+-djbdns 1.05
++djbdns 1.05-fg1
+--- djbdns-1.05/cache.c.cachedump	2001-02-11 22:11:45.000000000 +0100
++++ djbdns-1.05/cache.c	2003-09-19 19:09:49.000000000 +0200
+@@ -1,3 +1,11 @@
++#ifdef DUMPCACHE
++#include <stdio.h>
++#include <unistd.h>
++#include "env.h"
++#include "error.h"
++#include "open.h"
++#include "openreadclose.h"
++#endif
+ #include "alloc.h"
+ #include "byte.h"
+ #include "uint32.h"
+@@ -205,3 +213,97 @@
+ 
+   return 1;
+ }
++
++#ifdef DUMPCACHE
++static int fd;
++
++static int cache_writeline(const char *buf, unsigned int len)
++{
++  int w;
++
++  while (len) {
++    w = write(fd,buf,len);
++    if (w == -1) {
++      if (errno == error_intr) continue;
++      close(fd);
++      return -1;
++    }
++    buf += w;
++    len -= w;
++  }
++  return 0;
++}
++
++int cache_dump(void)
++{
++  static char *fn;
++  static char *fntmp;
++  uint32 pos;
++  unsigned int len;
++
++  fn = env_get("DUMPCACHE");
++  if (!fn) return 999;
++  fntmp = env_get("DUMPCACHETMP");
++  if (!fntmp) return 999;
++  fd = open_trunc(fntmp);
++  if (fd == -1) return -1;
++
++  pos = oldest;
++  while (pos < unused) {
++    len = get4(pos + 4) + get4(pos + 8) + 16;
++    if (cache_writeline(x + pos + 4, len)) return -1;
++    pos += 4 + len;
++  }
++  pos = hsize;
++  while (pos < writer) {
++    len = get4(pos + 4) + get4(pos + 8) + 16;
++    if (cache_writeline(x + pos + 4, len)) return -1;
++    pos += 4 + len;
++  }
++
++  if (fsync(fd) == -1) return -1;
++  if (close(fd) == -1) return -1;
++  if (rename(fntmp,fn) == -1) return -1;
++  return 0;
++}
++
++int cache_slurp(const char *fn)
++{
++  static stralloc buf = {0};
++  char *p;
++  uint32 pos;
++  unsigned int len;
++  uint32 keylen;
++  uint32 datalen;
++  struct tai now;
++  struct tai expire;
++  int nb;
++
++  if (openreadclose(fn,&buf,16384) != 1) goto DIE;
++  tai_now(&now);
++  p = buf.s;
++  pos = 0;
++  len = buf.len;
++  nb = 0;
++  while (pos + 16 <= len) {
++    uint32_unpack(p + pos, &keylen);
++    uint32_unpack(p + pos + 4, &datalen);
++    tai_unpack(p + pos + 8, &expire);
++    pos += 16;
++    if (pos + keylen + datalen > len) break; /* missing data */
++    if (!tai_less(&expire,&now)) {
++      tai_sub(&expire,&expire,&now);
++      cache_set(p + pos, keylen, p + pos + keylen, datalen, (unsigned int)expire.x);
++    }
++    pos += keylen + datalen;
++    nb++;
++  }
++  alloc_free(buf.s); buf.s = 0;
++  return nb;
++
++ DIE:
++  alloc_free(buf.s); buf.s = 0;
++  if (errno == error_noent) return 0;
++  return -1;
++}
++#endif
+--- djbdns-1.05/cache.h.cachedump	2001-02-11 22:11:45.000000000 +0100
++++ djbdns-1.05/cache.h	2003-09-19 19:09:49.000000000 +0200
+@@ -8,5 +8,9 @@
+ extern int cache_init(unsigned int);
+ extern void cache_set(const char *,unsigned int,const char *,unsigned int,uint32);
+ extern char *cache_get(const char *,unsigned int,unsigned int *,uint32 *);
++#ifdef DUMPCACHE
++extern int cache_dump(void);
++extern int cache_slurp(const char *);
++#endif
+ 
+ #endif
+--- djbdns-1.05/conf-cc.cachedump	2001-02-11 22:11:45.000000000 +0100
++++ djbdns-1.05/conf-cc	2003-09-19 19:09:49.000000000 +0200
+@@ -1,3 +1,3 @@
+-gcc -O2 -Wimplicit -Wunused -Wcomment -Wchar-subscripts -Wuninitialized -Wshadow -Wcast-qual -Wcast-align -Wwrite-strings
++gcc -O2 -Wimplicit -Wunused -Wcomment -Wchar-subscripts -Wuninitialized -Wshadow -Wcast-qual -Wcast-align -Wwrite-strings -DDUMPCACHE
+ 
+ This will be used to compile .c files.
+--- djbdns-1.05/dnscache-conf.c.cachedump	2001-02-11 22:11:45.000000000 +0100
++++ djbdns-1.05/dnscache-conf.c	2003-09-19 19:09:49.000000000 +0200
+@@ -32,6 +32,10 @@
+ char *user;
+ char *loguser;
+ struct passwd *pw;
++#ifdef DUMPCACHE
++int useruid;
++int usergid;
++#endif
+ const char *myip;
+ 
+ uint32 seed[32];
+@@ -81,6 +85,14 @@
+   myip = argv[4];
+   if (!myip) myip = "127.0.0.1";
+ 
++#ifdef DUMPCACHE
++  pw = getpwnam(user);
++  seed_addtime();
++  if (!pw)
++    strerr_die3x(111,FATAL,"unknown account ",user);
++  useruid = pw->pw_uid;
++  usergid = pw->pw_gid;
++#endif
+   pw = getpwnam(loguser);
+   seed_addtime();
+   if (!pw)
+@@ -120,6 +132,14 @@
+   seed_addtime(); perm(0644);
+   seed_addtime(); start("env/DATALIMIT"); outs("3000000\n"); finish();
+   seed_addtime(); perm(0644);
++#ifdef DUMPCACHE
++  seed_addtime(); start("env/SLURPCACHE"); outs("dump/slurpcache\n"); finish();
++  seed_addtime(); perm(0644);
++  seed_addtime(); start("env/DUMPCACHE"); outs("dump/dumpcache\n"); finish();
++  seed_addtime(); perm(0644);
++  seed_addtime(); start("env/DUMPCACHETMP"); outs("dump/dumpcache.tmp\n"); finish();
++  seed_addtime(); perm(0644);
++#endif
+   seed_addtime(); start("run");
+   outs("#!/bin/sh\nexec 2>&1\nexec <seed\nexec envdir ./env sh -c '\n  exec envuidgid "); outs(user);
+   outs(" softlimit -o250 -d \"$DATALIMIT\" ");
+@@ -131,6 +151,11 @@
+   seed_addtime(); perm(0755);
+   seed_addtime(); makedir("root");
+   seed_addtime(); perm(02755);
++#ifdef DUMPCACHE
++  seed_addtime(); makedir("root/dump");
++  seed_addtime(); owner(useruid,usergid);
++  seed_addtime(); perm(02755);
++#endif
+   seed_addtime(); makedir("root/ip");
+   seed_addtime(); perm(02755);
+   seed_addtime(); start("root/ip/127.0.0.1"); finish();
+--- djbdns-1.05/dnscache.c.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/dnscache.c	2003-09-19 19:14:47.000000000 +0200
+@@ -23,6 +23,9 @@
+ #include "log.h"
+ #include "okclient.h"
+ #include "droproot.h"
++#ifdef DUMPCACHE
++#include "sig.h"
++#endif
+ 
+ stralloc ignoreip = {0};
+ 
+@@ -317,6 +320,17 @@
+   log_tcpopen(x->ip,x->port);
+ }
+ 
++#ifdef DUMPCACHE
++static void do_dump(void)
++{
++  int r;
++  r = cache_dump();
++  if (r < 0)
++    r = errno;
++  log_dump(r);
++}
++#endif
++
+ #define FATAL "dnscache: fatal: "
+ 
+ iopause_fd *io = 0;
+@@ -487,6 +501,16 @@
+   scan_ulong(x,&cachesize);
+   if (!cache_init(cachesize))
+     strerr_die3x(111,FATAL,"not enough memory for cache of size ",x);
++#ifdef DUMPCACHE
++  x = env_get("SLURPCACHE");
++  if (x) {
++    int nb = cache_slurp(x);
++    if (nb < 0)
++      strerr_die4sys(111,FATAL,"unable to slurp cache ",x," : ");
++    else
++      log_slurp(nb);
++  }
++#endif
+ 
+   if (openreadclose("ignoreip",&ignoreip,64) < 0) 
+     strerr_die2x(111,FATAL,"trouble reading ignoreip");
+@@ -516,6 +540,11 @@
+       strerr_die4sys(111,FATAL,"unable to listen on TCP socket for IP ",iperr,": ");
+     }
+ 
++#ifdef DUMPCACHE
++  sig_catch(sig_alarm, do_dump);
++  sig_catch(sig_term, do_dump);
++#endif
++
+   log_startup();
+   doit();
+ }
+--- djbdns-1.05/hassgact.h1.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/hassgact.h1	2003-09-19 19:09:49.000000000 +0200
+@@ -0,0 +1 @@
++/* sysdep: -sigaction */
+--- djbdns-1.05/hassgact.h2.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/hassgact.h2	2003-09-19 19:09:49.000000000 +0200
+@@ -0,0 +1,2 @@
++/* sysdep: +sigaction */
++#define HASSIGACTION 1
+--- djbdns-1.05/hassgprm.h1.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/hassgprm.h1	2003-09-19 19:09:49.000000000 +0200
+@@ -0,0 +1 @@
++/* sysdep: -sigprocmask */
+--- djbdns-1.05/hassgprm.h2.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/hassgprm.h2	2003-09-19 19:09:49.000000000 +0200
+@@ -0,0 +1,2 @@
++/* sysdep: +sigprocmask */
++#define HASSIGPROCMASK 1
+--- djbdns-1.05/log.c.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/log.c	2003-09-19 19:09:49.000000000 +0200
+@@ -101,6 +101,20 @@
+   line();
+ }
+ 
++#ifdef DUMPCACHE
++void log_slurp(int nb)
++{
++  string("slurp "); number(nb);
++  line();
++}
++
++void log_dump(int err)
++{
++  string("dump "); number(err);
++  line();
++}
++#endif
++
+ void log_query(uint64 *qnum,const char client[4],unsigned int port,const char id[2],const char *q,const char qtype[2])
+ {
+   string("query "); number(*qnum); space();
+--- djbdns-1.05/log.h.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/log.h	2003-09-19 19:15:53.000000000 +0200
+@@ -4,6 +4,10 @@
+ #include "uint64.h"
+ 
+ extern void log_startup(void);
++#ifdef DUMPCACHE
++extern void log_slurp(int);
++extern void log_dump(int);
++#endif
+ extern void log_listen(const char *);
+ 
+ extern void log_query(uint64 *,const char *,unsigned int,const char *,const char *,const char *);
+--- djbdns-1.05/sig.c.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/sig.c	2003-09-19 19:09:49.000000000 +0200
+@@ -0,0 +1,12 @@
++#include <signal.h>
++#include "sig.h"
++
++int sig_alarm = SIGALRM;
++int sig_child = SIGCHLD;
++int sig_cont = SIGCONT;
++int sig_hangup = SIGHUP;
++int sig_pipe = SIGPIPE;
++int sig_term = SIGTERM;
++
++void (*sig_defaulthandler)() = SIG_DFL;
++void (*sig_ignorehandler)() = SIG_IGN;
+--- djbdns-1.05/sig.h.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/sig.h	2003-09-19 19:09:49.000000000 +0200
+@@ -0,0 +1,25 @@
++#ifndef SIG_H
++#define SIG_H
++
++extern int sig_alarm;
++extern int sig_child;
++extern int sig_cont;
++extern int sig_hangup;
++extern int sig_pipe;
++extern int sig_term;
++
++extern void (*sig_defaulthandler)();
++extern void (*sig_ignorehandler)();
++
++extern void sig_catch(int,void (*)());
++#define sig_ignore(s) (sig_catch((s),sig_ignorehandler))
++#define sig_uncatch(s) (sig_catch((s),sig_defaulthandler))
++
++extern void sig_block(int);
++extern void sig_unblock(int);
++extern void sig_blocknone(void);
++extern void sig_pause(void);
++
++extern void sig_dfl(int);
++
++#endif
+--- djbdns-1.05/sig_block.c.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/sig_block.c	2003-09-19 19:09:49.000000000 +0200
+@@ -0,0 +1,38 @@
++#include <signal.h>
++#include "sig.h"
++#include "hassgprm.h"
++
++void sig_block(int sig)
++{
++#ifdef HASSIGPROCMASK
++  sigset_t ss;
++  sigemptyset(&ss);
++  sigaddset(&ss,sig);
++  sigprocmask(SIG_BLOCK,&ss,(sigset_t *) 0);
++#else
++  sigblock(1 << (sig - 1));
++#endif
++}
++
++void sig_unblock(int sig)
++{
++#ifdef HASSIGPROCMASK
++  sigset_t ss;
++  sigemptyset(&ss);
++  sigaddset(&ss,sig);
++  sigprocmask(SIG_UNBLOCK,&ss,(sigset_t *) 0);
++#else
++  sigsetmask(sigsetmask(~0) & ~(1 << (sig - 1)));
++#endif
++}
++
++void sig_blocknone(void)
++{
++#ifdef HASSIGPROCMASK
++  sigset_t ss;
++  sigemptyset(&ss);
++  sigprocmask(SIG_SETMASK,&ss,(sigset_t *) 0);
++#else
++  sigsetmask(0);
++#endif
++}
+--- djbdns-1.05/sig_catch.c.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/sig_catch.c	2003-09-19 19:09:49.000000000 +0200
+@@ -0,0 +1,16 @@
++#include <signal.h>
++#include "sig.h"
++#include "hassgact.h"
++
++void sig_catch(int sig,void (*f)())
++{
++#ifdef HASSIGACTION
++  struct sigaction sa;
++  sa.sa_handler = f;
++  sa.sa_flags = 0;
++  sigemptyset(&sa.sa_mask);
++  sigaction(sig,&sa,(struct sigaction *) 0);
++#else
++  signal(sig,f); /* won't work under System V, even nowadays---dorks */
++#endif
++}
+--- djbdns-1.05/sig_pause.c.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/sig_pause.c	2003-09-19 19:09:49.000000000 +0200
+@@ -0,0 +1,14 @@
++#include <signal.h>
++#include "sig.h"
++#include "hassgprm.h"
++
++void sig_pause(void)
++{
++#ifdef HASSIGPROCMASK
++  sigset_t ss;
++  sigemptyset(&ss);
++  sigsuspend(&ss);
++#else
++  sigpause(0);
++#endif
++}
+--- djbdns-1.05/trysgact.c.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/trysgact.c	2003-09-19 19:09:49.000000000 +0200
+@@ -0,0 +1,10 @@
++#include <signal.h>
++
++main()
++{
++  struct sigaction sa;
++  sa.sa_handler = 0;
++  sa.sa_flags = 0;
++  sigemptyset(&sa.sa_mask);
++  sigaction(0,&sa,(struct sigaction *) 0);
++}
+--- djbdns-1.05/trysgprm.c.cachedump	2003-09-19 19:09:49.000000000 +0200
++++ djbdns-1.05/trysgprm.c	2003-09-19 19:09:49.000000000 +0200
+@@ -0,0 +1,10 @@
++#include <signal.h>
++
++main()
++{
++  sigset_t ss;
++ 
++  sigemptyset(&ss);
++  sigaddset(&ss,SIGCHLD);
++  sigprocmask(SIG_SETMASK,&ss,(sigset_t *) 0);
++}

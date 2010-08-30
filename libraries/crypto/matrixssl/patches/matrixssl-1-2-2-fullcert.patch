@@ -1,0 +1,11 @@
+--- matrixssl-1-2-2/src/crypto/cryptoLayer.h.fullcert	2004-11-12 14:00:43.628962528 +0100
++++ matrixssl-1-2-2/src/crypto/cryptoLayer.h	2004-11-12 14:01:00.514395552 +0100
+@@ -106,7 +106,7 @@
+ /*
+ 	Misc support
+ */
+-/* #define USE_FULL_CERT_PARSE */
++#define USE_FULL_CERT_PARSE
+ /* #define USE_MD2 */
+ 
+ /*

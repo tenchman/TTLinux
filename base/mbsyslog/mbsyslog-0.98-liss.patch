@@ -1,0 +1,52 @@
+diff -up mbsyslog-0.98/Makefile.liss mbsyslog-0.98/Makefile
+--- mbsyslog-0.98/Makefile.liss	2001-08-17 21:13:00.000000000 +0200
++++ mbsyslog-0.98/Makefile	2008-03-18 19:08:06.000000000 +0100
+@@ -16,8 +16,7 @@ CFLAGS=-Wall
+ all: $(SYSLOGD_GLUE) $(KLOGD) $(SYSLOGD_INET) $(SYSLOGD_POLICY)
+ 
+ install: all
+-	strip $(SYSLOGD_GLUE) $(KLOGD) $(SYSLOGD_INET) $(SYSLOGD_POLICY)
+-	./doinstall
++	./doinstall $(INSTDIR)
+ 
+ check:
+ 	./docheck
+diff -up mbsyslog-0.98/klogd.c.liss mbsyslog-0.98/klogd.c
+--- mbsyslog-0.98/klogd.c.liss	2001-08-17 21:13:00.000000000 +0200
++++ mbsyslog-0.98/klogd.c	2008-03-18 18:10:09.000000000 +0100
+@@ -42,7 +42,7 @@ int log(int sd,char *buf)
+ 		if ((buf = strchr(buf,'>')))
+ 			buf++;
+ 	}
+-	snprintf(line,MBSL_MAXLINE,"<%u>+%s %s kernel: %s",pri,nowstr(),node(),buf);
++	snprintf(line,MBSL_MAXLINE,"<%u>%s kernel: %s",pri,nowstr(),buf);
+ 
+ 	if (fullwrite(sd,line,strlen(line)+1) == -1) {
+ 		fprintf(stderr,ERRMSG"write(): %s\n",se());
+@@ -63,11 +63,9 @@ int main(void)
+ 	if ((fd = open_klog()) == -1)
+ 		return -1;
+ 
+-	dropprivs(IDENT,1,NULL,ERRMSG);	/* chroot, don't setuid */
+-
+ 		{	/* announce startup */
+ 	char msg[MBSL_MAXLINE+1];
+-	snprintf(msg,MBSL_MAXLINE,"klogd %s started",MBSL_VERSION);
++	snprintf(msg,MBSL_MAXLINE,"<6>klogd %s started",MBSL_VERSION);
+ 	log(sd,msg);
+ 		}
+ 
+diff -up mbsyslog-0.98/doinstall.liss mbsyslog-0.98/doinstall
+--- mbsyslog-0.98/doinstall.liss	2001-08-17 21:13:00.000000000 +0200
++++ mbsyslog-0.98/doinstall	2008-03-18 18:10:09.000000000 +0100
+@@ -7,7 +7,9 @@
+ ##
+ 
+ . targets
+-inst=$INSTALLDIR
++inst=${1}/bin
++
++[ -d $inst ] || mkdir -p $inst
+ 
+ if test -w $inst
+ then

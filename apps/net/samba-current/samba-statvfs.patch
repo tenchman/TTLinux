@@ -1,0 +1,20 @@
+--- source/smbd/statvfs.c.statvfs	2006-09-13 20:53:32.000000000 +0200
++++ source/smbd/statvfs.c	2006-09-13 20:54:32.000000000 +0200
+@@ -21,7 +21,7 @@
+ 
+ #include "includes.h"
+ 
+-#if defined(LINUX)
++#if defined(LINUX) && defined(HAVE_SYS_STATVFS_H)
+ static int linux_statvfs(const char *path, vfs_statvfs_struct *statbuf)
+ {
+ 	struct statvfs statvfs_buf;
+@@ -51,7 +51,7 @@
+ */
+ int sys_statvfs(const char *path, vfs_statvfs_struct *statbuf)
+ {
+-#if defined(LINUX)
++#if defined(LINUX) && defined(HAVE_SYS_STATVFS_H)
+ 	return linux_statvfs(path, statbuf);
+ #else
+ 	/* BB change this to return invalid level */

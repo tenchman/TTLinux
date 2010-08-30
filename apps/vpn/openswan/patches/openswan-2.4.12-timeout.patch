@@ -1,0 +1,23 @@
+diff -up openswan-2.4.12/programs/pluto/demux.c.timeout openswan-2.4.12/programs/pluto/demux.c
+--- openswan-2.4.12/programs/pluto/demux.c.timeout	2009-03-23 09:00:05.000000000 +0100
++++ openswan-2.4.12/programs/pluto/demux.c	2009-03-23 12:32:00.000000000 +0100
+@@ -695,12 +695,18 @@ static bool
+ check_msg_errqueue(const struct iface_port *ifp, short interest)
+ {
+     struct pollfd pfd;
++    
++    if (ifp->change == IFN_DELETE) {
++      openswan_log("interface %s (fd %d) is already down",
++	  ifp->ip_dev->id_vname, ifp->fd);
++      return 0;
++    }
+ 
+     pfd.fd = ifp->fd;
+     pfd.events = interest | POLLPRI | POLLOUT;
+ 
+     while (pfd.revents = 0
+-    , poll(&pfd, 1, -1) > 0 && (pfd.revents & POLLERR))
++    , poll(&pfd, 1, 10000) > 0 && (pfd.revents & POLLERR))
+     {
+ 	u_int8_t buffer[3000];	/* hope that this is big enough */
+ 	union

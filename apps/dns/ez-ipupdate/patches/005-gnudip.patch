@@ -1,0 +1,30 @@
+--- ez-ipupdate-3.0.11b8/ez-ipupdate.c.gnudip	2008-10-17 14:07:12.000000000 +0200
++++ ez-ipupdate-3.0.11b8/ez-ipupdate.c	2008-10-17 14:10:09.000000000 +0200
+@@ -3426,14 +3426,6 @@ int GNUDIP_check_info(void)
+     chomp(host);
+   }
+ 
+-  if((address) && (strcmp(address, "0.0.0.0") != 0))
+-  {
+-    if(!(options & OPT_QUIET))
+-    {
+-      fprintf(stderr, "warning: for GNUDIP the \"address\" parameter is only used if set to \"0.0.0.0\" thus making an offline request\n");
+-    }
+-  }
+-
+   warn_fields(service->fields_used);
+ 
+   return 0;
+@@ -3503,7 +3495,11 @@ int GNUDIP_update_entry(void)
+ 
+   dprintf((stderr, "auth: %s\n", auth));
+ 
+-  snprintf(buf, BUFFER_SIZE, "%s:%s:%s:%s\n", user_name, auth, domainname,
++  if (address)
++    snprintf(buf, BUFFER_SIZE, "%s:%s:%s:%s:%s\n", user_name, auth, domainname,
++      gnudip_request, address);
++  else
++    snprintf(buf, BUFFER_SIZE, "%s:%s:%s:%s\n", user_name, auth, domainname,
+       gnudip_request);
+   output(buf);
+ 

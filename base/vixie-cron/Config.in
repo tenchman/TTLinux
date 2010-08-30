@@ -1,0 +1,11 @@
+# vim:set syntax=kconfig:
+config CONFIG_CRON
+  bool "vixie cron - A daemon for executing specified programs at set times"
+  default n
+  help
+    The vixie-cron package contains the Vixie version of cron.  Cron is a
+    standard UNIX daemon that runs specified programs at scheduled times.
+    Vixie cron adds better security and more powerful configuration
+    options to the standard version of cron.
+
+    

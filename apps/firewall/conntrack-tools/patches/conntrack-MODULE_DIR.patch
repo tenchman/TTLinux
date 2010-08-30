@@ -1,0 +1,11 @@
+--- conntrack-tools-0.9.3/configure.in.MODULE_DIR	2007-04-17 22:33:23.000000000 +0200
++++ conntrack-tools-0.9.3/configure.in	2007-04-17 22:33:48.000000000 +0200
+@@ -91,7 +91,7 @@
+ dnl--------------------------------
+ 
+ if test ! -z "$libdir"; then
+-   MODULE_DIR="\\\"$libdir/conntrack/\\\""
++   MODULE_DIR="\\\"$libdir/conntrack-tools/\\\""
+    CFLAGS="$CFLAGS -DCONNTRACK_LIB_DIR=$MODULE_DIR"
+ fi
+ 

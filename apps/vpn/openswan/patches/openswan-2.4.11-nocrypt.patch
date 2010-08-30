@@ -1,0 +1,18 @@
+diff -up openswan2-2.4.11/lib/libcrypto/libdes/fcrypt.c.nocrypt openswan2-2.4.11/lib/libcrypto/libdes/fcrypt.c
+--- openswan2-2.4.11/lib/libcrypto/libdes/fcrypt.c.nocrypt	2008-02-04 09:26:40.000000000 +0100
++++ openswan2-2.4.11/lib/libcrypto/libdes/fcrypt.c	2008-02-04 09:27:13.000000000 +0100
+@@ -13,7 +13,7 @@
+  * definition is the maximum of lenght of password and can changed. I have
+  * defined 24.
+  */
+-
++#ifndef __dietlibc__
+ #include "des/des_locl.h"
+ 
+ /* Added more values to handle illegal salt values the way normal
+@@ -149,4 +149,5 @@ r=(r+7)/8;
+ 	ret[13]='\0';
+ 	return(ret);
+ 	}
++#endif
+ 

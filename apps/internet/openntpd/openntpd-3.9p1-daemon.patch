@@ -1,0 +1,70 @@
+diff -up openntpd-3.9p1/ntpd.c.daemon openntpd-3.9p1/ntpd.c
+--- openntpd-3.9p1/ntpd.c.daemon	2006-05-14 07:29:23.000000000 +0200
++++ openntpd-3.9p1/ntpd.c	2009-02-18 15:40:30.000000000 +0100
+@@ -73,7 +73,7 @@ usage(void)
+ {
+ 	extern char *__progname;
+ 
+-	fprintf(stderr, "usage: %s [-dSs] [-f file]\n", __progname);
++	fprintf(stderr, "usage: %s [-dDsS] [-f file]\n", __progname);
+ 	exit(1);
+ }
+ 
+@@ -96,13 +96,18 @@ main(int argc, char *argv[])
+ 	conffile = CONFFILE;
+ 
+ 	bzero(&conf, sizeof(conf));
++	conf.daemonize = 1;
+ 
+ 	log_init(1);		/* log to stderr until daemonized */
+ 	res_init();		/* XXX */
+ 
+-	while ((ch = getopt(argc, argv, "df:sS")) != -1) {
++	while ((ch = getopt(argc, argv, "dDf:sS")) != -1) {
+ 		switch (ch) {
++		case 'D':
++			conf.daemonize = 0;
++			break;
+ 		case 'd':
++			conf.daemonize = 0;
+ 			conf.debug = 1;
+ 			break;
+ 		case 'f':
+@@ -140,7 +145,7 @@ main(int argc, char *argv[])
+ 
+ 	if (!conf.settime) {
+ 		log_init(conf.debug);
+-		if (!conf.debug)
++		if (conf.daemonize)
+ 			if (daemon(1, 0))
+ 				fatal("daemon");
+ 	} else
+@@ -183,7 +188,7 @@ main(int argc, char *argv[])
+ 			log_init(conf.debug);
+ 			log_debug("no reply received in time, skipping initial "
+ 			    "time setting");
+-			if (!conf.debug)
++			if (conf.daemonize)
+ 				if (daemon(1, 0))
+ 					fatal("daemon");
+ 		}
+@@ -292,7 +297,7 @@ dispatch_imsg(struct ntpd_conf *conf)
+ 			memcpy(&d, imsg.data, sizeof(d));
+ 			ntpd_settime(d);
+ 			/* daemonize now */
+-			if (!conf->debug)
++			if (conf->daemonize)
+ 				if (daemon(1, 0))
+ 					fatal("daemon");
+ 			conf->settime = 0;
+diff -up openntpd-3.9p1/ntpd.h.daemon openntpd-3.9p1/ntpd.h
+--- openntpd-3.9p1/ntpd.h.daemon	2009-02-18 15:32:41.000000000 +0100
++++ openntpd-3.9p1/ntpd.h	2009-02-18 15:32:41.000000000 +0100
+@@ -131,6 +131,7 @@ struct ntpd_conf {
+ 	u_int8_t				listen_all;
+ 	u_int8_t				settime;
+ 	u_int8_t				debug;
++	u_int8_t				daemonize;
+ 	u_int32_t				scale;
+ };
+ 

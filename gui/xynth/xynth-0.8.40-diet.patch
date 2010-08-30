@@ -1,0 +1,191 @@
+--- xynth-0.8.40/src/lib/xynth_.h.diet	2006-09-06 12:48:38.000000000 +0200
++++ xynth-0.8.40/src/lib/xynth_.h	2007-04-16 23:01:03.000000000 +0200
+@@ -105,6 +105,9 @@
+ 
+ #if defined(HAVE_POLL)
+ 	#include <sys/poll.h>
++#if defined(__dietlibc__)
++	typedef unsigned int nfds_t;
++#endif
+ #else
+ 	#define	POLLIN		0x0001
+ 	#define	POLLPRI		0x0002
+--- xynth-0.8.40/src/server/video/fb/fbdev.h.diet	2006-09-06 12:48:46.000000000 +0200
++++ xynth-0.8.40/src/server/video/fb/fbdev.h	2007-04-16 23:01:03.000000000 +0200
+@@ -17,7 +17,7 @@
+ 
+ #include <linux/fb.h>
+ 
+-struct {
++struct __fb {
+ 	int fd;
+ 	int bitsperpixel;
+ 	int bytesperpixel;
+@@ -25,7 +25,8 @@
+ 	struct fb_fix_screeninfo f_scr;
+ 	struct fb_var_screeninfo v_scr;
+ 	struct fb_var_screeninfo v_scro;
+-} fb;
++};
++extern struct __fb fb;
+ 
+ void fb_setpalette (int index, int red, int green, int blue);
+ void fb_getvaro (void);
+--- xynth-0.8.40/src/server/video/fb/fb.c.diet	2006-09-06 12:48:46.000000000 +0200
++++ xynth-0.8.40/src/server/video/fb/fb.c	2007-04-16 23:01:03.000000000 +0200
+@@ -25,6 +25,7 @@
+ #include "fbdev.h"
+ 
+ int fb_console_fd;
++struct __fb fb;
+ 
+ void fb_setpalette (int index, int red, int green, int blue)
+ {
+--- xynth-0.8.40/src/server/video/vesa/lrmi-0.10/lrmi.c.diet	2006-09-06 12:48:46.000000000 +0200
++++ xynth-0.8.40/src/server/video/vesa/lrmi-0.10/lrmi.c	2007-04-16 23:01:03.000000000 +0200
+@@ -31,7 +31,52 @@
+ 
+ #if defined(__linux__)
+ 
++#if defined(__dietlibc__)
++struct vm86_regs {
++	long ebx;
++	long ecx;
++	long edx;
++	long esi;
++	long edi;
++	long ebp;
++	long eax;
++	long __null_ds;
++	long __null_es;
++	long __null_fs;
++	long __null_gs;
++	long orig_eax;
++	long eip;
++	unsigned short cs, __csh;
++	long eflags;
++	long esp;
++	unsigned short ss, __ssh;
++	unsigned short es, __esh;
++	unsigned short ds, __dsh;
++	unsigned short fs, __fsh;
++	unsigned short gs, __gsh;
++};
++struct revectored_struct {
++	unsigned long __map[8];
++};
++struct vm86_struct {
++	struct vm86_regs regs;
++	unsigned long flags;
++	unsigned long screen_bitmap;
++	unsigned long cpu_type;
++	struct revectored_struct int_revectored;
++	struct revectored_struct int21_revectored;
++};
++#define TF_MASK         0x00000100
++#define IF_MASK         0x00000200
++#define IOPL_MASK       0x00003000
++#define VIF_MASK        0x00080000
++#define VM86_TYPE(retval)       ((retval) & 0xff)
++#define VM86_ARG(retval)        ((retval) >> 8)
++#define VM86_UNKNOWN    1
++#define VM86_INTx       2
++#else
+ #include <asm/vm86.h>
++#endif
+ #include <signal.h>
+ 
+ #ifdef USE_LIBC_VM86
+--- xynth-0.8.40/src/server/video/helper/mtrr.c.diet	2006-09-06 12:48:42.000000000 +0200
++++ xynth-0.8.40/src/server/video/helper/mtrr.c	2007-04-16 23:01:03.000000000 +0200
+@@ -15,8 +15,19 @@
+ 
+ #if defined(VIDEO_HELPER_MTRR)
+ 
+-#include <asm/mtrr.h>
+ #include <sys/ioctl.h>
++#if defined(__dietlibc__)
++struct mtrr_sentry
++{
++	unsigned long base;    /*  Base address     */
++	unsigned long size;    /*  Size of region   */
++	unsigned int type;     /*  Type of region   */
++};
++#define MTRR_TYPE_WRCOMB    1
++#define MTRRIOC_ADD_ENTRY   _IOW('M', 0, struct mtrr_sentry)
++#else
++#include <asm/mtrr.h>
++#endif
+ #include <fcntl.h>
+ 
+ #include "../../../lib/xynth_.h"
+--- xynth-0.8.40/src/server/server.c.diet	2006-09-06 12:48:47.000000000 +0200
++++ xynth-0.8.40/src/server/server.c	2007-04-16 23:01:03.000000000 +0200
+@@ -75,6 +75,7 @@
+ #endif
+ 	NULL,
+ };
++s_server_t *server;
+ 
+ int s_server_cfg_check_digit (char *ptr, char *digits)
+ {
+--- xynth-0.8.40/src/server/server.h.diet	2006-09-06 12:48:47.000000000 +0200
++++ xynth-0.8.40/src/server/server.h	2007-04-16 23:01:03.000000000 +0200
+@@ -186,7 +186,7 @@
+ 	int rotate_shm_id;
+ } s_server_t;
+ 
+-s_server_t *server;
++extern s_server_t *server;
+ 
+ /* event.c */
+ void s_server_event_parse_keyboard (s_keybd_driver_t *keybd);
+--- xynth-0.8.40/demo/term/term.c.diet	2006-09-06 12:47:44.000000000 +0200
++++ xynth-0.8.40/demo/term/term.c	2007-04-16 23:03:18.000000000 +0200
+@@ -22,6 +22,9 @@
+ #include <string.h>
+ #include <unistd.h>
+ #include <signal.h>
++#if defined(__dietlibc__)
++#include <termios.h>		      /* struct winsize */
++#endif
+ #include <sys/wait.h>
+ #include <sys/stat.h>
+ #include <sys/ioctl.h>
+@@ -76,7 +79,14 @@
+ 	int y1;
+ } scroll_reg = {1, SCREENH};
+ 
++#if defined(__dietlibc__)
++int getpt(void)
++{
++  return open("/dev/ptmx", O_RDWR|O_NOCTTY);
++}
++#else
+ extern int getpt (void);
++#endif
+ extern int grantpt (int);
+ extern int unlockpt (int);
+ 
+--- xynth-0.8.40/demo/desktop/desktop.h.diet	2006-09-06 12:47:53.000000000 +0200
++++ xynth-0.8.40/demo/desktop/desktop.h	2007-04-16 23:01:03.000000000 +0200
+@@ -24,7 +24,9 @@
+ #include <fcntl.h>
+ #include <time.h>
+ #include <unistd.h>
++#if !defined(__dietlibc__)
+ #include <sys/unistd.h>
++#endif
+ #include "xynth_.h"
+ 
+ typedef enum {
+--- xynth-0.8.40/Makefile.diet	2006-09-06 12:48:59.000000000 +0200
++++ xynth-0.8.40/Makefile	2007-04-16 23:04:03.000000000 +0200
+@@ -27,7 +27,6 @@
+ ifeq ($(PLATFORM_LINUX), Y)
+ 	mkdir -p $(INSTALLDIR)
+ 	cp -af dist/* $(INSTALLDIR)
+-	ldconfig
+ else
+ ifeq ($(PLATFORM_MINGW), Y)
+ 	mkdir -p c:/xynth

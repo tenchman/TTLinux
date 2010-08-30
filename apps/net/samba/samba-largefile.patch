@@ -1,0 +1,13 @@
+--- source/configurelargefile	2006-09-20 15:30:07.000000000 +0200
++++ source/configure	2006-09-20 15:31:01.000000000 +0200
+@@ -45290,8 +45290,8 @@
+ /* end confdefs.h.  */
+ 
+ #if defined(HAVE_LONGLONG) && (defined(HAVE_OFF64_T) || (defined(SIZEOF_OFF_T) && (SIZEOF_OFF_T == 8)))
+-#include <sys/types.h>
+-#else
++__COMPILE_ERROR_
++else
+ __COMPILE_ERROR_
+ #endif
+ 

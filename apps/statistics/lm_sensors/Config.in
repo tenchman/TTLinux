@@ -1,0 +1,24 @@
+# vim:set syntax=kconfig:
+config CONFIG_LM_SENSORS
+  bool "lm_sensors - Linux sensors drivers and hardware monitoring tools."
+  default n
+  depends CONFIG_SYSFSUTILS
+  help
+    lm_sensors  provides  essential  tools  and  drivers  for  monitoring  the
+    temperatures, voltages, and fans of Linux systems with hardware monitoring
+    devices. It contains Linux 2.4 drivers for  sensor chips and I2C and SMBus
+    masters, text-based  tools for sensor reporting, and a library for sensors
+    access  called "libsensors".  It also  contains tools for  sensor hardware
+    identification and I2C bus probing.
+
+    http://www.lm-sensors.org/
+  
+  config CONFIG_LM_SENSORS_SENSORD
+    bool "compile in sensord support"
+    default y
+    depends CONFIG_LM_SENSORS
+    select CONFIG_RRDTOOL
+    help
+      You doesn't need this if you use collectd with lm_sensors support.
+
+      If you are unsure, answer N.

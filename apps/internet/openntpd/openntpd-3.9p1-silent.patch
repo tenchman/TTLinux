@@ -1,0 +1,23 @@
+--- openntpd-3.9p1/ntp_msg.c.silent	2007-04-27 15:18:26.000000000 +0200
++++ openntpd-3.9p1/ntp_msg.c	2007-04-27 15:21:16.000000000 +0200
+@@ -26,6 +26,8 @@
+ #include "ntpd.h"
+ #include "ntp.h"
+ 
++static sendto_count = 0;
++
+ int
+ ntp_getmsg(struct sockaddr *sa, char *p, ssize_t len, struct ntp_msg *msg)
+ {
+@@ -97,7 +99,10 @@ ntp_sendmsg(int fd, struct sockaddr *sa,
+ 			/* logging is futile */
+ 			return (-1);
+ 		}
+-		log_warn("sendto");
++		if (sendto_count % 60 == 0) {
++		  log_warn("sendto");
++		  sendto_count++;
++		}
+ 		return (-1);
+ 	}
+ 

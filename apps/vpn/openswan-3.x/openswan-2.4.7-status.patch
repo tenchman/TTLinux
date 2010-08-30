@@ -1,0 +1,290 @@
+--- openswan-2.4.7/programs/pluto/connections.h.status	2005-11-17 02:44:12.000000000 +0100
++++ openswan-2.4.7/programs/pluto/connections.h	2007-05-10 11:13:31.000000000 +0200
+@@ -377,6 +377,7 @@
+ /* print connection status */
+ 
+ extern void show_connections_status(void);
++extern void show_connections_config(void);
+ extern int  connection_compare(const struct connection *ca
+ 			       , const struct connection *cb);
+ #ifdef NAT_TRAVERSAL
+--- openswan-2.4.7/programs/pluto/rcv_whack.c.status	2005-05-19 16:58:55.000000000 +0200
++++ openswan-2.4.7/programs/pluto/rcv_whack.c	2007-05-10 11:13:31.000000000 +0200
+@@ -371,6 +371,12 @@
+ 	}
+     }
+ 
++    if (msg.whack_lissstatus)
++        show_states(msg.name);
++
++    if (msg.whack_conn_config)
++        show_connections_config();
++
+     if (msg.whack_crash)
+ 	delete_states_by_peer(&msg.whack_crash_peer);
+ 
+--- openswan-2.4.7/programs/pluto/state.c.status	2006-08-11 19:34:49.000000000 +0200
++++ openswan-2.4.7/programs/pluto/state.c	2007-05-10 11:13:31.000000000 +0200
+@@ -866,6 +866,7 @@
+ 	delta = -1;
+     }
+ 
++    /* DPD state only in Phase1 */
+     if (IS_IPSEC_SA_ESTABLISHED(st->st_state))
+     {
+ 	dpdbuf[0]='\0';
+@@ -1040,6 +1041,99 @@
+     pfree(array);
+ }
+ 
++void
++show_states(char *name)
++{
++    int i;
++    char state_buf[LOG_WIDTH];
++    char *phase1 = NULL, *phase2 = NULL;
++    int count;
++    struct state **array;
++
++    /* make count of states */
++    count = 0;
++    for (i = 0; i < STATE_TABLE_SIZE; i++)
++    {
++	struct state *st;
++
++	for (st = statetable[i]; st != NULL; st = st->st_hashchain_next)
++	{
++	    count++;
++	}
++    }
++
++    /* build the array */
++    array = alloc_bytes(sizeof(struct state *)*count, "state array");
++    count = 0;
++    for (i = 0; i < STATE_TABLE_SIZE; i++)
++    {
++	struct state *st;
++
++	for (st = statetable[i]; st != NULL; st = st->st_hashchain_next)
++	{
++	    array[count++]=st;
++	}
++    }
++
++    for (i = 0; i < count; i++)
++    {
++	struct state *st;
++	struct connection *c;
++        char thisaddrstr[INET6_ADDRSTRLEN], thataddrstr[INET6_ADDRSTRLEN];
++        char thisnetstr[SUBNETTOT_BUF], thatnetstr[SUBNETTOT_BUF];
++
++	st = array[i];
++        c = st->st_connection;
++        struct end *this = &c->spd.this;
++	struct end *that = &c->spd.that;
++
++        if(name && strcmp(name, c->name))
++	  continue;
++
++        if((c->spd.eroute_owner != st->st_serialno) && 
++          IS_IPSEC_SA_ESTABLISHED(st->st_state))
++	  continue;
++
++        phase1 = IS_ISAKMP_SA_ESTABLISHED(st->st_state) ? "yes" : "no";
++
++        phase2 = IS_IPSEC_SA_ESTABLISHED(st->st_state) ? "yes" : "no";
++
++        addrtot(&c->spd.this.host_addr, 0, thisaddrstr, INET6_ADDRSTRLEN);
++	addrtot(&c->spd.that.host_addr, 0, thataddrstr, INET6_ADDRSTRLEN);
++
++        /* what to do here ? */
++        thisnetstr[0] = 0;
++	thatnetstr[0] = 0;
++
++        /* this client network */
++        if (this->has_client) {
++	  ip_address client_net, client_mask;
++
++          networkof(&this->client, &client_net);
++          maskof(&this->client, &client_mask);
++          subnettot(&this->client, 0, thisnetstr, sizeof(thisnetstr));
++        }
++
++        /* remote(that) client network */
++        if (that->has_client) {
++          ip_address client_net, client_mask;
++
++          networkof(&that->client, &client_net);
++          maskof(&that->client, &client_mask);
++          subnettot(&that->client, 0, thatnetstr, sizeof(thatnetstr));
++        }
++
++        snprintf(state_buf, LOG_WIDTH, 
++	  "#%lu ;name=%s;phase1=%s;phase2=%s;LNET=%s;LGW=%s;RGW=%s;RNET=%s", 
++	   st->st_serialno, c->name, phase1, phase2, thisnetstr, thisaddrstr, thataddrstr,
++	   thatnetstr);
++        whack_log(RC_COMMENT, state_buf);
++    }
++
++    /* free the array */
++    pfree(array);
++}
++
+ /* Given that we've used up a range of unused CPI's,
+  * search for a new range of currently unused ones.
+  * Note: this is very expensive when not trivial!
+--- openswan-2.4.7/programs/pluto/state.h.status	2005-07-26 04:11:23.000000000 +0200
++++ openswan-2.4.7/programs/pluto/state.h	2007-05-10 11:13:31.000000000 +0200
+@@ -310,6 +310,7 @@
+ 				     , msgid_t msgid);
+ 
+ extern void show_states_status(void);
++extern void show_states(char *name);
+ 
+ #if 1
+ void for_each_state(void *(f)(struct state *, void *data), void *data);
+--- openswan-2.4.7/programs/pluto/whack.h.status	2004-12-16 02:22:44.000000000 +0100
++++ openswan-2.4.7/programs/pluto/whack.h	2007-05-10 11:13:31.000000000 +0200
+@@ -34,7 +34,7 @@
+  */
+ 
+ #define WHACK_BASIC_MAGIC (((((('w' << 8) + 'h') << 8) + 'k') << 8) + 24)
+-#define WHACK_MAGIC (((((('o' << 8) + 'h') << 8) + 'k') << 8) + 32)
++#define WHACK_MAGIC (((((('o' << 8) + 'h') << 8) + 'l') << 8) + 32)
+ 
+ /* struct whack_end is a lot like connection.h's struct end
+  * It differs because it is going to be shipped down a socket
+@@ -162,6 +162,12 @@
+     bool whack_deletestate;
+     so_serial_t whack_deletestateno;
+ 
++    /* for WHACK_LISSSTATUS: */
++    bool whack_lissstatus;
++
++    /* for WHACK_CONFIG: */
++    bool whack_conn_config;
++
+     /* for WHACK_LISTEN: */
+     bool whack_listen, whack_unlisten;
+ 
+--- openswan-2.4.7/programs/pluto/whack.c.status	2006-10-27 22:05:09.000000000 +0200
++++ openswan-2.4.7/programs/pluto/whack.c	2007-05-10 11:13:31.000000000 +0200
+@@ -178,6 +178,13 @@
+ 	    " --deletestate <state_object_number>"
+             " --crash <ip-address>"
+ 	    "\n\n"
++	"lissstatus: whack"
++	    " --lissstatus"
++	    " --name <connection_name>"
++	    "\n\n"
++	"config: whack"
++	    " --config"
++	    "\n\n"
+ 	"pubkey: whack"
+ 	    " --keyid <id>"
+ 	    " [--addkey]"
+@@ -351,6 +358,8 @@
+     OPT_TERMINATE,
+     OPT_DELETE,
+     OPT_DELETESTATE,
++    OPT_LISSSTATUS,
++    OPT_CONFIG,
+     OPT_LISTEN,
+     OPT_UNLISTEN,
+ 
+@@ -545,6 +554,9 @@
+     { "terminate", no_argument, NULL, OPT_TERMINATE + OO },
+     { "delete", no_argument, NULL, OPT_DELETE + OO },
+     { "deletestate", required_argument, NULL, OPT_DELETESTATE + OO + NUMERIC_ARG },
++    { "lissstatus", no_argument, NULL, OPT_LISSSTATUS + OO },
++    { "ls", no_argument, NULL, OPT_LISSSTATUS + OO },
++    { "config", no_argument, NULL, OPT_CONFIG + OO },
+     { "crash", required_argument, NULL, OPT_DELETECRASH + OO },
+     { "listen", no_argument, NULL, OPT_LISTEN + OO },
+     { "unlisten", no_argument, NULL, OPT_UNLISTEN + OO },
+@@ -1144,6 +1156,14 @@
+ 	    msg.whack_deletestateno = opt_whole;
+ 	    continue;
+ 
++	case OPT_LISSSTATUS:	/* --lissstatus */
++	    msg.whack_lissstatus = TRUE;
++	    continue;
++
++	case OPT_CONFIG:	/* --config */
++	    msg.whack_conn_config = TRUE;
++	    continue;
++
+ 	case OPT_DELETECRASH:   /* --crash <ip-address> */
+ 	    msg.whack_crash = TRUE;
+ 	    diagq(ttoaddr(optarg, 0, msg.tunnel_addr_family, &msg.whack_crash_peer), optarg);
+@@ -1715,9 +1735,11 @@
+     if (!LDISJOINT(opts_seen
+     , LELEM(OPT_ROUTE) | LELEM(OPT_UNROUTE)
+     | LELEM(OPT_INITIATE) | LELEM(OPT_TERMINATE)
+-    | LELEM(OPT_DELETE) | LELEM(OPT_CD)))
++    | LELEM(OPT_DELETE) | LELEM(OPT_LISSSTATUS)
++    | LELEM(OPT_CD)))
+     {
+-	if (!LHAS(opts_seen, OPT_NAME))
++        /* LISSSTATUS use name a optional parameter */
++	if (!LHAS(opts_seen, OPT_NAME) && !LELEM(OPT_LISSSTATUS))
+ 	    diag("missing --name <connection_name>");
+     }
+     else if (!msg.whack_options)
+@@ -1734,11 +1756,11 @@
+ 
+     if (!(msg.whack_connection || msg.whack_key || msg.whack_myid
+ 	  || msg.whack_delete || msg.whack_deletestate
+-	  || msg.whack_initiate || msg.whack_oppo_initiate
+-	  || msg.whack_terminate
++	  || msg.whack_lissstatus || msg.whack_initiate 
++	  || msg.whack_oppo_initiate || msg.whack_terminate
+ 	  || msg.whack_route || msg.whack_unroute || msg.whack_listen
+ 	  || msg.whack_unlisten || msg.whack_list || msg.whack_purgeocsp
+-	  || msg.whack_reread || msg.whack_crash
++	  || msg.whack_reread || msg.whack_crash || msg.whack_conn_config
+ 	  || msg.whack_status || msg.whack_options || msg.whack_shutdown))
+     {
+ 	diag("no action specified; try --help for hints");
+--- openswan-2.4.7/programs/pluto/connections.c.status	2006-09-04 19:00:01.000000000 +0200
++++ openswan-2.4.7/programs/pluto/connections.c	2007-05-10 11:13:31.000000000 +0200
+@@ -4310,6 +4310,39 @@
+ }
+ 
+ void
++show_connections_config(void)
++{
++    struct connection *c;
++    int count, i;
++    struct connection **array;
++
++    /* make an array of connections, and sort it */
++    count=0;
++    for (c = connections; c != NULL; c = c->ac_next)
++    {
++	count++;
++    }
++    array = alloc_bytes(sizeof(struct connection *)*count, "connection array");
++
++    count=0;
++    for (c = connections; c != NULL; c = c->ac_next)
++    {
++	array[count++]=c;
++    }
++
++    /* sort it! */
++    qsort(array, count, sizeof(struct connection *), connection_compare_qsort);
++
++    for (i=0; i<count; i++)
++    {
++      c = array[i];
++      whack_log(RC_COMMENT, "%s\n", c->name);
++    }
++
++    pfree(array);
++}
++
++void
+ show_connections_status(void)
+ {
+     struct connection *c;

@@ -1,0 +1,63 @@
+--- ripmime-1.4.0.5/MIME_headers.h.charset	2005-12-13 13:12:12.000000000 +0100
++++ ripmime-1.4.0.5/MIME_headers.h	2005-12-13 13:12:40.000000000 +0100
+@@ -116,6 +116,7 @@
+ 	int content_disposition;
+ 	char content_disposition_string[ _MIMEH_CONTENT_DISPOSITION_MAX +1 ];
+ 	int charset;
++	char charset_string[ _MIMEH_CONTENT_DISPOSITION_MAX +1 ];
+ 	int format;
+ 	int file_has_uuencode;
+ 	char uudec_name[_MIMEH_FILENAMELEN_MAX +1];	// UUDecode name. This is a post-decode information field.
+--- ripmime-1.4.0.5/mime.c.charset	2005-12-13 13:50:58.000000000 +0100
++++ ripmime-1.4.0.5/mime.c	2005-12-13 14:08:07.000000000 +0100
+@@ -2353,7 +2353,6 @@
+ 			//		and then strip it of any nasty characters (such as / and \)
+ 
+ 			char *filename_prefix;
+-
+ 			filename_prefix = strdup( hinfo->content_type_string );
+ 			if (filename_prefix != NULL)
+ 			{
+@@ -2362,12 +2361,17 @@
+ 				pp = filename_prefix;
+ 				while (*pp) { if ((*pp == '/') || (*pp == '\\')) *pp = '-'; pp++; }
+ 
+-				snprintf( hinfo->filename, _MIMEH_FILENAMELEN_MAX, "%s%s%d", glb.blankfileprefix_expliticly_set?glb.blankfileprefix:"", filename_prefix, glb.filecount );
+-
++				if (hinfo->charset_string[0])
++				  snprintf( hinfo->filename, _MIMEH_FILENAMELEN_MAX, "%s%s%d:%s", glb.blankfileprefix_expliticly_set?glb.blankfileprefix:"", filename_prefix, glb.filecount,hinfo->charset_string );
++				else
++				  snprintf( hinfo->filename, _MIMEH_FILENAMELEN_MAX, "%s%s%d", glb.blankfileprefix_expliticly_set?glb.blankfileprefix:"", filename_prefix, glb.filecount ); 
+ 				free(filename_prefix);
+ 
+ 			} else {
+-				snprintf( hinfo->filename, _MIMEH_FILENAMELEN_MAX, "%s%d", glb.blankfileprefix, glb.filecount );
++				if (hinfo->charset_string[0])
++				  snprintf( hinfo->filename, _MIMEH_FILENAMELEN_MAX, "%s%d:%s", glb.blankfileprefix, glb.filecount, hinfo->charset_string );
++				else
++				  snprintf( hinfo->filename, _MIMEH_FILENAMELEN_MAX, "%s%d", glb.blankfileprefix, glb.filecount );
+ 			}
+ 		} else {
+ 
+--- ripmime-1.4.0.5/MIME_headers.c.charset	2005-12-13 13:13:58.000000000 +0100
++++ ripmime-1.4.0.5/MIME_headers.c	2005-12-13 14:46:16.000000000 +0100
+@@ -1937,6 +1937,11 @@
+ 				 ** Look for name or filename specifications in the headers
+ 				 **/
+ 
++				
++				return_value = MIMEH_parse_header_parameter( hinfo, param, "charset", hinfo->charset_string, sizeof(hinfo->charset_string), &data_end_point);
++				if ( return_value == 0 )  
++				  FNFILTER_filter(hinfo->charset_string, _MIMEH_STRLEN_MAX);
++				
+ 				return_value = MIMEH_parse_header_parameter( hinfo, param, "name", hinfo->name, sizeof(hinfo->name), &data_end_point);
+ 				/** Update param to point where data_end_point is
+ 				 ** this is so when we come around here again due 
+@@ -2763,6 +2768,7 @@
+ 	hinfo->name[0] = '\0';
+ 	hinfo->content_type = _CTYPE_UNKNOWN;
+ 	hinfo->subject[0] = '\0';
++	hinfo->charset_string[0] = '\0';
+ 
+ 	// 20040116-1234:PLD - added to appease valgrind
+ 	hinfo->content_disposition = 0;

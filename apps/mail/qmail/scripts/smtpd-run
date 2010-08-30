@@ -1,0 +1,7 @@
+#!/bin/sh
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+HOST="\$(head -1 /var/qmail/control/me)"
+CHKPASS="\$(head -1 /var/qmail/control/chkpass)"
+exec envuidgid qmaild softlimit -m 3000000 \
+  tcpserver -v -c40 -UX -HR 0 smtp qmail-smtpd $HOST $CHKPASS /bin/true
+

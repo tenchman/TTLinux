@@ -1,0 +1,51 @@
+--- curl-7.10.3/configure.fix	Mon Feb  3 16:32:21 2003
++++ curl-7.10.3/configure	Mon Feb  3 16:32:56 2003
+@@ -10568,48 +10568,6 @@
+ 
+ fi
+ 
+-
+-
+-# Check whether --with-krb4-includes or --without-krb4-includes was given.
+-if test "${with_krb4_includes+set}" = set; then
+-  withval="$with_krb4_includes"
+-
+- CPPFLAGS="$CPPFLAGS -I$withval"
+- KRB4INC="$withval"
+- want_krb4=yes
+-
+-fi;
+-
+-
+-# Check whether --with-krb4-libs or --without-krb4-libs was given.
+-if test "${with_krb4_libs+set}" = set; then
+-  withval="$with_krb4_libs"
+-
+- LDFLAGS="$LDFLAGS -L$withval"
+- KRB4LIB="$withval"
+- want_krb4=yes
+-
+-fi;
+-
+-
+-OPT_KRB4=off
+-
+-# Check whether --with-krb4 or --without-krb4 was given.
+-if test "${with_krb4+set}" = set; then
+-  withval="$with_krb4"
+-
+-  OPT_KRB4="$withval"
+-  if test X"$OPT_KRB4" != Xyes
+-  then
+-    LDFLAGS="$LDFLAGS -L$OPT_KRB4/lib"
+-    KRB4LIB="$OPT_KRB4/lib"
+-    CPPFLAGS="$CPPFLAGS -I$OPT_KRB4/include"
+-    KRB4INC="$OPT_KRB4/include"
+-  fi
+-  want_krb4="yes"
+-
+-fi;
+-
+ echo "$as_me:$LINENO: checking if Kerberos4 support is requested" >&5
+ echo $ECHO_N "checking if Kerberos4 support is requested... $ECHO_C" >&6
+ 

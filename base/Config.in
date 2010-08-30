@@ -1,0 +1,12 @@
+# vim:set syntax=kconfig:
+menu "Basis"
+source "base/coreutils/Config.in"
+source "base/iproute/Config.in"
+source "base/util-linux/Config.in"
+source "base/minit/Config.in"
+source "base/module-init-tools/Config.in"
+source "base/vixie-cron/Config.in"
+source "base/acl/Config.in"
+source "base/attr/Config.in"
+source "base/radvd/Config.in"
+endmenu

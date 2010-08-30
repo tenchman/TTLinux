@@ -1,0 +1,12 @@
+diff -up csync2-1.34/getrealfn.c.diet csync2-1.34/getrealfn.c
+--- csync2-1.34/getrealfn.c.diet	2007-07-24 23:04:18.000000000 +0200
++++ csync2-1.34/getrealfn.c	2007-10-25 22:40:41.000000000 +0200
+@@ -27,7 +27,7 @@
+ 
+ static char *my_get_current_dir_name()
+ {
+-#if defined __CYGWIN__ || defined __FreeBSD__ || defined __OpenBSD__ || defined __NetBSD__
++#if defined __CYGWIN__ || defined __FreeBSD__ || defined __OpenBSD__ || defined __NetBSD__ || defined __dietlibc__
+ 	char *r = malloc(1024);
+ 	if (!getcwd(r, 1024))
+ 		strcpy(r, "/__PATH_TO_LONG__");

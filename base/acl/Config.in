@@ -1,0 +1,10 @@
+# vim:set syntax=kconfig:
+config CONFIG_ACL
+  bool "acl - Access control list utilities"
+  default n
+  select CONFIG_ATTR
+  help
+    This package contains the getfacl and setfacl utilities needed for
+    manipulating access control lists.
+
+    http://oss.sgi.com/projects/xfs/

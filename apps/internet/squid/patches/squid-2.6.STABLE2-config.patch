@@ -1,0 +1,39 @@
+--- squid-2.5.STABLE10/src/defines.h.config	2005-03-26 03:50:52.000000000 +0100
++++ squid-2.5.STABLE10/src/defines.h	2005-05-22 15:08:34.520529632 +0200
+@@ -220,7 +220,7 @@
+ 
+ /* were to look for errors if config path fails */
+ #ifndef DEFAULT_SQUID_ERROR_DIR
+-#define DEFAULT_SQUID_ERROR_DIR "/usr/local/squid/etc/errors"
++#define DEFAULT_SQUID_ERROR_DIR "/etc/squid/errors"
+ #endif
+ 
+ /* gb_type operations */
+--- squid-2.5.STABLE10/src/cf.data.pre.config	2005-05-11 01:08:40.000000000 +0200
++++ squid-2.5.STABLE10/src/cf.data.pre	2005-05-22 15:10:01.402321592 +0200
+@@ -2210,6 +2210,7 @@
+ #http_access allow our_networks
+ 
+ # And finally deny all other access to this proxy
++http_access allow localhost
+ http_access deny all
+ NOCOMMENT_END
+ DOC_END
+@@ -2446,7 +2447,7 @@
+ 
+ NAME: cache_effective_user
+ TYPE: string
+-DEFAULT: nobody
++DEFAULT: squid
+ LOC: Config.effectiveUser
+ DOC_START
+ 	If you start Squid as root, it will change its effective/real
+@@ -2461,7 +2462,7 @@
+ 
+ NAME: cache_effective_group
+ TYPE: string
+-DEFAULT: none
++DEFAULT: squid
+ LOC: Config.effectiveGroup
+ DOC_START
+ 	If you want Squid to run with a specific GID regardless of

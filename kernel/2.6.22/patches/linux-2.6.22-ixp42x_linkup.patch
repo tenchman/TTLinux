@@ -1,0 +1,14 @@
+--- linux-2.6.22.18/drivers/ixp400/ixp400_xscale_sw/src/ethAcc/IxEthAccMii.c.linkup  2008-04-03 11:36:06.000000000 +0200
++++ linux-2.6.22.18/drivers/ixp400/ixp400_xscale_sw/src/ethAcc/IxEthAccMii.c 2008-04-03 14:28:01.000000000 +0200
+@@ -201,6 +201,12 @@
+               IX_ETH_ACC_MAC_CORE_CNTRL,
+               IX_ETH_ACC_CORE_MDC_EN);
+ 
++/* zweites MII an NPE-C binden */
++miiBaseAddressVirt = (UINT32) IX_OSAL_MEM_MAP(IX_ETH_ACC_MAC_1_BASE, IX_ETH_ACC_MAC_1_MAP_SIZE);
++       REG_WRITE(miiBaseAddressVirt,
++              IX_ETH_ACC_MAC_CORE_CNTRL,
++              IX_ETH_ACC_CORE_MDC_EN);
++
+     return IX_ETH_ACC_SUCCESS;
+ }

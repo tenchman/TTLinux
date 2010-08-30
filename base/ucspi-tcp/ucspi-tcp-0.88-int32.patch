@@ -1,0 +1,24 @@
+--- qmail-1.03/uint32.h2.int32	2005-10-24 09:19:51.000000000 +0200
++++ qmail-1.03/uint32.h2	2005-10-24 09:20:46.000000000 +0200
+@@ -1,6 +1,9 @@
+ #ifndef UINT32_H
+ #define UINT32_H
+ 
++#ifndef uint32_defined
++#define uint32_defined
+ typedef unsigned long uint32;
++#endif
+ 
+ #endif
+--- qmail-1.03/uint32.h1.int32	2005-10-24 09:19:44.000000000 +0200
++++ qmail-1.03/uint32.h1	2005-10-24 09:20:20.000000000 +0200
+@@ -1,6 +1,9 @@
+ #ifndef UINT32_H
+ #define UINT32_H
+ 
++#ifndef uint32_defined
++#define uint32_defined
+ typedef unsigned int uint32;
++#endif
+ 
+ #endif

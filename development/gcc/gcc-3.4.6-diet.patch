@@ -1,0 +1,234 @@
+--- gcc-3.4.6/libstdc++-v3/include/c_std/std_cstdio.h.diet	2007-10-08 20:10:23.000000000 +0200
++++ gcc-3.4.6/libstdc++-v3/include/c_std/std_cstdio.h	2007-10-08 20:12:54.000000000 +0200
+@@ -142,7 +142,7 @@
+   using ::vsprintf;
+ }
+ 
+-#if _GLIBCXX_USE_C99
++#if _GLIBCXX_USE_C99 || defined(__dietlibc__)
+ 
+ #undef snprintf
+ #undef vfscanf
+--- gcc-3.4.6/gcc/gcc.c.diet	2006-01-21 19:52:11.000000000 +0100
++++ gcc-3.4.6/gcc/gcc.c	2007-07-26 22:05:54.000000000 +0200
+@@ -1404,15 +1404,15 @@
+ #endif
+ 
+ static const char *const standard_exec_prefix = STANDARD_EXEC_PREFIX;
+-static const char *const standard_exec_prefix_1 = "/usr/libexec/gcc/";
+-static const char *const standard_exec_prefix_2 = "/usr/lib/gcc/";
++static const char *const standard_exec_prefix_1 = "/opt/diet/libexec/gcc/";
++static const char *const standard_exec_prefix_2 = "/opt/diet/lib-i386/gcc/";
+ static const char *md_exec_prefix = MD_EXEC_PREFIX;
+ 
+ static const char *md_startfile_prefix = MD_STARTFILE_PREFIX;
+ static const char *md_startfile_prefix_1 = MD_STARTFILE_PREFIX_1;
+ static const char *const standard_startfile_prefix = STANDARD_STARTFILE_PREFIX;
+-static const char *const standard_startfile_prefix_1 = "/lib/";
+-static const char *const standard_startfile_prefix_2 = "/usr/lib/";
++static const char *const standard_startfile_prefix_1 = "/opt/diet/lib-i386/";
++static const char *const standard_startfile_prefix_2 = "/opt/diet/local/lib-i386/";
+ 
+ static const char *const tooldir_base_prefix = TOOLDIR_BASE_PREFIX;
+ static const char *tooldir_prefix;
+--- gcc-3.4.6/gcc/cppdefault.c.diet	2003-03-01 15:31:21.000000000 +0100
++++ gcc-3.4.6/gcc/cppdefault.c	2007-07-26 22:05:54.000000000 +0200
+@@ -26,7 +26,7 @@
+ #include "cppdefault.h"
+ 
+ #ifndef STANDARD_INCLUDE_DIR
+-#define STANDARD_INCLUDE_DIR "/usr/include"
++#define STANDARD_INCLUDE_DIR "/opt/diet/include"
+ #endif
+ 
+ #ifndef STANDARD_INCLUDE_COMPONENT
+--- gcc-3.4.6/gcc/unwind-dw2-fde-glibc.c.diet	2004-09-08 17:16:16.000000000 +0200
++++ gcc-3.4.6/gcc/unwind-dw2-fde-glibc.c	2007-07-26 22:05:54.000000000 +0200
+@@ -36,6 +36,7 @@
+ #include "auto-host.h" /* For HAVE_LD_EH_FRAME_HDR.  */
+ #include "tconfig.h"
+ #include "tsystem.h"
++#define inhibit_libc
+ #ifndef inhibit_libc
+ #include <link.h>
+ #endif
+--- gcc-3.4.6/gcc/Makefile.in.diet	2005-02-24 10:26:59.000000000 +0100
++++ gcc-3.4.6/gcc/Makefile.in	2007-07-26 22:05:55.000000000 +0200
+@@ -345,7 +345,7 @@
+ PARTITION_H = $(srcdir)/../include/partition.h
+ 
+ # Default native SYSTEM_HEADER_DIR, to be overridden by targets.
+-NATIVE_SYSTEM_HEADER_DIR = /usr/include
++NATIVE_SYSTEM_HEADER_DIR = /opt/diet/include
+ # Default cross SYSTEM_HEADER_DIR, to be overridden by targets.
+ CROSS_SYSTEM_HEADER_DIR = @CROSS_SYSTEM_HEADER_DIR@
+ 
+--- gcc-3.4.6/gcc/config.gcc.diet	2005-07-19 23:08:48.000000000 +0200
++++ gcc-3.4.6/gcc/config.gcc	2007-07-26 22:05:54.000000000 +0200
+@@ -1004,6 +1004,11 @@
+ 		thread_file='single'
+ 	fi
+ 	;;
++i[34567]86-*-linux*dietlibc*)	# Intel 80386's running GNU/Linux
++				# with ELF format using dietlibc
++	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h svr4.h linux.h i386/linux.h"
++	tmake_file="t-slibgcc-elf-ver t-linux-dietlibc i386/t-crtstuff"
++	;;
+ i[34567]86-*-linux*)	# Intel 80386's running GNU/Linux
+ 			# with ELF format using glibc 2
+ 			# aka GNU/Linux C library 6
+--- gcc-3.4.6/gcc/collect2.c.diet	2005-01-10 16:25:23.000000000 +0100
++++ gcc-3.4.6/gcc/collect2.c	2007-07-26 22:05:54.000000000 +0200
+@@ -1017,8 +1017,8 @@
+   prefix_from_env ("LIBPATH", &libpath_lib_dirs);
+   /* Add to this list also two standard directories where
+      AIX loader always searches for libraries.  */
+-  add_prefix (&libpath_lib_dirs, "/lib");
+-  add_prefix (&libpath_lib_dirs, "/usr/lib");
++  add_prefix (&libpath_lib_dirs, "/opt/diet/lib-i386");
++  add_prefix (&libpath_lib_dirs, "/opt/diet/lib");
+ #endif
+ 
+   /* Get any options that the upper GCC wants to pass to the sub-GCC.
+@@ -2314,9 +2314,9 @@
+ 	      }
+ 	}
+       /* built in directories are /lib, /usr/lib, and /usr/local/lib */
+-      *pp++ = "/lib";
+-      *pp++ = "/usr/lib";
+-      *pp++ = "/usr/local/lib";
++      *pp++ = "/opt/diet/lib-i386";
++      *pp++ = "/opt/diet/lib";
++      *pp++ = "/opt/diet/local/lib";
+       *pp = 0;
+     }
+   libname = name;
+--- /dev/null	2007-10-08 19:15:07.099993013 +0200
++++ gcc-3.4.6/gcc/config/t-linux-dietlibc	2007-07-26 22:05:54.000000000 +0200
+@@ -0,0 +1,11 @@
++T_CFLAGS = -D__dietlibc__
++
++# Compile crtbeginS.o and crtendS.o with pic.
++CRTSTUFF_T_CFLAGS_S = $(CRTSTUFF_T_CFLAGS) -fPIC
++# Compile libgcc2.a with pic.
++TARGET_LIBGCC2_CFLAGS = -fPIC
++
++# Use unwind-dw2-fde
++LIB2ADDEH = $(srcdir)/unwind-dw2.c $(srcdir)/unwind-dw2-fde.c \
++  $(srcdir)/unwind-sjlj.c $(srcdir)/unwind-c.c
++LIB2ADDEHDEP = unwind.inc unwind-dw2-fde.h
+--- gcc-3.4.6/gcc/config/i386/linux.h.diet	2003-11-29 04:08:13.000000000 +0100
++++ gcc-3.4.6/gcc/config/i386/linux.h	2007-07-26 22:05:54.000000000 +0200
+@@ -83,11 +83,15 @@
+   while (0)
+ 
+ #undef CPP_SPEC
++#if defined(__dietlibc__)
++#define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT} -D__dietlibc__"
++#else
+ #ifdef USE_GNULIBC_1
+ #define CPP_SPEC "%{posix:-D_POSIX_SOURCE}"
+ #else
+ #define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
+ #endif
++#endif
+ 
+ #undef CC1_SPEC
+ #define CC1_SPEC "%(cc1_cpu) %{profile:-p}"
+@@ -109,6 +113,15 @@
+ /* If ELF is the default format, we should not use /lib/elf.  */
+ 
+ #undef	LINK_SPEC
++#if defined(__dietlibc__)
++#define LINK_SPEC "-m elf_i386 %{shared:-shared} \
++  %{!shared: \
++    %{!ibcs: \
++      %{!static: \
++	%{rdynamic:-export-dynamic} \
++	%{!dynamic-linker:-dynamic-linker /opt/diet/lib-i386/libdl.so}} \
++	%{static:-static}}}"
++#else
+ #ifdef USE_GNULIBC_1
+ #define LINK_SPEC "-m elf_i386 %{shared:-shared} \
+   %{!shared: \
+@@ -126,6 +139,7 @@
+ 	%{!dynamic-linker:-dynamic-linker /lib/ld-linux.so.2}} \
+ 	%{static:-static}}}"
+ #endif
++#endif
+ 
+ /* A C statement (sans semicolon) to output to the stdio stream
+    FILE the assembler definition of uninitialized global DECL named
+--- gcc-3.4.6/gcc/config/linux.h.diet	2003-11-29 04:08:13.000000000 +0100
++++ gcc-3.4.6/gcc/config/linux.h	2007-07-26 22:05:54.000000000 +0200
+@@ -32,6 +32,9 @@
+ 
+ #undef MD_EXEC_PREFIX
+ #undef MD_STARTFILE_PREFIX
++#if defined(__dietlibc__)
++#define MD_STARTFILE_PREFIX "/opt/diet/lib-i386"
++#endif
+ 
+ /* Provide a STARTFILE_SPEC appropriate for GNU/Linux.  Here we add
+    the GNU/Linux magical crtbegin.o file (see crtstuff.c) which
+@@ -39,6 +42,11 @@
+    object constructed before entering `main'.  */
+    
+ #undef	STARTFILE_SPEC
++#if defined(__dietlibc__)
++/* Provide a STARTFILE_SPEC appropriate for dietlibc/Linux. */
++#define STARTFILE_SPEC \
++   "%{shared:dyn_so_start.o%s} %{!shared:%{static:start.o%s dyn_start.o%s} %{!static:dstart.o%s dyn_dstart.o%s}}"
++#else
+ #ifdef USE_GNULIBC_1
+ #define STARTFILE_SPEC \
+   "%{!shared: \
+@@ -55,6 +63,7 @@
+   "%{!shared: %{pg|p|profile:gcrt1.o%s;:crt1.o%s}} \
+    crti.o%s %{static:crtbeginT.o%s;shared|pie:crtbeginS.o%s;:crtbegin.o%s}"
+ #endif
++#endif
+ 
+ /* Provide a ENDFILE_SPEC appropriate for GNU/Linux.  Here we tack on
+    the GNU/Linux magical crtend.o file (see crtstuff.c) which
+@@ -63,8 +72,13 @@
+    GNU/Linux "finalizer" file, `crtn.o'.  */
+ 
+ #undef	ENDFILE_SPEC
++#if defined(__dietlibc__)
++#define ENDFILE_SPEC \
++  "%{shared:dyn_dstop.o%s}%{!shared:%{static:dyn_stop.o%s}%{!static:dyn_dstop.o%s}}"
++#else
+ #define ENDFILE_SPEC \
+   "%{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s"
++#endif
+ 
+ /* This is for -profile to use -lc_p instead of -lc.  */
+ #ifndef CC1_SPEC
+--- gcc-3.4.6/gcc/system.h.diet	2004-03-16 00:22:50.000000000 +0100
++++ gcc-3.4.6/gcc/system.h	2007-07-26 22:05:54.000000000 +0200
+@@ -518,8 +518,10 @@
+    the most likely value of A is B.  This feature was added at some point
+    between 2.95 and 3.0.  Let's use 3.0 as the lower bound for now.  */
+ #if (GCC_VERSION < 3000)
++#ifndef __builtin_expect
+ #define __builtin_expect(a, b) (a)
+ #endif
++#endif
+ 
+ /* Provide some sort of boolean type.  We use stdbool.h if it's
+   available.  This must be after all inclusion of system headers,
+--- gcc-3.4.6/libtool.m4.diet	2004-05-18 11:09:14.000000000 +0200
++++ gcc-3.4.6/libtool.m4	2007-07-26 22:05:55.000000000 +0200
+@@ -689,6 +689,11 @@
+   lt_cv_file_magic_test_file=`echo /lib/libc.so* /lib/libc-*.so`
+   ;;
+ 
++dietlibc-linux*)
++  lt_cv_deplibs_check_method=pass_all
++  lt_cv_file_magic_test_file=`echo /opt/diet/lib-i386/libc.so`
++  ;;
++
+ netbsd*)
+   if echo __ELF__ | $CC -E - | grep __ELF__ > /dev/null; then
+     [lt_cv_deplibs_check_method='match_pattern /lib[^/\.]+\.so\.[0-9]+\.[0-9]+$']

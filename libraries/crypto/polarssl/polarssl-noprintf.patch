@@ -1,0 +1,65 @@
+--- polarssl-0.11.1/library/bignum.c.noprintf	2009-05-17 12:32:51.000000000 +0200
++++ polarssl-0.11.1/library/bignum.c	2009-07-23 23:11:36.000000000 +0200
+@@ -361,12 +361,16 @@ int mpi_write_string( mpi *X, int radix,
+         {
+             for( j = ciL - 1; j >= 0; j-- )
+             {
++                int a, b;
+                 c = ( X->p[i] >> (j << 3) ) & 0xFF;
+ 
+                 if( c == 0 && k == 0 && (i + j) != 0 )
+                     continue;
+ 
+-                p += sprintf( p, "%02X", c );
++                b = c & 0x0F;
++                a = (c >> 4) & 0x0F;
++                *p++ = a >= 10 ? a - 10 + 'A' : a + '0';
++                *p++ = b >= 10 ? b - 10 + 'A' : b + '0';
+                 k = 1;
+             }
+         }
+@@ -422,6 +426,7 @@ int mpi_write_file( char *p, mpi *X, int
+     size_t slen;
+     size_t plen;
+     char s[1024];
++    FILE *out = fout ? fout : stdout;
+ 
+     n = sizeof( s );
+     memset( s, 0, n );
+@@ -436,14 +441,9 @@ int mpi_write_file( char *p, mpi *X, int
+     s[slen++] = '\r';
+     s[slen++] = '\n';
+ 
+-    if( fout != NULL )
+-    {
+-        if( fwrite( p, 1, plen, fout ) != plen ||
+-            fwrite( s, 1, slen, fout ) != slen )
+-            return( POLARSSL_ERR_MPI_FILE_IO_ERROR );
+-    }
+-    else
+-        printf( "%s%s", p, s );
++    if( fwrite( p, 1, plen, fout ) != plen ||
++	fwrite( s, 1, slen, fout ) != slen )
++	return( POLARSSL_ERR_MPI_FILE_IO_ERROR );
+ 
+ cleanup:
+ 
+--- polarssl-0.11.1/library/x509parse.c.noprintf	2009-05-17 12:32:51.000000000 +0200
++++ polarssl-0.11.1/library/x509parse.c	2009-07-24 21:25:45.000000000 +0200
+@@ -1762,6 +1762,8 @@ int x509parse_keyfile( rsa_context *rsa,
+     return( ret );
+ }
+ 
++#if defined(XYSSL_CERT_INFO)
++
+ #if defined _MSC_VER && !defined snprintf
+ #include <stdarg.h>
+ 
+@@ -2066,6 +2068,7 @@ int x509parse_crl_info( char *buf, size_
+ 
+     return( size - n );
+ }
++#endif
+ 
+ /*
+  * Return 0 if the x509_time is still valid, or 1 otherwise.

@@ -1,0 +1,27 @@
+Index: demux.c
+===================================================================
+RCS file: /projects/xelerance/master/openswan-2/programs/pluto/demux.c,v
+retrieving revision 1.210.2.16
+diff -c -r1.210.2.16 demux.c
+*** openswan-2.x.x/programs/pluto/demux.c.old	16 Jun 2008 01:03:04 -0000	1.210.2.16
+--- openswan-2.x.x/programs/pluto/demux.c	22 Mar 2009 20:11:13 -0000
+***************
+*** 1068,1076 ****
+--- 1068,1084 ----
+          switch (n->isan_type)
+          {
+          case R_U_THERE:
++ 	   if(st==NULL) {
++ 		loglog(RC_LOG_SERIOUS, "received bogus  R_U_THERE informational message");
++ 		return STF_IGNORE;
++ 	   }
+              return dpd_inI_outR(st, n, n_pbs);
+  
+          case R_U_THERE_ACK:
++ 	   if(st==NULL) {
++ 		loglog(RC_LOG_SERIOUS, "received bogus  R_U_THERE informational message");
++ 		return STF_IGNORE;
++ 	   }
+              return dpd_inR(st, n, n_pbs);
+  
+  	case PAYLOAD_MALFORMED:

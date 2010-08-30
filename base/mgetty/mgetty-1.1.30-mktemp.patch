@@ -1,0 +1,23 @@
+Use mktemp to create the stdin temporary file.  Not portable to systems
+without mktemp, unfortunately.
+
+--- mgetty-1.1.30/fax/faxspool.in	2002-12-18 16:59:16.000000000 -0500
++++ mgetty-1.1.30/fax/faxspool.in	2002-12-18 17:06:43.000000000 -0500
+@@ -637,10 +637,14 @@
+ #
+     if [ x$file = x- ]
+     then
++	file=`mktemp /tmp/faxspool.XXXXXX`
++	if test -z $file
++	then
++	    $echo "ERROR: can't create work file, giving up" >&2 ; exit 6
++	fi
++	trap "rm $file" 0
+ 	$echo "spooling $file (stdin)..."
+-	trap "rm /tmp/faxsp.$$" 0
+-        cat - >/tmp/faxsp.$$
+-	file=/tmp/faxsp.$$
++        cat - >$file
+     else
+ 	$echo "spooling $file..."
+     fi

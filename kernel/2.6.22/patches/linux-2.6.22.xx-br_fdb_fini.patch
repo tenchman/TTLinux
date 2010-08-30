@@ -1,0 +1,12 @@
+diff -up linux-2.6.22.18/net/bridge/br_fdb.c.br_fdb_fini linux-2.6.22.18/net/bridge/br_fdb.c
+--- linux-2.6.22.18/net/bridge/br_fdb.c.br_fdb_fini	2008-03-17 16:16:35.000000000 +0100
++++ linux-2.6.22.18/net/bridge/br_fdb.c	2008-03-17 16:18:18.000000000 +0100
+@@ -44,7 +44,7 @@ int __init br_fdb_init(void)
+ 	return 0;
+ }
+ 
+-void __exit br_fdb_fini(void)
++void br_fdb_fini(void)
+ {
+ 	kmem_cache_destroy(br_fdb_cache);
+ }

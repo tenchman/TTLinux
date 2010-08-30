@@ -1,0 +1,51 @@
+--- dietlibc-cvs/include/resolv.h.res6	2006-02-18 12:01:30.000000000 +0100
++++ dietlibc-cvs/include/resolv.h	2006-02-18 12:05:26.000000000 +0100
+@@ -24,6 +24,23 @@
+ #define	MAXRESOLVSORT		10	/* number of net to sort on */
+ #define	RES_MAXNDOTS		15	/* should reflect bit field size */
+ 
++typedef enum { res_goahead, res_nextns, res_modified, res_done, res_error }
++	res_sendhookact;
++
++typedef res_sendhookact (*res_send_qhook) (struct sockaddr_in * const *ns,
++					   const unsigned char **query,
++					   int *querylen,
++					   unsigned char *ans,
++					   int anssiz,
++					   int *resplen);
++
++typedef res_sendhookact (*res_send_rhook) (const struct sockaddr_in *ns,
++					   const unsigned char *query,
++					   int querylen,
++					   unsigned char *ans,
++					   int anssiz,
++					   int *resplen);
++
+ typedef struct __res_state {
+   int	retrans;	 	/* retransmission time interval */
+   int	retry;			/* number of times to retransmit */
+@@ -43,7 +60,23 @@
+     struct in_addr	addr;
+     uint32_t	mask;
+   } sort_list[MAXRESOLVSORT];
+-  char	pad[72];		/* on an i386 this means 512b total */
++  res_send_qhook qhook;		/* query hook */
++  res_send_rhook rhook;		/* response hook */
++  int	res_h_errno;		/* last one set for this context */
++  int	_vcsock;		/* PRIVATE: for res_send VC i/o */
++  unsigned int	_flags;			/* PRIVATE: see below */
++  union {
++    char	pad[52];	/* On an i386 this means 512b total. */
++    struct {
++      uint16_t		  nscount;
++      uint16_t		  nsmap[MAXNS];
++      int		  nssocks[MAXNS];
++      uint16_t		  nscount6;
++      uint16_t		  nsinit;
++      struct sockaddr_in6 * nsaddrs[MAXNS];
++      unsigned int	  _initstamp[2];
++    } _ext;
++  } _u;
+ } * res_state;
+ 
+ /*

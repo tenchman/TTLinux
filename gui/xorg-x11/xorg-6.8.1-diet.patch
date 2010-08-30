@@ -1,0 +1,562 @@
+--- xorg-x11-6.8.1/lib/X11/Xlib.h.diet	2004-04-23 20:43:24.000000000 +0200
++++ xorg-x11-6.8.1/lib/X11/Xlib.h	2005-05-18 12:16:42.000000000 +0200
+@@ -84,13 +84,11 @@
+ #endif
+ #endif
+ 
+-#if defined(ISC) && defined(USE_XMBTOWC)
++#if defined(USE_XMBTOWC)
+ #define wctomb(a,b)	_Xwctomb(a,b)
+ #define mblen(a,b)	_Xmblen(a,b) 
+-#ifndef USE_XWCHAR_STRING
+ #define mbtowc(a,b,c)	_Xmbtowc(a,b,c)
+ #endif
+-#endif
+ 
+ extern int
+ _Xmblen(
+--- xorg-x11-6.8.1/lib/X11/XDefaultIMIF.c.diet	2004-04-23 20:43:24.000000000 +0200
++++ xorg-x11-6.8.1/lib/X11/XDefaultIMIF.c	2005-05-18 12:16:42.000000000 +0200
+@@ -53,6 +53,14 @@
+ #define MAXINT          (~((unsigned int)1 << (8 * sizeof(int)) - 1))
+ #endif /* !MAXINT */
+ 
++extern int _Xmbstowcs(
++#if NeedFunctionPrototypes
++    wchar_t    *wstr,
++    char       *str,
++    int                len
++#endif
++);
++
+ typedef struct _StaticXIM *StaticXIM;
+ 
+ typedef struct _XIMStaticXIMRec {
+@@ -447,7 +455,7 @@
+     } else {
+ 	*status = XLookupKeySym;
+     }
+-    mbstowcs(buffer, mb_buf, length);
++    _Xmbstowcs(buffer, mb_buf, length);
+     XFree(mb_buf);
+     return(length);
+ }
+--- xorg-x11-6.8.1/lib/font/util/Imakefile.diet	2004-08-27 21:27:11.000000000 +0200
++++ xorg-x11-6.8.1/lib/font/util/Imakefile	2005-05-18 12:16:42.000000000 +0200
+@@ -25,7 +25,7 @@
+  * (see http://pdx.freedesktop.org/cgi-bin/bugzilla/show_bug.cgi?id=513)
+  */
+ #if !HasFreetype2 && !SharedLibFreetype2
+-INTERNALDEFINES = -DUSE_INTERNAL_FREETYPE
++XCOMM INTERNALDEFINES = -DUSE_INTERNAL_FREETYPE
+ #endif
+ #endif
+ 
+--- xorg-x11-6.8.1/lib/Xaw/XawI18n.h.diet	2004-04-23 20:43:38.000000000 +0200
++++ xorg-x11-6.8.1/lib/Xaw/XawI18n.h	2005-05-18 12:16:42.000000000 +0200
+@@ -61,7 +61,7 @@
+ #endif
+ #endif
+ 
+-#ifdef QNX4
++#if (defined QNX4) || (defined __dietlibc__)
+ #define toascii( c ) ((unsigned)(c) & 0x007f)
+ #endif
+ 
+@@ -91,10 +91,6 @@
+  );
+ 
+ #define wcsncpy(d, s, l)	_Xwcsncpy(d, s, l)
+-
+-#ifdef USE_XMBTOWC
+-#define mbtowc(wc, s, l)	_Xmbtowc(wc, s, l)
+-#endif
+ #endif
+ 
+ wchar_t _Xaw_atowc
+--- xorg-x11-6.8.1/extras/Mesa/src/mesa/drivers/dri/common/dri_util.c.diet	2004-08-13 01:05:42.000000000 +0200
++++ xorg-x11-6.8.1/extras/Mesa/src/mesa/drivers/dri/common/dri_util.c	2005-05-18 12:16:42.000000000 +0200
+@@ -51,8 +51,10 @@
+ #include "glcontextmodes.h"
+ 
+ #ifndef PFNGLXGETMSCRATEOMLPROC
++#if __STDC_VERSION__ < 199901L
+ typedef GLboolean ( * PFNGLXGETMSCRATEOMLPROC) (__DRInativeDisplay *dpy, __DRIid drawable, int32_t *numerator, int32_t *denominator);
+ #endif
++#endif
+ 
+ /**
+  * Weak thread-safety dispatch pointer.  Older versions of libGL will not have
+--- xorg-x11-6.8.1/extras/Mesa/src/mesa/main/glheader.h.diet	2004-07-22 08:52:55.000000000 +0200
++++ xorg-x11-6.8.1/extras/Mesa/src/mesa/main/glheader.h	2005-05-18 12:16:42.000000000 +0200
+@@ -62,7 +62,7 @@
+ #include <stdlib.h>
+ #include <stdio.h>
+ #include <string.h>
+-#if defined(__linux__) && defined(__i386__)
++#if defined(__linux__) && defined(__i386__) && !defined(__dietlibc__)
+ #include <fpu_control.h>
+ #endif
+ #endif
+--- xorg-x11-6.8.1/extras/drm/shared/drm.h.diet	2005-05-18 12:28:44.000000000 +0200
++++ xorg-x11-6.8.1/extras/drm/shared/drm.h	2005-05-18 12:29:41.000000000 +0200
+@@ -38,8 +38,12 @@
+ #define _DRM_H_
+ 
+ #if defined(__linux__)
++#if defined(__dietlibc__)
++#include <sys/ioctl.h>
++#else
+ #include <linux/config.h>
+ #include <asm/ioctl.h>		/* For _IO* macros */
++#endif
+ #define DRM_IOCTL_NR(n)		_IOC_NR(n)
+ #define DRM_IOC_VOID		_IOC_NONE
+ #define DRM_IOC_READ		_IOC_READ
+--- xorg-x11-6.8.1/programs/lbxproxy/Imakefile.diet	2004-04-23 21:54:33.000000000 +0200
++++ xorg-x11-6.8.1/programs/lbxproxy/Imakefile	2005-05-18 12:16:42.000000000 +0200
+@@ -29,7 +29,7 @@
+ 
+ di/LibraryTargetName(dilbx):	di
+ 
+-#if !defined(LynxOSArchitecture) && !defined(QNX4Architecture)
++#if !defined(LynxOSArchitecture) && !defined(QNX4Architecture) && !defined(Dietlibc)
+ ServerTarget(lbxproxy,$(SUBDIRS),NullParameter,$(LBXLIBS),$(OTHERLIBS))
+ #else
+ ServerTarget(lbxproxy,$(SUBDIRS),di/main.o,$(LBXLIBS),$(OTHERLIBS))
+--- xorg-x11-6.8.1/programs/xload/get_rload.c.diet	2004-04-23 21:54:57.000000000 +0200
++++ xorg-x11-6.8.1/programs/xload/get_rload.c	2005-05-18 12:16:42.000000000 +0200
+@@ -10,7 +10,7 @@
+ /* Not all OS supports get_rload
+    steal the STUB idea from get_load
+  */
+-#if defined(QNX4) || defined(__CYGWIN__)
++#if defined(QNX4) || defined(__CYGWIN__) || defined(__dietlibc__)
+ #define RLOADSTUB
+ #endif
+ 
+--- xorg-x11-6.8.1/programs/xfs/Imakefile.diet	2004-04-23 21:54:47.000000000 +0200
++++ xorg-x11-6.8.1/programs/xfs/Imakefile	2005-05-18 12:16:42.000000000 +0200
+@@ -45,7 +45,7 @@
+ 
+ all:: config
+ 
+-#if !defined(LynxOSArchitecture) && !defined(QNX4Architecture)
++#if !defined(LynxOSArchitecture) && !defined(QNX4Architecture) && !defined(Dietlibc)
+ ServerTarget(xfs,$(FSDIRS),NullParameter,$(FSLIBS),$(FSSYSLIBS) $(EXTRA_LIBRARIES))
+ #else
+ ServerTarget(xfs,$(FSDIRS),difs/main.o,$(FSLIBS),$(FSSYSLIBS) $(EXTRA_LIBRARIES))
+--- xorg-x11-6.8.1/programs/xdm/util.c.diet	2004-04-23 21:54:42.000000000 +0200
++++ xorg-x11-6.8.1/programs/xdm/util.c	2005-05-18 12:16:42.000000000 +0200
+@@ -250,9 +250,11 @@
+ #endif
+ #else
+ 	setpgrp (0, getpid ());
++#if !defined(__dietlibc__)
+ 	sigsetmask (0);
+ #endif
+ #endif
++#endif
+ #ifdef SIGCHLD
+ 	(void) Signal (SIGCHLD, SIG_DFL);
+ #endif
+--- xorg-x11-6.8.1/programs/xdm/sessreg.c.diet	2004-04-23 21:54:42.000000000 +0200
++++ xorg-x11-6.8.1/programs/xdm/sessreg.c	2005-05-18 12:16:42.000000000 +0200
+@@ -55,7 +55,7 @@
+ # include	<stdio.h>
+ # include	<utmp.h>
+ 
+-#if defined(SYSV) || defined(SVR4) || defined(Lynx) || defined(__QNX__) || defined(__DARWIN__) || defined(_SEQUENT_)
++#if defined(SYSV) || defined(SVR4) || defined(Lynx) || defined(__QNX__) || defined(__DARWIN__) || defined(_SEQUENT_) || defined(__dietlibc__)
+ #define NO_LASTLOG
+ #endif
+ 
+--- xorg-x11-6.8.1/programs/xterm/xterm.h.diet	2004-08-13 14:57:21.000000000 +0200
++++ xorg-x11-6.8.1/programs/xterm/xterm.h	2005-05-18 12:16:42.000000000 +0200
+@@ -140,6 +140,7 @@
+ #define HAVE_UTMP_UT_XTIME 1
+ #endif
+ 
++#if ! defined(__dietlibc__)
+ #if defined(linux) || defined(__CYGWIN__)
+ #define USE_LASTLOG
+ #define HAVE_LASTLOG_H
+@@ -150,6 +151,7 @@
+ #define USE_LASTLOG
+ #endif
+ #endif
++#endif
+ 
+ #if defined(__OpenBSD__)
+ #define DEFDELETE_DEL TRUE
+--- xorg-x11-6.8.1/programs/Xserver/hw/xfree86/loader/coffloader.c.diet	2004-04-23 21:54:06.000000000 +0200
++++ xorg-x11-6.8.1/programs/Xserver/hw/xfree86/loader/coffloader.c	2005-05-18 12:16:42.000000000 +0200
+@@ -25,7 +25,7 @@
+ #include <sys/types.h>
+ #include <unistd.h>
+ #include <stdlib.h>
+-#ifdef __QNX__
++#if defined(__QNX__) || defined(__dietlibc__)
+ #include <fcntl.h>
+ #else
+ #include <sys/fcntl.h>
+--- xorg-x11-6.8.1/programs/Xserver/hw/xfree86/loader/elfloader.c.diet	2004-04-23 21:54:06.000000000 +0200
++++ xorg-x11-6.8.1/programs/Xserver/hw/xfree86/loader/elfloader.c	2005-05-18 12:16:42.000000000 +0200
+@@ -29,7 +29,7 @@
+ #endif
+ #include <unistd.h>
+ #include <stdlib.h>
+-#ifdef __QNX__
++#if defined(__QNX__) || defined(__dietlibc__)
+ # include <fcntl.h>
+ #else
+ # include <sys/fcntl.h>
+--- xorg-x11-6.8.1/programs/Xserver/hw/xfree86/loader/xf86sym.c.diet	2004-08-26 13:58:08.000000000 +0200
++++ xorg-x11-6.8.1/programs/Xserver/hw/xfree86/loader/xf86sym.c	2005-05-18 12:16:42.000000000 +0200
+@@ -90,6 +90,9 @@
+ #endif
+ #include "compiler.h"
+ 
++#ifdef __dietlibc__
++#define HAS_GLIBC_SIGSETJMP 1
++#endif
+ #ifndef HAS_GLIBC_SIGSETJMP
+ #if defined(setjmp) && defined(__GNU_LIBRARY__) && \
+     (!defined(__GLIBC__) || (__GLIBC__ < 2) || \
+@@ -917,7 +920,7 @@
+ #ifdef HAS_GLIBC_SIGSETJMP
+     SYMFUNC(xf86setjmp)
+     SYMFUNC(xf86setjmp0)
+-#if defined(__GLIBC__) && (__GLIBC__ >= 2)
++#if (defined(__GLIBC__) && (__GLIBC__ >= 2)) || defined(__dietlibc__)
+     SYMFUNCALIAS("xf86setjmp1", __sigsetjmp)
+ #else
+     SYMFUNC(xf86setjmp1)	/* For libc5 */
+--- xorg-x11-6.8.1/programs/Xserver/hw/xfree86/loader/aoutloader.c.diet	2004-04-23 21:54:06.000000000 +0200
++++ xorg-x11-6.8.1/programs/Xserver/hw/xfree86/loader/aoutloader.c	2005-05-18 12:16:42.000000000 +0200
+@@ -29,7 +29,7 @@
+ #include <sys/stat.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+-#ifdef __QNX__
++#if defined(__QNX__) || defined(__dietlibc__)
+ #include <fcntl.h>
+ #else
+ #include <sys/fcntl.h>
+--- xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/shared/libc_wrapper.c.diet	2004-07-30 22:51:08.000000000 +0200
++++ xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/shared/libc_wrapper.c	2005-05-18 12:16:42.000000000 +0200
+@@ -168,9 +168,9 @@
+ #endif
+ #include <setjmp.h>
+ 
+-#if defined(setjmp) && defined(__GNU_LIBRARY__) && \
++#if defined(setjmp) && (defined(__GNU_LIBRARY__) && \
+     (!defined(__GLIBC__) || (__GLIBC__ < 2) || \
+-     ((__GLIBC__ == 2) && (__GLIBC_MINOR__ < 3)))
++     ((__GLIBC__ == 2) && (__GLIBC_MINOR__ < 3))) || defined(__dietlibc__))
+ #define HAS_GLIBC_SIGSETJMP 1
+ #endif
+ 
+@@ -459,8 +459,18 @@
+ }
+ 
+ int
++#ifdef __dietlibc__
++xf86ioctl(int fd, int request, ...)
++{
++    va_list ap;
++    pointer argp;
++    
++    va_start(ap, request);
++    argp = (pointer)va_arg(ap, pointer);
++#else
+ xf86ioctl(int fd, unsigned long request, pointer argp)
+ {
++#endif   
+     int status = ioctl(fd, request, argp);
+ 
+     xf86errno = xf86GetErrno();
+--- xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/linux/lnx_kbd.c.diet	2004-04-23 21:54:08.000000000 +0200
++++ xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/linux/lnx_kbd.c	2005-05-18 12:16:42.000000000 +0200
+@@ -93,8 +93,12 @@
+ /* kbd rate stuff based on kbdrate.c from Rik Faith <faith@cs.unc.edu> et.al.
+  * from util-linux-2.9t package */
+ 
++#ifdef __dietlibc__
++#include <sys/kd.h>
++#else
+ #include <linux/kd.h>
+ #include <linux/version.h>
++#endif
+ #ifdef __sparc__
+ #include <asm/param.h>
+ #include <asm/kbio.h>
+--- xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/linux/lnx_io.c.diet	2004-04-23 21:54:08.000000000 +0200
++++ xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/linux/lnx_io.c	2005-05-18 12:16:42.000000000 +0200
+@@ -65,9 +65,12 @@
+ 
+ /* kbd rate stuff based on kbdrate.c from Rik Faith <faith@cs.unc.edu> et.al.
+  * from util-linux-2.9t package */
+-
++#ifdef __dietlibc__
++#include <sys/kd.h>
++#else
+ #include <linux/kd.h>
+ #include <linux/version.h>
++#endif
+ #ifdef __sparc__
+ #include <asm/param.h>
+ #include <asm/kbio.h>
+--- xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/linux/drm/xf86drmCompat.c.diet	2004-06-16 11:39:15.000000000 +0200
++++ xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/linux/drm/xf86drmCompat.c	2005-05-18 12:16:42.000000000 +0200
+@@ -69,8 +69,10 @@
+ #endif
+ 
+ #ifdef __linux__
++#ifndef __dietlibc__
+ #include <sys/sysmacros.h>	/* for makedev() */
+ #endif
++#endif
+ #include "xf86drm.h"
+ #include "xf86drmCompat.h"
+ #include "drm.h"
+--- xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/linux/lnx_agp.c.diet	2004-04-23 21:54:08.000000000 +0200
++++ xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/linux/lnx_agp.c	2005-05-18 12:16:42.000000000 +0200
+@@ -16,7 +16,11 @@
+ #include "xf86OSpriv.h"
+ 
+ #if defined(linux)
++#if defined(__dietlibc__)
++#include <sys/ioctl.h>
++#else
+ #include <asm/ioctl.h>
++#endif
+ #include <linux/agpgart.h>
+ #elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+ #include <sys/ioctl.h>
+--- xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/linux/agpgart.h.diet	2004-04-23 21:54:08.000000000 +0200
++++ xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/linux/agpgart.h	2005-05-18 12:16:42.000000000 +0200
+@@ -51,7 +51,9 @@
+ #endif
+ 
+ #ifndef __KERNEL__
++#ifndef __dietlibc__
+ #include <linux/types.h>
++#endif
+ #include <asm/types.h>
+ #include <sys/types.h>
+ 
+--- xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/xf86_ansic.h.diet	2003-11-25 20:28:50.000000000 +0100
++++ xorg-x11-6.8.1/programs/Xserver/hw/xfree86/os-support/xf86_ansic.h	2005-05-18 12:16:42.000000000 +0200
+@@ -267,7 +267,11 @@
+ extern int xf86open(const char*, int,...);
+ extern int xf86close(int);
+ extern long xf86lseek(int, long, int);
++#ifdef __dietlibc__
++extern int xf86ioctl(int, int,...);
++#else
+ extern int xf86ioctl(int, unsigned long, pointer);
++#endif
+ extern xf86ssize_t xf86read(int, void *, xf86size_t);
+ extern xf86ssize_t xf86write(int, const void *, xf86size_t);
+ extern void* xf86mmap(void*, xf86size_t, int, int, int, xf86size_t /* off_t */);
+--- xorg-x11-6.8.1/programs/Xserver/Xext/xf86bigfont.c.diet	2004-04-23 20:44:41.000000000 +0200
++++ xorg-x11-6.8.1/programs/Xserver/Xext/xf86bigfont.c	2005-05-18 12:16:42.000000000 +0200
+@@ -187,7 +187,7 @@
+ 
+ 	FontShmdescIndex = AllocateFontPrivateIndex();
+ 
+-#if !defined(CSRG_BASED) && !defined(__CYGWIN__)
++#if !defined(CSRG_BASED) && !defined(__CYGWIN__) && !defined(__dietlibc__)
+ 	pagesize = SHMLBA;
+ #else
+ # ifdef _SC_PAGESIZE
+--- xorg-x11-6.8.1/programs/Xserver/Imakefile.diet	2004-09-01 02:59:17.000000000 +0200
++++ xorg-x11-6.8.1/programs/Xserver/Imakefile	2005-05-18 12:16:42.000000000 +0200
+@@ -833,9 +833,9 @@
+ #endif
+ #if (defined(SunArchitecture) || defined(SparcArchitecture)) && \
+     defined(SVR4Architecture)
+-XPSYSLIBS = $(FONTLIBS) $(CBRT) $(SYSLIBS) -lw
++XPSYSLIBS = $(FONTLIBS) $(CBRT) $(XLIB) $(SYSLIBS) -lw
+ #else
+-XPSYSLIBS = $(FONTLIBS) $(CBRT) $(SYSLIBS)
++XPSYSLIBS = $(FONTLIBS) $(CBRT) $(XLIB) $(SYSLIBS)
+ #endif
+ #if HasParallelMake
+ MakeMutex($(XPSUBDIRS) $(XPOBJS) $(XPLIBS) $(XPSYSLIBS))
+--- xorg-x11-6.8.1/programs/Xserver/Xprint/attributes.c.diet	2004-07-20 00:01:52.000000000 +0200
++++ xorg-x11-6.8.1/programs/Xserver/Xprint/attributes.c	2005-05-18 12:16:42.000000000 +0200
+@@ -1269,7 +1269,7 @@
+     return command;
+ }
+ 
+-#ifdef __QNX__
++#if defined(__QNX__) || defined(__dietlibc__)
+ #define toascii( c ) ((unsigned)(c) & 0x007f)
+ #endif
+ 
+--- xorg-x11-6.8.1/programs/xedit/lisp/lisp.c.diet	2004-09-02 10:40:32.000000000 +0200
++++ xorg-x11-6.8.1/programs/xedit/lisp/lisp.c	2005-05-18 12:16:42.000000000 +0200
+@@ -46,7 +46,11 @@
+ #endif
+ 
+ #if defined(linux)
++#if defined(__dietlibc__)
++#include <sys/shm.h>
++#else
+ #include <asm/page.h>  /* for PAGE_SIZE */
++#endif
+ #define HAS_GETPAGESIZE
+ #define HAS_SC_PAGESIZE	/* _SC_PAGESIZE may be an enum for Linux */
+ #endif
+--- xorg-x11-6.8.1/config/cf/linux.cf.diet	2004-08-11 23:14:01.000000000 +0200
++++ xorg-x11-6.8.1/config/cf/linux.cf	2005-05-18 12:16:43.000000000 +0200
+@@ -207,7 +207,11 @@
+ #endif
+ 
+ #if (LinuxCLibMajorVersion >= 6 || LinuxDistribution == LinuxSuSE)
+-# define LinuxLocaleDefines	/**/
++# ifdef Dietlibc
++#  define LinuxLocaleDefines   -DX_LOCALE
++# else
++#  define LinuxLocaleDefines	/**/
++# endif
+ #else
+ # define LinuxLocaleDefines	-DX_LOCALE
+ #endif
+@@ -225,12 +229,16 @@
+ #endif
+ 
+ #if LinuxCLibMajorVersion >= 6
++# ifdef Dietlibc
++#  define XawI18nDefines	-DUSE_XWCHAR_STRING -DUSE_XMBTOWC
++# else
++#  define XawI18nDefines	-DHAS_WCHAR_H -DHAS_WCTYPE_H -DNO_WIDEC_H
++# endif
+ # define LinuxSourceDefines	-D_POSIX_C_SOURCE=199309L \
+ 				-D_POSIX_SOURCE -D_XOPEN_SOURCE \
+ 				-D_BSD_SOURCE -D_SVID_SOURCE \
+ 				LinuxAdditionalIncludes LinuxGnuSourceDefines \
+ 				LinuxLocaleDefines
+-# define XawI18nDefines		-DHAS_WCHAR_H -DHAS_WCTYPE_H -DNO_WIDEC_H
+ # define HasPosixThreads	YES
+ # define ThreadedX		YES
+ # define HasThreadSafeAPI	YES
+@@ -947,7 +955,9 @@
+ # define DlLibrary		/**/
+ #endif
+ 
++#ifndef ServerExtraSysLibs
+ #define ServerExtraSysLibs	/**/
++#endif
+ 
+ #ifndef PamLibraries
+ #define PamLibraries		-lpam DlLibrary
+--- xorg-x11-6.8.1/config/cf/host.def.diet	2005-05-18 12:16:43.000000000 +0200
++++ xorg-x11-6.8.1/config/cf/host.def	2005-05-18 12:16:43.000000000 +0200
+@@ -0,0 +1,87 @@
++#define ProjectRoot               /opt/diet/X11R6
++#define LinuxAdditionalIncludes   -I/usr/src/linux/include
++
++#define Dietlibc
++
++#define XFree86CustomVersion      "Custom Build: 6.8.1 dietlibc"
++
++#define CcCmd			  i386-dietlibc-linux-gcc
++#define CppCmd			  i386-dietlibc-linux-cpp
++#define DefaultCCOptions	  -std=c99 -pedantic GccWarningOptions
++
++#define SystemUsrIncDir		  /opt/diet/include
++#define SystemUsrLibDir		  /opt/diet/lib-i386
++#define StdIncDir		  /opt/diet/include
++#define StdLibDir		  /opt/diet/lib-i386
++#define LibpngDir		  /opt/diet
++#define LibpngIncDir		  /opt/diet/include
++#define LibpngLibDir		  /opt/diet/lib-i386
++#define PreIncDir		  /opt/diet/include
++#define NCursesIncDir		  /opt/diet/include/ncurses
++
++#define BootstrapCFlags            -fPIC -Os -march=i386 -pipe
++#define DefaultGcc2i386Opt         -fPIC -Os -march=i386 -pipe
++#define DefaultGcc2AxpOpt          -fPIC -Os -march=i386 -pipe -Wa,-m21164a
++#define PositionIndependentCFlags  -fPIC
++#define StandardDefines		   -I/usr/src/linux/include -I/opt/diet/include/ncurses -D__dietlibc__ -D__KERNEL_STRICT_NAMES -DHAS_GLIBC_SIGSETJMP -DUSE_XWCHAR_STRING -DUSE_XMBTOWC -DX_LOCALE -Dlinux LinuxMachineDefines LinuxSourceDefines
++#define StaticNeedsPicForShared    YES
++
++#define HasCplusplus                NO
++#define LocalThreads                NO
++#define XorgServer                 YES
++#define XnestServer                 NO
++#define XVirtualFramebufferServer   NO
++#define BuildServer                YES
++#define XfbdevServer               YES
++#define BuildServersOnly            NO
++#define XF86CardDrivers            mga nv vesa vga
++#define HasMTRRSupport		     NO
++
++#define HasFreetype2                NO
++#define HasLibCrypt                 NO
++#define HasSharedLibraries         YES
++#define HasZlib                    YES
++#define HasExpat                    NO
++#define HasPoll			   YES
++#define HasPosixThreads		   YES
++#define HasFontconfig               NO
++#define ForceNormalLib              NO
++#define HasDevRandom               YES
++#define HasPosixRegex		    NO
++#define HasLinuxInput              YES
++
++#define UseConfDirForXkb            NO
++#define UseConfDirForAppDefaults    NO
++#define UseFreetype2		   YES
++
++#define StripInstalledPrograms     YES
++#define BuildHtmlManPages           NO
++#define BuildType1                 YES
++#define BuildFreeType              YES
++#define BuildXF86MiscExt            NO
++#define BuildGlxExt		   YES
++#define BuildXF86DRI		   YES
++#define BuildPhigs                  NO
++#define BuildPexExt                 NO
++#define BuildPexLib                 NO
++#define BuildXIE                    NO
++#define BuildXIElib                 NO
++#define BuildFonts		    NO
++
++#undef  DefaultUserPath
++#define DefaultUserPath		    /usr/local/bin:/bin:/usr/bin
++#undef  DefaultSystemPath
++#define DefaultSystemPath	    /usr/local/sbin:/sbin:/usr/sbin:/bin:/usr/bin
++
++#define FontDir                     /usr/X11R6/lib/fonts
++#define AdmDir			    /var/log
++#define LbxproxyDir		    /etc/X11/lbxproxy
++#define ProxyManagerDir		    /etc/X11/proxymngr
++#define ServerConfigDir		    /etc/X11/xserver
++#define XdmDir			    /etc/X11/xdm
++#define XConfigDir		    /etc/X11
++#define XinitDir		    /etc/X11/xinit
++
++#define BuildChooser                NO
++#define BuildPlugin                 NO
++
+--- xorg-x11-6.8.1/include/Xfuncs.h.diet	2004-04-23 20:43:05.000000000 +0200
++++ xorg-x11-6.8.1/include/Xfuncs.h	2005-05-18 12:16:43.000000000 +0200
+@@ -52,9 +52,11 @@
+ #include <strings.h>
+ #endif
+ #define _XFUNCS_H_INCLUDED_STRING_H
+-#define bcopy(b1,b2,len) memmove(b2, b1, (size_t)(len))
+-#define bzero(b,len) memset(b, 0, (size_t)(len))
+-#define bcmp(b1,b2,len) memcmp(b1, b2, (size_t)(len))
++#ifndef __dietlibc__
++# define bcopy(b1,b2,len) memmove(b2, b1, (size_t)(len))
++# define bzero(b,len) memset(b, 0, (size_t)(len))
++# define bcmp(b1,b2,len) memcmp(b1, b2, (size_t)(len))
++#endif
+ #endif
+ #endif /* X_USEBFUNCS */
+ 

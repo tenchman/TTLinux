@@ -1,0 +1,60 @@
+--- axTLS-1.1.9-2/Makefile.install	2007-12-02 01:42:23.000000000 +0100
++++ axTLS-1.1.9-2/Makefile	2008-09-19 18:48:23.000000000 +0200
+@@ -65,8 +65,9 @@ ssl/version.h:
+ 	@echo "#define AXTLS_VERSION    \"(no version)\"" > ssl/version.h
+ 
+ $(PREFIX) :
+-	@mkdir -p $(PREFIX)/lib
+-	@mkdir -p $(PREFIX)/bin
++	@mkdir -p $(DESTDIR)$(PREFIX)/lib
++	@mkdir -p $(DESTDIR)$(PREFIX)/bin
++	@mkdir -p $(DESTDIR)$(PREFIX)/include/axtls
+ 
+ release:
+ 	$(MAKE) -C config/scripts/config clean
+@@ -86,31 +87,31 @@ win32_demo:
+ 	$(MAKE) win32releaseconf
+ 
+ install: $(PREFIX) all
+-	cp --no-dereference $(STAGE)/libax* $(PREFIX)/lib
+-	chmod 755 $(PREFIX)/lib/libax* 
++	cp --no-dereference $(STAGE)/libax* $(DESTDIR)$(PREFIX)/lib
++	chmod 755 $(DESTDIR)$(PREFIX)/lib/libax* 
+ ifdef CONFIG_SAMPLES
+-	install -m 755 $(STAGE)/ax* $(PREFIX)/bin 
++	install -m 755 $(STAGE)/ax* $(DESTDIR)$(PREFIX)/bin 
+ endif
+ ifdef CONFIG_HTTP_HAS_AUTHORIZATION
+-	install -m 755 $(STAGE)/htpasswd $(PREFIX)/bin 
++	install -m 755 $(STAGE)/htpasswd $(DESTDIR)$(PREFIX)/bin 
+ endif
+ ifdef CONFIG_PLATFORM_CYGWIN
+-	install -m 755 $(STAGE)/cygaxtls.dll $(PREFIX)/bin 
++	install -m 755 $(STAGE)/cygaxtls.dll $(DESTDIR)$(PREFIX)/bin 
+ endif
+ ifdef CONFIG_PERL_BINDINGS 
+ 	install -m 755 $(STAGE)/axtlsp.pm `perl -e 'use Config; print $$Config{installarchlib};'`
+ endif
+-	@mkdir -p -m 755 $(PREFIX)/include/axTLS
+-	install -m 644 crypto/*.h $(PREFIX)/include/axTLS
+-	install -m 644 ssl/*.h $(PREFIX)/include/axTLS
+-	-rm $(PREFIX)/include/axTLS/cert.h
+-	-rm $(PREFIX)/include/axTLS/private_key.h
+-	install -m 644 config/config.h $(PREFIX)/include/axTLS
++	@mkdir -p -m 755 $(DESTDIR)$(PREFIX)/include/axTLS
++	install -m 644 crypto/*.h $(DESTDIR)$(PREFIX)/include/axTLS
++	install -m 644 ssl/*.h $(DESTDIR)$(PREFIX)/include/axTLS
++	-rm $(DESTDIR)$(PREFIX)/include/axTLS/cert.h
++	-rm $(DESTDIR)$(PREFIX)/include/axTLS/private_key.h
++	install -m 644 config/config.h $(DESTDIR)$(PREFIX)/include/axTLS
+ 
+ installclean:
+-	-@rm $(PREFIX)/lib/libax* > /dev/null 2>&1
+-	-@rm $(PREFIX)/bin/ax* > /dev/null 2>&1
+-	-@rm $(PREFIX)/bin/axhttpd* > /dev/null 2>&1
++	-@rm $(DESTDIR)$(PREFIX)/lib/libax* > /dev/null 2>&1
++	-@rm $(DESTDIR)$(PREFIX)/bin/ax* > /dev/null 2>&1
++	-@rm $(DESTDIR)$(PREFIX)/bin/axhttpd* > /dev/null 2>&1
+ 	-@rm `perl -e 'use Config; print $$Config{installarchlib};'`/axtlsp.pm > /dev/null 2>&1
+ 
+ test:

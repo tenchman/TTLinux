@@ -1,0 +1,51 @@
+--- gcc-4.1.2/gcc/config/arm/elf.h.softfloat	2008-04-29 11:44:46.000000000 +0200
++++ gcc-4.1.2/gcc/config/arm/elf.h	2008-04-29 11:46:59.000000000 +0200
+@@ -46,7 +46,9 @@
+ 
+ #ifndef SUBTARGET_ASM_FLOAT_SPEC
+ #define SUBTARGET_ASM_FLOAT_SPEC "\
+-%{mapcs-float:-mfloat}"
++%{mapcs-float:-mfloat} \
++%{mhard-float:-mfpu=fpa} \
++%{!mhard-float: %{msoft-float:-mfpu=softfpa;:-mfpu=softvfp}}"
+ #endif
+ 
+ #ifndef ASM_SPEC
+--- gcc-4.1.2/gcc/config/arm/linux-elf.h.softfloat	2008-04-29 10:12:11.000000000 +0200
++++ gcc-4.1.2/gcc/config/arm/linux-elf.h	2008-04-29 11:41:51.000000000 +0200
+@@ -43,18 +43,18 @@
+ #endif
+ 
+ #undef  TARGET_DEFAULT_FLOAT_ABI
+-#define TARGET_DEFAULT_FLOAT_ABI ARM_FLOAT_ABI_HARD
++#define TARGET_DEFAULT_FLOAT_ABI ARM_FLOAT_ABI_SOFT
+ 
+ #undef  TARGET_DEFAULT
+ #define TARGET_DEFAULT (TARGET_ENDIAN_DEFAULT)
+ 
+-#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm6
++#define SUBTARGET_CPU_DEFAULT TARGET_CPU_xscale
+ 
+ #define SUBTARGET_EXTRA_LINK_SPEC " -m " TARGET_LINKER_EMULATION " -p"
+ 
+ #undef  MULTILIB_DEFAULTS
+ #define MULTILIB_DEFAULTS \
+-	{ "marm", TARGET_ENDIAN_OPTION, "mhard-float", "mno-thumb-interwork" }
++	{ "marm", TARGET_ENDIAN_OPTION, "msoft-float", "mno-thumb-interwork" }
+ 
+ /* Now we define the strings used to build the spec file.  */
+ #undef  LIB_SPEC
+--- gcc-4.1.2/gcc/config/arm/t-linux.softfloat	2008-04-29 11:42:50.000000000 +0200
++++ gcc-4.1.2/gcc/config/arm/t-linux	2008-04-29 11:43:53.000000000 +0200
+@@ -4,7 +4,10 @@ TARGET_LIBGCC2_CFLAGS = -fomit-frame-poi
+ LIBGCC2_DEBUG_CFLAGS = -g0
+ 
+ LIB1ASMSRC = arm/lib1funcs.asm
+-LIB1ASMFUNCS = _udivsi3 _divsi3 _umodsi3 _modsi3 _dvmd_lnx
++LIB1ASMFUNCS = _udivsi3 _divsi3 _umodsi3 _modsi3 _dvmd_lnx \
++    _negdf2 _addsubdf3 _muldivdf3 _cmpdf2 _unorddf2 _fixdfsi _fixunsdfsi \
++    _truncdfsf2 _negsf2 _addsubsf3 _muldivsf3 _cmpsf2 _unordsf2 \
++    _fixsfsi _fixunssfsi _floatdidf _floatdisf
+ 
+ # MULTILIB_OPTIONS = mhard-float/msoft-float
+ # MULTILIB_DIRNAMES = hard-float soft-float

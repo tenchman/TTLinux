@@ -1,0 +1,6 @@
+# vim:set syntax=kconfig:
+config CONFIG_GNUTLS
+  bool "GnuTLS"
+  default n
+  help
+    http://www.gnu.org/software/gnutls/

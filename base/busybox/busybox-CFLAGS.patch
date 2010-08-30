@@ -1,0 +1,30 @@
+--- busybox-1.8.2/Makefile.CFLAGS	2007-11-24 05:31:36.000000000 +0100
++++ busybox-1.8.2/Makefile	2008-07-23 09:42:06.000000000 +0200
+@@ -305,7 +305,7 @@ CFLAGS		:= $(CFLAGS)
+ CPPFLAGS	:= $(CPPFLAGS)
+ AFLAGS		:= $(AFLAGS)
+ LDFLAGS		:= $(LDFLAGS)
+-LDLIBS		:=
++LDLIBS		:= compat
+ 
+ # Read KERNELRELEASE from .kernelrelease (if it exists)
+ KERNELRELEASE = $(shell cat .kernelrelease 2> /dev/null)
+--- busybox-1.8.2/Makefile.flags.CFLAGS	2007-11-10 02:40:54.000000000 +0100
++++ busybox-1.8.2/Makefile.flags	2008-07-23 09:45:52.000000000 +0200
+@@ -1,6 +1,8 @@
+ # ==========================================================================
+ # Build system
+ # ==========================================================================
++CFLAGS += -D_BSD_SOURCE
++LDFLAGS += -lcompat
+ 
+ BB_VER = $(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
+ export BB_VER
+@@ -46,7 +48,6 @@ CFLAGS += $(call cc-option,-Os -fno-buil
+ # of branch probabilities (hopefully makes bloatcheck more stable):
+ CFLAGS += $(call cc-option,-fno-guess-branch-probability,)
+ CFLAGS += $(call cc-option,-funsigned-char -static-libgcc,)
+-CFLAGS += $(call cc-option,-falign-functions=1 -falign-jumps=1 -falign-labels=1 -falign-loops=1,)
+ 
+ # FIXME: These warnings are at least partially to be concerned about and should
+ # be fixed..

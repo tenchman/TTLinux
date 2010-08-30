@@ -1,0 +1,72 @@
+--- traceroute-2.0.3/traceroute/traceroute.c.diet	2007-01-09 13:37:54.000000000 +0100
++++ traceroute-2.0.3/traceroute/traceroute.c	2007-05-14 17:27:19.000000000 +0200
+@@ -29,7 +29,9 @@
+ #include <linux/errqueue.h>
+ 
+ /*  XXX: Remove this when things will be defined properly in netinet/ ...  */
++#ifndef __dietlibc__
+ #include "flowlabel.h"
++#endif
+ 
+ #include <clif.h>
+ #include "version.h"
+@@ -48,6 +50,9 @@
+ #define IPV6_RECVHOPLIMIT IPV6_HOPLIMIT
+ #endif
+ 
++#ifndef IPV6_RTHDR_TYPE_0
++#define IPV6_RTHDR_TYPE_0 0
++#endif
+ 
+ #define MAX_HOPS	255
+ #define MAX_PROBES	10
+@@ -159,7 +164,9 @@
+ 
+ 	memset (&hints, 0, sizeof (hints));
+ 	hints.ai_family = af;
++#ifndef __dietlibc__
+ 	hints.ai_flags = AI_IDN;
++#endif
+ 
+ 	ret = getaddrinfo (name, NULL, &hints, &res);
+ 	if (ret) {
+@@ -613,8 +620,13 @@
+ 	    char buf[1024];
+ 
+ 	    buf[0] = '\0';
++#ifndef __dietlibc__
+ 	    getnameinfo (&res->sa, sizeof (*res), buf, sizeof (buf),
+ 							    0, 0, NI_IDN);
++#else
++	    getnameinfo (&res->sa, sizeof (*res), buf, sizeof (buf),
++							    0, 0, 0);
++#endif
+ 	    /*  foo on errors.  */
+ 
+ 	    printf (" %s (%s)", buf, str);
+--- traceroute-2.0.3/include/linux/errqueue.h.diet	2007-05-14 17:12:35.000000000 +0200
++++ traceroute-2.0.3/include/linux/errqueue.h	2007-05-14 17:11:16.000000000 +0200
+@@ -0,0 +1,23 @@
++#ifndef _LINUX_ERRQUEUE_H
++#define _LINUX_ERRQUEUE_H 1
++
++struct sock_extended_err
++{
++	__u32	ee_errno;	
++	__u8	ee_origin;
++	__u8	ee_type;
++	__u8	ee_code;
++	__u8	ee_pad;
++	__u32   ee_info;
++	__u32   ee_data;
++};
++
++#define SO_EE_ORIGIN_NONE	0
++#define SO_EE_ORIGIN_LOCAL	1
++#define SO_EE_ORIGIN_ICMP	2
++#define SO_EE_ORIGIN_ICMP6	3
++
++#define SO_EE_OFFENDER(ee)	((struct sockaddr*)((ee)+1))
++
++
++#endif

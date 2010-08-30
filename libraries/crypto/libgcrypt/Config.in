@@ -1,0 +1,73 @@
+# vim:set syntax=kconfig:
+config CONFIG_LIBGCRYPT
+  bool "libgcrypt - A general-purpose cryptography library"
+  default n
+  help
+    Libgcrypt is a general purpose crypto library based on the code used
+    in GNU Privacy Guard.
+
+    http://www.gnupg.org/
+  
+  menu "Digests"
+    depends CONFIG_LIBGCRYPT
+    
+    config CONFIG_LIBGCRYPT_DIGEST_CRC
+    bool "crc - "
+    depends CONFIG_LIBGCRYPT
+
+    config CONFIG_LIBGCRYPT_DIGEST_MD4
+    bool "md4 - message digest algorithm"
+    depends CONFIG_LIBGCRYPT
+
+    config CONFIG_LIBGCRYPT_DIGEST_SHA256
+    bool "sha256 - The SHA (Secure Hash Algorithm) hash function"
+    depends CONFIG_LIBGCRYPT
+
+    config CONFIG_LIBGCRYPT_DIGEST_SHA512
+    bool "sha512 - The SHA (Secure Hash Algorithm) hash function"
+    depends CONFIG_LIBGCRYPT
+  endmenu
+
+  menu "Public key algos"
+    depends CONFIG_LIBGCRYPT
+    
+    config CONFIG_LIBGCRYPT_PUBKEY_ELGAMAL
+    bool "elgamal - asymmetric key encryption algorithm for public key cryptography"
+    depends CONFIG_LIBGCRYPT
+
+    config CONFIG_LIBGCRYPT_PUBKEY_RSA
+    bool "rsa - algorithm for public-key encryption"
+    depends CONFIG_LIBGCRYPT
+  endmenu
+
+  menu "Ciphers"
+    depends CONFIG_LIBGCRYPT
+    
+    config CONFIG_LIBGCRYPT_CIPHERS_ARCFOUR
+    bool "arcfour - The arcfour stream cipher"
+    depends CONFIG_LIBGCRYPT
+
+    config CONFIG_LIBGCRYPT_CIPHERS_BLOWFISH
+    bool "blowfish - The blowfish keyed, symmetric block cipher"
+    depends CONFIG_LIBGCRYPT
+
+    config CONFIG_LIBGCRYPT_CIPHERS_CAST5
+    bool "cast5 - Cast5 (CAST-128) block cipher"
+    depends CONFIG_LIBGCRYPT
+
+    config CONFIG_LIBGCRYPT_CIPHERS_AES
+    bool "AES - Advanced Encryption Standard, also known as Rijndael"
+    depends CONFIG_LIBGCRYPT
+
+    config CONFIG_LIBGCRYPT_CIPHERS_TWOFISH
+    bool "twofish - Twofish symmetric key block cipher"
+    depends CONFIG_LIBGCRYPT
+
+    config CONFIG_LIBGCRYPT_CIPHERS_SERPENT
+    bool "serpent - Serpent symmetric key block cipher"
+    depends CONFIG_LIBGCRYPT
+
+    config CONFIG_LIBGCRYPT_CIPHERS_RFC2268
+    bool "rfc2268 -RC2(r) Encryption Algorithm"
+    depends CONFIG_LIBGCRYPT
+  endmenu

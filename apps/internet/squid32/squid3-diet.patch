@@ -1,0 +1,18 @@
+diff -up squid-3.1.0.14/compat/os/linux.h.diet squid-3.1.0.14/compat/os/linux.h
+--- squid-3.1.0.14/compat/os/linux.h.diet	2009-09-29 14:51:44.000000000 +0200
++++ squid-3.1.0.14/compat/os/linux.h	2009-09-29 14:55:50.000000000 +0200
+@@ -35,11 +35,13 @@
+ #if HAVE_SYS_CAPABILITY_H
+ 
+ #if LIBCAP_BROKEN
++#ifndef _LINUX_TYPES_H
+ #undef _POSIX_SOURCE
+ #define _LINUX_TYPES_H
+ #define _LINUX_FS_H
+ typedef uint32_t __u32;
+-#endif
++#endif /* _LINUX_TYPES_H */
++#endif /* LIBCAP_BROKEN */
+ 
+ #include <sys/capability.h>
+ #endif /* HAVE_SYS_CAPABILITY_H */

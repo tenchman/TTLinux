@@ -1,0 +1,11 @@
+--- openssl-0.9.7k/fips/rand/fips_rand.h.nodes	2006-01-30 19:14:31.000000000 +0100
++++ openssl-0.9.7k/fips/rand/fips_rand.h	2006-09-18 07:45:28.000000000 +0200
+@@ -50,7 +50,7 @@
+ #ifndef HEADER_FIPS_RAND_H
+ #define HEADER_FIPS_RAND_H
+ 
+-#include "des.h"
++// #include "des.h"
+ 
+ #ifdef OPENSSL_FIPS
+ 

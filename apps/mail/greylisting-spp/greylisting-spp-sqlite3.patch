@@ -1,0 +1,423 @@
+--- greylisting-spp-0.2/src/db-sqlite3.c.sqlite3	2007-04-23 21:21:13.000000000 +0200
++++ greylisting-spp-0.2/src/db-sqlite3.c	2007-04-23 21:20:53.000000000 +0200
+@@ -0,0 +1,408 @@
++/* greylisting-spp - A qmail-spp plugin implementing greylisting
++ *
++ * db-sqlite.c
++ *
++ *  Copyright (C) 2004 Peter Conrad <conrad@tivano.de>
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License (version 2) as
++ *  published by the Free Software Foundation.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, write to the Free Software
++ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#include <sqlite3.h>
++#include <unistd.h>
++#include <stdlib.h>
++#include <string.h>
++#include <time.h>
++#include "db-api.h"
++
++static sqlite3	*db = NULL;
++
++static int  result_count;
++static char result_time[8];
++static char result_flag;
++
++static char *parameter[4];
++
++#define ERR_CANT_OPEN_DB	"Can't open database file \""
++#define ERR_CANT_CREATE_DB_FN	"Can't create DB function!\n"
++#define ERR_VERSION_MISMATCH	"Version mismatch in file \""
++#define ERR_WRITING_ENTRY	"Couldn't write entry: "
++#define ERR_READING_ENTRY	"Couldn't read entry: "
++
++/* This file contains functions for manipulating the greylisting database.
++ * The database is an SQLite style database (see http://sqlite.org/ ).
++ * It consists of two simple tables:
++ *  - GL_MGMT contains some key/value pairs for internal use
++ *  - GL_GREYLIST contains greylisting data (i. e. IP, sender, recipient,
++ *    timestamp and flag).
++ */
++
++/** Closes cursor, transaction, db and handle.
++ */
++void closedb() {
++    if (db) {
++	sqlite3_close(db);
++	db = NULL;
++    }
++}
++
++/** Write the read error message to stderr and exit with status 1. */
++static void read_error(char *error) {
++    write(STDERR_FILENO, progname, strlen(progname));
++    write(STDERR_FILENO, ": ", 2);
++    write(STDERR_FILENO, ERR_READING_ENTRY, strlen(ERR_READING_ENTRY));
++    if (error) {
++	write(STDERR_FILENO, error, strlen(error));
++	free(error);
++    } else {
++	write(STDERR_FILENO, "NULL", 4);
++    }
++    write(STDERR_FILENO, "\n" , 1);
++    closedb();
++    exit(1);
++}
++
++/** Write the write error message to stderr and exit with status 1. */
++static void write_error(char *error) {
++    write(STDERR_FILENO, progname, strlen(progname));
++    write(STDERR_FILENO, ": ", 2);
++    write(STDERR_FILENO, ERR_WRITING_ENTRY, strlen(ERR_WRITING_ENTRY));
++    if (error) {
++	write(STDERR_FILENO, error, strlen(error));
++	free(error);
++    } else {
++	write(STDERR_FILENO, "<<NULL>>", 4);
++    }
++    write(STDERR_FILENO, "\n" , 1);
++    closedb();
++    exit(1);
++}
++
++/** Writes to the given buffer 8 hex digits representing the given time.
++ */
++static void timeAsString(char *ts, time_t time) {
++int i = 7;
++
++    while (time) {
++	int digit = time & 0xf;
++	if (digit < 10) {
++	    ts[i] = '0' + digit;
++	} else {
++	    ts[i] = 'a' + digit - 10;
++	}
++	i--;
++	time >>= 4;
++    }
++    while (i >= 0) { ts[i--] = '0'; }
++}
++
++/** Writes to the given buffer 8 hex digits representing the current time.
++ */
++static void currentTimeAsString(char *ts) {
++    timeAsString(ts, time(NULL));
++}
++
++/** Parses the given buffer as a hex string representing a timestamp.
++ *  The buffer must contain at least 8 hex digits.
++ *  Returns -1 in case of an error.
++ */
++static time_t parseTimeString(char *buf) {
++int i;
++time_t ts = 0;
++
++    for (i = 0; i < 8; i++) {
++	ts <<= 4;
++	if (buf[i] >= '0' && buf[i] <= '9') {
++	    ts += buf[i] - '0';
++	} else if (buf[i] >= 'a' && buf[i] <= 'f') {
++	    ts += buf[i] - 'a' + 10;
++	} else {
++	    return -1;
++	}
++    }
++
++    return ts;
++}
++
++static int lck_callback(void *pArg, int argc, char **argv,
++			char **columnNames) {
++    if (!argv) {
++	result_time[0] = 0;
++	return 0;
++    }
++    if (argc != 1) {
++	return -1; /* Expecting 1 result column, the timestamp */
++    }
++    memcpy(result_time, argv[0], 8);
++    return 0;
++}
++
++static int count_callback(void *pArg, int argc, char **argv,
++			  char **columnNames) {
++    result_count = atoi(argv[0]);
++    return 0;
++}
++
++static void gl_parameter(sqlite3_context *fn, int i, sqlite3_value **argv) {
++    char *text = (char*)sqlite3_value_text(argv[0]);
++    sqlite3_result_text(fn, parameter[text[0] - '1'], -1, SQLITE_TRANSIENT);
++}
++
++/** Opens the given database file. Checks if required tables exist and creates
++ *  them if not. Checks the value of 'Version' and 'LastCleanup' and executes
++ * a cleanup statement if it's more than max_wait seconds in the past.
++ */
++void opendb(char *path) {
++    time_t now, then;
++    char buf[9], *errmsg = NULL;
++
++    if (sqlite3_open(path, &db) != SQLITE_OK) {
++	errmsg = (char *)sqlite3_errmsg(db);
++        write(STDERR_FILENO, progname, strlen(progname));
++	write(STDERR_FILENO, ": ", 2);
++	write(STDERR_FILENO, ERR_CANT_OPEN_DB, strlen(ERR_CANT_OPEN_DB));
++	if (errmsg) {
++	    write(STDERR_FILENO, errmsg, strlen(errmsg));
++	    free(errmsg);
++	} else {
++	    write(STDERR_FILENO, "NULL", 4);
++	}
++	write(STDERR_FILENO, "\n" , 1);
++	exit(1);
++    }
++
++    /* Locking + transactions are handled by sqlite - or so the documentation
++     * says... */
++    sqlite3_busy_timeout(db, 5000); /* 5 seconds should be more than enough. */
++
++    /* Hack^H^H^H^HWorkaround for missing parameter binding functions */
++    if (sqlite3_create_function(db, "gl_parameter", 1, SQLITE_ANY, 0, &gl_parameter, 0, 0)
++	    != SQLITE_OK) {
++	write(STDERR_FILENO, progname, strlen(progname));
++	write(STDERR_FILENO, ": ", 2);
++	write(STDERR_FILENO, ERR_CANT_CREATE_DB_FN,
++	      strlen(ERR_CANT_CREATE_DB_FN));
++	closedb();
++    }
++
++    /* Check if table GL_MGMT exists */
++    if (sqlite3_exec(db, "SELECT COUNT(*) FROM SQLite_Master "
++			"WHERE Type = 'table' AND name = 'GL_MGMT'",
++		    &count_callback, NULL, &errmsg) != SQLITE_OK) {
++	read_error(errmsg);
++    }
++    if (result_count == 0) {
++	/* If not -> create tables */
++	if (sqlite3_exec(db, "CREATE TABLE GL_MGMT ("
++			    "Name TEXT NOT NULL PRIMARY KEY, "
++			    "Value TEXT NOT NULL)",
++			NULL, NULL, &errmsg) != SQLITE_OK) {
++	    write_error(errmsg);
++	}
++	if (sqlite3_exec(db, "INSERT INTO GL_MGMT (Name, Value) "
++			    "VALUES ('Version', '1.0')",
++			NULL, NULL, &errmsg) != SQLITE_OK) {
++	    write_error(errmsg);
++	}
++	currentTimeAsString(buf);
++	buf[8] = 0;
++	parameter[0] = buf;
++	if (sqlite3_exec(db, "INSERT INTO GL_MGMT (Name, Value) "
++			    "VALUES ('LastCleanup', gl_parameter(1))",
++			NULL, NULL, &errmsg) != SQLITE_OK) {
++	    write_error(errmsg);
++	}
++	if (sqlite3_exec(db, "CREATE TABLE GL_GREYLIST ("
++			    "IP TEXT NOT NULL, "
++			    "Sender TEXT NOT NULL, "
++			    "Recipient TEXT NOT NULL, "
++			    "Flag CHAR(1) NOT NULL, "
++			    "Timestamp CHAR(8) NOT NULL, "
++			    "PRIMARY KEY (IP, Sender, Recipient))",
++			NULL, NULL, &errmsg) != SQLITE_OK) {
++	    write_error(errmsg);
++	}
++	if (sqlite3_exec(db, "CREATE INDEX I_GL_FLAG_TIME "
++			    "ON GL_GREYLIST (Flag, Timestamp)",
++			NULL, NULL, &errmsg) != SQLITE_OK) {
++	    write_error(errmsg);
++	}
++    } else {
++	/* else check Version, check LastCleanupRun */
++	if (sqlite3_exec(db, "SELECT COUNT(*) FROM GL_MGMT "
++			    "WHERE Name = 'Version' AND Value = '1.0'",
++			&count_callback, NULL, &errmsg) != SQLITE_OK) {
++	    read_error(errmsg);
++	}
++	if (result_count == 0) {
++	    write(STDERR_FILENO, progname, strlen(progname));
++	    write(STDERR_FILENO, ": ", 2);
++	    write(STDERR_FILENO, ERR_VERSION_MISMATCH,
++		  strlen(ERR_VERSION_MISMATCH));
++	    write(STDERR_FILENO, path, strlen(path));
++	    write(STDERR_FILENO, "\n" , 1);
++	    closedb();
++	    exit(1);
++	}
++	result_time[0] = 0;
++	if (sqlite3_exec(db, "SELECT Value FROM GL_MGMT "
++			    "WHERE Name = 'LastCleanup'",
++			&lck_callback, NULL, &errmsg) != SQLITE_OK) {
++	    read_error(errmsg);
++	}
++	if (!result_time[0]) {
++	    currentTimeAsString(buf);
++	    buf[8] = 0;
++	    parameter[0] = buf;
++	    if (sqlite3_exec(db, "INSERT INTO GL_MGMT (Name, Value) "
++				"VALUES ('LastCleanup', gl_parameter(1))",
++			    NULL, NULL, &errmsg) != SQLITE_OK) {
++		write_error(errmsg);
++	    }
++	} else {
++	    then = parseTimeString(result_time);
++	    now = time(NULL);
++	    if (now - then > max_wait) {
++		buf[8] = 0;
++		timeAsString(buf, now - max_wait);
++		parameter[0] = buf;
++		if (sqlite3_exec(db, "DELETE FROM GL_GREYLIST "
++				    "WHERE Flag = '-' "
++				      "AND Timestamp < gl_parameter(1)",
++				NULL, NULL, &errmsg) != SQLITE_OK) {
++		    write_error(errmsg);
++		}
++		timeAsString(buf, now - accept_good);
++		if (sqlite3_exec(db, "DELETE FROM GL_GREYLIST "
++				    "WHERE Flag = '+' "
++				      "AND Timestamp < gl_parameter(1)",
++				NULL, NULL, &errmsg) != SQLITE_OK) {
++		    write_error(errmsg);
++		}
++		timeAsString(buf, now);
++		if (sqlite3_exec(db, "UPDATE GL_MGMT "
++				    "SET Value = gl_parameter(1) "
++				    "WHERE Name = 'LastCleanup'",
++				NULL, NULL, &errmsg) != SQLITE_OK) {
++		    write_error(errmsg);
++		}
++	    }
++	}
++    }
++}
++
++static int find_callback(void *pArg, int argc, char **argv,
++			 char **columnNames) {
++    if (!argv) {
++	result_time[0] = 0;
++	return 0;
++    }
++    if (argc != 2) {
++	return -1; /* Expecting 2 result columns, Timestamp and Flag */
++    }
++    memcpy(result_time, argv[0], 8);
++    result_flag = argv[1][0];
++    return 0;
++}
++
++/** Searches the database for the given entry.
++ *  Returns a negative number if no matching entry was found.
++ *  Returns 0 if a matching entry was found but the min_reject interval has
++ *  not yet expired.
++ *  Otherwise, a positive number is returned.
++ */
++int find_entry(char *ip, char *sender, char *recipient) {
++time_t now, then;
++char *errmsg = NULL;
++
++    parameter[0] = ip;
++    parameter[1] = sender;
++    parameter[2] = recipient;
++    result_time[0] = 0;
++    if (sqlite3_exec(db, "SELECT Timestamp, Flag FROM GL_GREYLIST "
++			"WHERE IP = gl_parameter(1) "
++			  "AND Sender = gl_parameter(2) "
++			  "AND Recipient = gl_parameter(3) ",
++		    &find_callback, NULL, &errmsg) != SQLITE_OK) {
++	read_error(errmsg);
++    }
++    if (!result_time[0]) { return -1; }
++
++    then = parseTimeString(result_time);
++    now = time(NULL);
++    if ((now - then > max_wait && result_flag == '-')
++            || (now - then > accept_good && result_flag == '+')) {
++        /* Expired -> delete */
++        delete_entry();
++        return -1;
++    }
++
++    return result_flag == '+' || now - then >= min_reject;
++}
++
++/** Updates the entry for our msg_key.
++ */
++void update_entry() {
++char *errmsg = NULL;
++char buf[9];
++
++    currentTimeAsString(buf);
++    buf[8] = 0;
++    parameter[3] = buf;
++    if (sqlite3_exec(db, "UPDATE GL_GREYLIST "
++			"SET Timestamp = gl_parameter(4), Flag = '+' "
++			"WHERE IP = gl_parameter(1) "
++			  "AND Sender = gl_parameter(2) "
++			  "AND Recipient = gl_parameter(3) ",
++		    NULL, NULL, &errmsg) != SQLITE_OK) {
++	write_error(errmsg);
++    }
++}
++
++/** Deletes the entry for our msg_key.
++ */
++void delete_entry() {
++char *errmsg = NULL;
++    if (sqlite3_exec(db, "DELETE FROM GL_GREYLIST "
++			"WHERE IP = gl_parameter(1) "
++			  "AND Sender = gl_parameter(2) "
++			  "AND Recipient = gl_parameter(3) ",
++		    NULL, NULL, &errmsg) != SQLITE_OK) {
++	write_error(errmsg);
++    }
++}
++
++/** Adds a new entry to the file.
++ */
++void add_entry(char *ip, char *sender, char *recipient) {
++char *errmsg = NULL;
++char buf[9];
++
++    parameter[0] = ip;
++    parameter[1] = sender;
++    parameter[2] = recipient;
++    currentTimeAsString(buf);
++    buf[8] = 0;
++    parameter[3] = buf;
++    if (sqlite3_exec(db, "INSERT INTO GL_GREYLIST "
++			"(IP, Sender, Recipient, Timestamp, Flag) "
++			"VALUES (gl_parameter(1), gl_parameter(2), "
++				"gl_parameter(3), gl_parameter(4), '-')",
++		    NULL, NULL, &errmsg) != SQLITE_OK) {
++	write_error(errmsg);
++    }
++}
++
++/* Do not change the following line:
++ * arch-tag: a8817aa0-2ec1-41bb-8e6c-0589f2dbba3d
++ */
+--- greylisting-spp-0.2/src/Makefile.sqlite3	2007-04-23 03:03:56.000000000 +0200
++++ greylisting-spp-0.2/src/Makefile	2007-04-23 21:21:32.000000000 +0200
+@@ -27,6 +27,9 @@
+ ifeq ($(DB_IMPL),sqlite)
+ LDFLAGS += -lsqlite
+ endif
++ifeq ($(DB_IMPL),sqlite3)
++LDFLAGS += -lsqlite3 -lpthread -lcompat
++endif
+ 
+ all: greylisting-spp
+ 

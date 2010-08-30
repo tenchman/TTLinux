@@ -1,0 +1,1532 @@
+--- ucspi-tcp-0.88/Makefile.matrixssl	2000-03-18 16:18:42.000000000 +0100
++++ ucspi-tcp-0.88/Makefile	2005-01-07 13:08:36.591683504 +0100
+@@ -1,5 +1,16 @@
+ # Don't edit Makefile! Use conf-* for configuration.
+ 
++WITH_SSL = yes
++
++ifeq ($(WITH_SSL),yes)
++DEFINES=-DWITH_SSL -DMATRIX_SSL
++SSLSOCKET=sslSocket.o
++# LIBS for additional libraries and INCS for additional includes
++LIBS=-lmatrixssl
++#INCS=-I/usr/local/include
++OPENSSLBIN=openssl
++endif
++
+ SHELL=/bin/sh
+ 
+ default: it
+@@ -151,6 +162,10 @@
+ 	> choose
+ 	chmod 755 choose
+ 
++clean: \
++TARGETS
++	rm -f `cat TARGETS`
++
+ commands.o: \
+ compile commands.c buffer.h stralloc.h gen_alloc.h str.h case.h \
+ commands.h
+@@ -741,11 +756,15 @@
+ stralloc.h gen_alloc.h
+ 	./compile tcprulescheck.c
+ 
++sslSocket.o: \
++compile sslSocket.c sslSocket.h
++	./compile sslSocket.c
++
+ tcpserver: \
+-load tcpserver.o rules.o remoteinfo.o timeoutconn.o cdb.a dns.a \
++load tcpserver.o rules.o remoteinfo.o timeoutconn.o $(SSLSOCKET) cdb.a dns.a \
+ time.a unix.a byte.a socket.lib
+-	./load tcpserver rules.o remoteinfo.o timeoutconn.o cdb.a \
+-	dns.a time.a unix.a byte.a  `cat socket.lib`
++	./load tcpserver rules.o remoteinfo.o timeoutconn.o $(SSLSOCKET) cdb.a \
++	dns.a time.a unix.a byte.a  $(LIBS) `cat socket.lib`
+ 
+ tcpserver.o: \
+ compile tcpserver.c uint16.h str.h byte.h fmt.h scan.h ip4.h fd.h \
+@@ -753,8 +772,8 @@
+ alloc.h buffer.h error.h strerr.h sgetopt.h subgetopt.h pathexec.h \
+ socket.h uint16.h ndelay.h remoteinfo.h stralloc.h uint16.h rules.h \
+ stralloc.h sig.h dns.h stralloc.h iopause.h taia.h tai.h uint64.h \
+-taia.h
+-	./compile tcpserver.c
++taia.h sslSocket.h
++	./compile $(DEFINES) $(INCS) tcpserver.c
+ 
+ time.a: \
+ makelib iopause.o tai_pack.o taia_add.o taia_approx.o taia_frac.o \
+@@ -835,3 +854,18 @@
+ 	| sed s}HOME}"`head -1 conf-home`"}g \
+ 	> who@
+ 	chmod 755 who@
++
++cert:
++	${OPENSSLBIN} req -new -x509 -nodes \
++	-out cert.pem -days 366 \
++	-keyout cert.pem
++
++cert-req:
++	${OPENSSLBIN} req -new -nodes \
++	-out req.pem \
++	-keyout cert.pem
++	@echo
++	@echo "Send req.pem to your CA to obtain signed_req.pem, and do:"
++	@echo "cat signed_req.pem >> `head -1 conf-qmail`/control/cert.pem"
++
++
+--- ucspi-tcp-0.88/tcpserver.c.matrixssl	2000-03-18 16:18:42.000000000 +0100
++++ ucspi-tcp-0.88/tcpserver.c	2005-01-07 13:11:27.799655936 +0100
+@@ -1,6 +1,13 @@
+ #include <sys/types.h>
+ #include <sys/param.h>
+ #include <netdb.h>
++
++#ifdef WITH_SSL
++#include <matrixssl/matrixSsl.h>
++#include "sslSocket.h"
++#include <stdio.h>
++#endif
++
+ #include "uint16.h"
+ #include "str.h"
+ #include "byte.h"
+@@ -36,6 +43,12 @@
+ int flagremotehost = 1;
+ int flagparanoid = 0;
+ unsigned long timeout = 26;
++#ifdef WITH_SSL
++int flagssl = 0;
++char *certfile = "./cert.pem";
++char *keyfile  = 0;
++void translate(sslKeys_t*, int, int, int, unsigned int);
++#endif
+ 
+ static stralloc tcpremoteinfo;
+ 
+@@ -238,6 +251,7 @@
+ 
+ void usage(void)
+ {
++#ifndef WITH_SSL
+   strerr_warn1("\
+ tcpserver: usage: tcpserver \
+ [ -1UXpPhHrRoOdDqQv ] \
+@@ -250,6 +264,22 @@
+ [ -l localname ] \
+ [ -t timeout ] \
+ host port program",0);
++#else
++  strerr_warn1("\
++tcpserver: usage: tcpserver \
++[ -1UXpPhHrRoOdDqQsSv ] \
++[ -c limit ] \
++[ -x rules.cdb ] \
++[ -B banner ] \
++[ -g gid ] \
++[ -u uid ] \
++[ -b backlog ] \
++[ -l localname ] \
++[ -t timeout ] \
++[ -n certfile ] \
++[ -N keyfile ] \
++host port program",0);
++#endif
+   _exit(100);
+ }
+ 
+@@ -299,8 +329,21 @@
+   unsigned long u;
+   int s;
+   int t;
+- 
++#ifdef WITH_SSL
++  int pi2c[2], pi4c[2];
++  sslKeys_t *keys;
++  int	    sslsock, err;
++  
++  x = env_get("KEYFILE");  if (x) keyfile  = x;
++  if (keyfile && str_equal(keyfile,"")) keyfile = 0;
++  
++  x = env_get("CERTFILE"); if (x) certfile = x;
++  if (certfile && str_equal(certfile,"")) certfile = 0;
++  
++  while ((opt = getopt(argc,argv,"dDvqQhHrRsS1UXx:t:u:g:l:b:B:c:nN:pPoO")) != opteof)
++#else
+   while ((opt = getopt(argc,argv,"dDvqQhHrR1UXx:t:u:g:l:b:B:c:pPoO")) != opteof)
++#endif
+     switch(opt) {
+       case 'b': scan_ulong(optarg,&backlog); break;
+       case 'c': scan_ulong(optarg,&limit); break;
+@@ -327,6 +370,12 @@
+       case 'g': scan_ulong(optarg,&gid); break;
+       case '1': flag1 = 1; break;
+       case 'l': localhost = optarg; break;
++#ifdef WITH_SSL
++      case 's': flagssl = 1; break;
++      case 'S': flagssl = 0; break;
++      case 'n': certfile = optarg; break;
++      case 'N': keyfile = optarg; break;
++#endif
+       default: usage();
+     }
+   argc -= optind;
+@@ -366,6 +415,17 @@
+     strerr_die3x(111,FATAL,"no IP address for ",hostname);
+   byte_copy(localip,4,addresses.s);
+ 
++#ifdef WITH_SSL
++  if (flagssl == 1) {
++    int ret;
++    if (!keyfile) keyfile = certfile;
++    matrixSslOpen();
++    ret = matrixSslReadKeys(&keys, certfile, keyfile, NULL, NULL);
++    if (ret < 0)
++      strerr_die2x(111,FATAL,"unable to load certificate and/or RSA private key");
++  }
++#endif
++  
+   s = socket_tcp();
+   if (s == -1)
+     strerr_die2sys(111,FATAL,"unable to create socket: ");
+@@ -415,6 +475,37 @@
+         sig_unblock(sig_child);
+         sig_uncatch(sig_term);
+         sig_uncatch(sig_pipe);
++#ifdef WITH_SSL
++	if (flagssl == 1) {
++	  if (pipe(pi2c) != 0)
++	    strerr_die2sys(111,DROP,"unable to create pipe: ");
++	  if (pipe(pi4c) != 0)
++	    strerr_die2sys(111,DROP,"unable to create pipe: ");
++	  switch(fork()) {
++	    case 0:
++	      close(0); close(1);
++	      close(pi2c[1]);
++	      close(pi4c[0]);
++	      if ((fd_move(0,pi2c[0]) == -1) || (fd_move(1,pi4c[1]) == -1))
++		strerr_die2sys(111,DROP,"unable to set up descriptors: ");
++	      /* signals are allready set in the parent */
++	      pathexec(argv);
++	      strerr_die4sys(111,DROP,"unable to run ",*argv,": ");
++	    case -1:
++	      strerr_die2sys(111,DROP,"unable to fork: ");
++	    default:
++	      /*
++	      sslsock = socketAccept(0, &err);
++	      if (err == INVALID_SOCKET)
++		strerr_die2x(111,DROP,"unable to set up socket");
++	      */
++	      close(pi2c[0]);
++	      close(pi4c[1]);
++	      translate(keys, 0, pi2c[1], pi4c[0], 3600);
++	      _exit(0);
++	  }
++	}
++#endif
+         pathexec(argv);
+ 	strerr_die4sys(111,DROP,"unable to run ",*argv,": ");
+       case -1:
+@@ -424,3 +515,100 @@
+     close(t);
+   }
+ }
++
++#ifdef WITH_SSL
++static int allwrite(int fd, char *buf, int len)
++{
++  int w = 0;
++
++  while (len) {
++    w = write(fd,buf,len);
++    if (w == -1) {
++      if (errno == error_intr) continue;
++      return -1; /* note that some data may have been written */
++    }
++    if (w == 0) ; /* luser's fault */
++    buf += w;
++    len -= w;
++  }
++  return w;
++}
++
++static int allwritessl(sslConn_t *cp, char *buf, int len, int *status)
++{
++  int w = 0;
++
++  while (len) {
++    w = sslWrite(cp, buf, len, status);
++    if (w == -1) {
++      if (errno == error_intr) continue;
++      return -1; /* note that some data may have been written */
++    }
++    if (w == 0) continue;
++    buf += w;
++    len -= w;
++  }
++  return w;
++}
++
++void translate(sslKeys_t *keys, int sslsock, int clearout, int clearin, unsigned int iotimeout)
++{
++#define BUFLENGTH 8192
++  char tbuf[BUFLENGTH];
++  struct taia now;
++  struct taia deadline;
++  iopause_fd iop[2];
++  int flagexitasap;
++  int iopl;
++  int status;
++  int n, r;
++  sslConn_t *cp;
++  
++  flagexitasap = 0;
++  
++  setSocketNodelay(sslsock);
++  setSocketBlock(sslsock);
++  if ((sslAccept(&cp, sslsock, keys, NULL, NULL)) != 0)
++    strerr_die2x(111,DROP,"unable to accept SSL connection");
++
++  while (!flagexitasap) {
++    taia_now(&now);
++    taia_uint(&deadline, iotimeout);
++    taia_add(&deadline, &now, &deadline);
++
++    /* fill iopause struct */
++    iopl = 2;
++    iop[0].fd = sslsock;
++    iop[0].events = IOPAUSE_READ;
++    iop[1].fd = clearin;
++    iop[1].events = IOPAUSE_READ;
++
++    /* do iopause read */
++    iopause(iop, iopl, &deadline, &now);
++    if (iop[0].revents) {
++      /* data on sslsock */
++      n = sslRead(cp, tbuf, BUFLENGTH, &status);
++      if ( n < 0 )
++	strerr_die2sys(111,DROP,"unable to read form network: ");
++      if ( n == 0 && status != 0) flagexitasap = 1;
++      r = allwrite(clearout, tbuf, n);
++      if ( r < 0 )
++	strerr_die2sys(111,DROP,"unable to write to client: ");
++    }
++    if (iop[1].revents) {
++      /* data on clearin */
++      n = read(clearin, tbuf, sizeof(tbuf));
++      if ( n < 0 )
++	strerr_die2sys(111,DROP,"unable to read form client: ");
++      if ( n == 0 )
++	flagexitasap = 1;
++      r = allwritessl(cp, tbuf, n, &status);
++      if ( r < 0 )
++	strerr_die2sys(111,DROP,"unable to write to network: ");
++    }
++    if (!iop[0].revents && !iop[1].revents)
++      strerr_die2x(0, DROP,"timeout reached without input");
++  }
++}
++#endif
++
+--- ucspi-tcp-0.88/sslSocket.c.matrixssl	2005-01-07 13:08:36.586684264 +0100
++++ ucspi-tcp-0.88/sslSocket.c	2005-01-07 13:09:32.990109640 +0100
+@@ -0,0 +1,1024 @@
++/*
++ *	socketLayer.c
++ *	Release $Name: MATRIXSSL_1_2_2_OPEN $
++ *
++ *	Sample SSL socket layer for MatrixSSL example exectuables
++ */
++/*
++ *	Copyright (c) PeerSec Networks, 2002-2004. All Rights Reserved.
++ *	The latest version of this code is available at http://www.matrixssl.org
++ *
++ *	This software is open source; you can redistribute it and/or modify
++ *	it under the terms of the GNU General Public License as published by
++ *	the Free Software Foundation; either version 2 of the License, or
++ *	(at your option) any later version.
++ *
++ *	This General Public License does NOT permit incorporating this software 
++ *	into proprietary programs.  If you are unable to comply with the GPL, a 
++ *	commercial license for this software may be purchased from PeerSec Networks
++ *	at http://www.peersec.com
++ *	
++ *	This program is distributed in WITHOUT ANY WARRANTY; without even the 
++ *	implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
++ *	See the GNU General Public License for more details.
++ *	
++ *	You should have received a copy of the GNU General Public License
++ *	along with this program; if not, write to the Free Software
++ *	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *	http://www.gnu.org/copyleft/gpl.html
++ */
++/******************************************************************************/
++
++#include <stdlib.h>
++#include <string.h>
++#include <stdio.h>
++#if defined(__linux__)
++#include <fcntl.h>
++#include <unistd.h>
++#endif
++#include "sslSocket.h"
++
++#ifdef DEBUG_IO
++static void out2(char *s)
++{
++  write(2, s, strlen(s));
++}
++#else
++#define out2(s)
++#endif
++
++static int socketWrite(SOCKET sock, sslBuf_t *out);
++
++/******************************************************************************/
++/*
++	An EXAMPLE socket layer API for the MatrixSSL library.  
++*/
++
++/******************************************************************************/
++/*
++	Server side.  Set up a listen socket.  This code is not specific to SSL.
++*/
++SOCKET socketListen(short port, int *err)
++{
++	struct sockaddr_in	addr;
++	SOCKET				fd;
++	int					rc;
++
++	addr.sin_family = AF_INET;
++	addr.sin_port = htons(port);
++	addr.sin_addr.s_addr = INADDR_ANY;
++	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
++		out2("Error creating listen socket\n");
++		*err = getSocketError();
++		return INVALID_SOCKET;
++	}
++/*
++	Make sure the socket is not inherited by exec'd processes
++	Set the REUSE flag to minimize the number of sockets in TIME_WAIT
++*/
++	fcntl(fd, F_SETFD, FD_CLOEXEC);
++	rc = 1;
++	setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&rc, sizeof(rc));
++
++	if (bind(fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
++		out2("Can't bind socket. Port in use or insufficient privilege\n");
++		*err = getSocketError();
++		return INVALID_SOCKET;
++	}
++	if (listen(fd, SOMAXCONN) < 0) {
++		out2("Error listening on socket\n");
++		*err = getSocketError();
++		return INVALID_SOCKET;
++	}
++	return fd;
++}
++
++/******************************************************************************/
++/*
++	Server side.  Accept a new socket connection off our listen socket.  
++	This code is not specific to SSL.
++*/
++SOCKET socketAccept(SOCKET listenfd, int *err)
++{
++	struct sockaddr_in	addr;
++	SOCKET				fd;
++	int					len;
++/*
++	Wait(blocking)/poll(non-blocking) for an incoming connection
++*/
++	len = sizeof(addr);
++	if ((fd = accept(listenfd, (struct sockaddr *)&addr, &len)) 
++			== INVALID_SOCKET) {
++		*err = getSocketError();
++		if (*err != WOULD_BLOCK) {
++			out2("Error accepting new socket\n");
++		}
++		return INVALID_SOCKET;
++	}
++/*
++	fd is the newly accepted socket. Disable Nagle on this socket.
++	Set blocking mode as default
++*/
++	setSocketNodelay(fd);
++	setSocketBlock(fd);
++	return fd;
++}
++
++/******************************************************************************/
++/*
++	Client side. Open a socket connection to a remote ip and port.
++	This code is not specific to SSL.
++*/
++SOCKET socketConnect(char *ip, short port, int *err)
++{
++	struct sockaddr_in	addr;
++	SOCKET				fd;
++	int					rc;
++
++	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
++		out2("Error creating socket\n");
++		*err = getSocketError();
++		return INVALID_SOCKET;
++	}
++/*
++	Make sure the socket is not inherited by exec'd processes
++	Set the REUSEADDR flag to minimize the number of sockets in TIME_WAIT
++*/
++	fcntl(fd, F_SETFD, FD_CLOEXEC);
++	rc = 1;
++	setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&rc, sizeof(rc));
++	setSocketNodelay(fd);
++/*
++	Turn on blocking mode for the connecting socket
++*/
++	setSocketBlock(fd);
++
++	memset((char *) &addr, 0x0, sizeof(addr));
++	addr.sin_family = AF_INET;
++	addr.sin_port = htons(port);
++	addr.sin_addr.s_addr = inet_addr(ip);
++	rc = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
++#if WIN
++	if (rc != 0) {
++#else
++	if (rc < 0) {
++#endif
++		*err = getSocketError();
++		return INVALID_SOCKET;
++	}
++	return fd;
++}
++
++/******************************************************************************/
++/*
++	Server side.  Accept an incomming SSL connection request.
++	'conn' will be filled in with information about the accepted ssl connection
++
++	return -1 on error, 0 on success, or WOULD_BLOCK for non-blocking sockets
++*/
++int sslAccept(sslConn_t **cpp, SOCKET fd, sslKeys_t *keys,
++			  int (*certValidator)(sslCertInfo_t *t, void *arg), int flags)
++{
++	sslConn_t	*conn;
++	unsigned char	buf[1024];
++	int		status, rc;
++/*
++	Associate a new ssl session with this socket.  The session represents
++	the state of the ssl protocol over this socket.  Session caching is
++	handled automatically by this api.
++*/
++	conn = calloc(sizeof(sslConn_t), 1);
++	conn->fd = fd;
++	if (matrixSslNewSession(&conn->ssl, keys, NULL,
++			SSL_FLAGS_SERVER | flags) < 0) {
++		sslFreeConnection(&conn);
++		return -1;
++	}
++/*
++	MatrixSSL doesn't provide buffers for data internally.  Define them
++	here to support buffered reading and writing for non-blocking sockets.
++	Although it causes quite a bit more work, we support dynamically growing
++	the buffers as needed.  Alternately, we could define 16K buffers here
++	and not worry about growing them.
++*/
++	memset(&conn->inbuf, 0x0, sizeof(sslBuf_t));
++	conn->insock.size = 1024;
++	conn->insock.start = conn->insock.end = conn->insock.buf = 
++		(unsigned char *)malloc(conn->insock.size);
++	conn->outsock.size = 1024;
++	conn->outsock.start = conn->outsock.end = conn->outsock.buf = 
++		(unsigned char *)malloc(conn->outsock.size);
++	conn->inbuf.size = 0;
++	conn->inbuf.start = conn->inbuf.end = conn->inbuf.buf = NULL;
++	*cpp = conn;
++
++readMore:
++	rc = sslRead(conn, buf, sizeof(buf), &status);
++/*
++	Reading handshake records should always return 0 bytes, we aren't
++	expecting any data yet.
++*/
++	if (rc == 0) {
++		if (status == SSLSOCKET_EOF || status == SSLSOCKET_CLOSE_NOTIFY) {
++			sslFreeConnection(&conn);
++			return -1;
++		}
++		if (matrixSslHandshakeIsComplete(conn->ssl) == 0) {
++			goto readMore;
++		}
++	} else if (rc > 0) {
++		sslAssert(0);
++		return -1;
++	} else {
++		out2("sslRead error in sslAccept\n");
++		sslFreeConnection(&conn);
++		return -1;
++	}
++	*cpp = conn;
++
++	return 0;
++}
++
++/******************************************************************************/
++/*
++	Client side.  Make a socket connection and go through the SSL handshake
++	phase in blocking mode.  The last parameter is an optional function
++	callback for user-level certificate validation.  NULL if not needed.
++*/
++int sslConnect(sslConn_t **cpp, SOCKET fd, sslKeys_t *keys, 
++			   sslSessionId_t *id, short cipherSuite, 
++			   int (*certValidator)(sslCertInfo_t *t, void *arg),void *userdata)
++{
++	sslConn_t	*conn;
++
++/*
++	Create a new SSL session for the new socket and register the
++	user certificate validator 
++*/
++	conn = calloc(sizeof(sslConn_t), 1);
++	conn->fd = fd;
++	if (matrixSslNewSession(&conn->ssl, keys, id, 0) < 0) {
++		sslFreeConnection(&conn);
++		return -1;
++	}
++	matrixSslSetCertValidator(conn->ssl, certValidator, userdata);
++
++	*cpp = sslDoHandshake(conn, cipherSuite);
++	
++	if (*cpp == NULL) {
++		return -1;
++	}
++	return 0;
++}
++
++/*
++	Construct the initial HELLO message to send to the server and initiate
++	the SSL handshake
++*/
++sslConn_t *sslDoHandshake(sslConn_t *conn, short cipherSuite)
++{
++	char	buf[1024];
++	int		bytes, status, rc;
++
++/*
++	MatrixSSL doesn't provide buffers for data internally.  Define them
++	here to support buffered reading and writing for non-blocking sockets.
++	Although it causes quite a bit more work, we support dynamically growing
++	the buffers as needed.  Alternately, we could define 16K buffers here
++	and not worry about growing them.
++*/
++#ifdef DEBUG
++	out2("sslDoHandshake\n");
++#endif
++	conn->insock.size = 1024;
++	conn->insock.start = conn->insock.end = conn->insock.buf = 
++		(unsigned char *)malloc(conn->insock.size);
++	conn->outsock.size = 1024;
++	conn->outsock.start = conn->outsock.end = conn->outsock.buf = 
++		(unsigned char *)malloc(conn->outsock.size);
++	conn->inbuf.size = 0;
++	conn->inbuf.start = conn->inbuf.end = conn->inbuf.buf = NULL;
++
++	bytes = matrixSslEncodeClientHello(conn->ssl, &conn->outsock, cipherSuite);
++	if (bytes < 0) {
++		sslAssert(bytes < 0);
++		goto error;
++	}
++/*
++	Send the hello with a blocking write
++*/
++	if (socketWrite(conn->fd, &conn->outsock) < 0) {
++		out2("Error in socketWrite\n");
++		goto error;
++	}
++	conn->outsock.start = conn->outsock.end = conn->outsock.buf;
++/*
++	Call sslRead to work through the handshake.  Not actually expecting
++	data back, so the finished case is simply when the handshake is
++	complete.
++*/
++readMore:
++	rc = sslRead(conn, buf, sizeof(buf), &status);
++/*
++	Reading handshake records should always return 0 bytes, we aren't
++	expecting any data yet.
++*/
++	if (rc == 0) {
++		if (status == SSLSOCKET_EOF || status == SSLSOCKET_CLOSE_NOTIFY) {
++			goto error;
++		}
++		if (matrixSslHandshakeIsComplete(conn->ssl) == 0) {
++			goto readMore;
++		}
++	} else if (rc > 0) {
++		out2("sslRead got unexpected data in sslConnect\n");
++		goto error;
++	} else {
++		out2("sslRead error in sslDoHandhake\n");
++		goto error;
++	}
++
++	return conn;
++
++error:
++	sslFreeConnection(&conn);
++	return NULL;
++}
++
++/******************************************************************************/
++/*
++	An example socket sslRead implementation that handles the ssl handshake
++	transparently.  Caller passes in allocated buf and length. 
++	
++	Return codes are as follows:
++
++	-1 return code is an error.  If a socket level error, error code is
++		contained in status parameter.  If using a non-blocking socket
++		implementation the caller should check for non-fatal errors such as
++		WOULD_BLOCK before closing the connection.  A zero value
++		in status indicates an error with this routine.  
++
++	A positive integer return code is the number of bytes successfully read
++		into the supplied buffer.  User can call sslRead again on the updated
++		buffer is there is more to be read.
++
++	0 return code indicates the read was successful, but there was no data
++		to be returned.  If status is set to zero, this is a case internal
++		to the sslAccept and sslConnect functions that a handshake
++		message has been exchanged.  If status is set to SOCKET_EOF
++		the connection has been closed by the other side.
++
++*/
++int sslRead(sslConn_t *cp, char *buf, int len, int *status)
++{
++	int				bytes, rc, remaining;
++	unsigned char	error, alertLevel, alertDescription, performRead;
++
++	*status = 0;
++
++	if (cp->ssl == NULL || len <= 0) {
++		return -1;
++	}
++/*
++	If inbuf is valid, then we have previously decoded data that must be
++	returned, return as much as possible.  Once all buffered data is
++	returned, free the inbuf.
++*/
++	if (cp->inbuf.buf) {
++		if (cp->inbuf.start < cp->inbuf.end) {
++			remaining = (int)(cp->inbuf.end - cp->inbuf.start);
++			bytes = (int)min(len, remaining);
++			memcpy(buf, cp->inbuf.start, bytes);
++			cp->inbuf.start += bytes;
++			return bytes;
++		}
++		free(cp->inbuf.buf);
++		cp->inbuf.buf = NULL;
++	}
++/*
++	Pack the buffered socket data (if any) so that start is at zero.
++*/
++	if (cp->insock.buf < cp->insock.start) {
++		if (cp->insock.start == cp->insock.end) {
++			cp->insock.start = cp->insock.end = cp->insock.buf;
++		} else {
++			memmove(cp->insock.buf, cp->insock.start, cp->insock.end - cp->insock.start);
++			cp->insock.end -= (cp->insock.start - cp->insock.buf);
++			cp->insock.start = cp->insock.buf;
++		}
++	}
++/*
++	Read up to as many bytes as there are remaining in the buffer.  We could
++	Have encrypted data already cached in conn->insock, but might as well read more
++	if we can.
++*/
++	performRead = 0;
++readMore:
++	if (cp->insock.end == cp->insock.start || performRead) {
++		performRead = 1;
++		bytes = recv(cp->fd, (char *)cp->insock.end, 
++			(int)((cp->insock.buf + cp->insock.size) - cp->insock.end), MSG_NOSIGNAL);
++		if (bytes == SOCKET_ERROR) {
++			*status = getSocketError();
++			return -1;
++		}
++		if (bytes == 0) {
++			*status = SSLSOCKET_EOF;
++			return 0;
++		}
++		cp->insock.end += bytes;
++	}
++/*
++	Define a temporary sslBuf
++*/
++	cp->inbuf.start = cp->inbuf.end = cp->inbuf.buf = malloc(len);
++	cp->inbuf.size = len;
++/*
++	Decode the data we just read from the socket
++*/
++decodeMore:
++	error = 0;
++	alertLevel = 0;
++	alertDescription = 0;
++
++	rc = matrixSslDecode(cp->ssl, &cp->insock, &cp->inbuf, &error, &alertLevel, 
++		&alertDescription);
++	switch (rc) {
++/*
++	Successfully decoded a record that did not return data or require a response.
++*/
++	case SSL_SUCCESS:
++#ifdef DEBUG
++		out2("SSL_SUCCESS\n");
++#endif
++		return 0;
++/*
++	Successfully decoded an application data record, and placed in tmp buf
++*/
++	case SSL_PROCESS_DATA:
++/*
++		Copy as much as we can from the temp buffer into the caller's buffer
++		and leave the remainder in conn->inbuf until the next call to read
++		It is possible that len > data in buffer if the encoded record
++		was longer than len, but the decoded record isn't!
++*/
++		rc = (int)(cp->inbuf.end - cp->inbuf.start);
++		rc = min(rc, len);
++		memcpy(buf, cp->inbuf.start, rc);
++		cp->inbuf.start += rc;
++		return rc;
++/*
++	We've decoded a record that requires a response into tmp
++	If there is no data to be flushed in the out buffer, we can write out
++	the contents of the tmp buffer.  Otherwise, we need to append the data 
++	to the outgoing data buffer and flush it out.
++*/
++	case SSL_SEND_RESPONSE:
++#ifdef DEBUG
++		out2("SSL_SEND_RESPONSE\n");
++#endif
++		bytes = send(cp->fd, (char *)cp->inbuf.start, 
++			(int)(cp->inbuf.end - cp->inbuf.start), MSG_NOSIGNAL);
++		if (bytes == SOCKET_ERROR) {
++			*status = getSocketError();
++			if (*status != WOULD_BLOCK) {
++				out2("Socket send error\n");
++				goto readError;
++			}
++			*status = 0;
++		}
++		cp->inbuf.start += bytes;
++		if (cp->inbuf.start < cp->inbuf.end) {
++/*
++			This must be a non-blocking socket since it didn't all get sent
++			out and there was no error.  We want to finish the send here
++			simply because we are likely in the SSL handshake.
++*/
++			setSocketBlock(cp->fd);
++			bytes = send(cp->fd, (char *)cp->inbuf.start, 
++				(int)(cp->inbuf.end - cp->inbuf.start), MSG_NOSIGNAL);
++			if (bytes == SOCKET_ERROR) {
++				*status = getSocketError();
++				goto readError;
++			}
++			cp->inbuf.start += bytes;
++			sslAssert(cp->inbuf.start == cp->inbuf.end);
++/*
++			Can safely set back to non-blocking because we wouldn't
++			have got here if this socket wasn't non-blocking to begin with.
++*/
++			setSocketNonblock(cp->fd);
++		}
++		cp->inbuf.start = cp->inbuf.end = cp->inbuf.buf;
++		return 0;
++/*
++	There was an error decoding the data, or encoding the out buffer.
++	There may be a response data in the out buffer, so try to send.
++	We try a single hail-mary send of the data, and then close the socket.
++	Since we're closing on error, we don't worry too much about a clean flush.
++*/
++	case SSL_ERROR:
++		out2("SSL: Closing on protocol error\n");
++		if (cp->inbuf.start < cp->inbuf.end) {
++			setSocketNonblock(cp->fd);
++			bytes = send(cp->fd, (char *)cp->inbuf.start, 
++				(int)(cp->inbuf.end - cp->inbuf.start), MSG_NOSIGNAL);
++		}
++		goto readError;
++/*
++	We've decoded an alert.  The level and description passed into
++	matrixSslDecode are filled in with the specifics.
++*/
++	case SSL_ALERT:
++		if (alertDescription == SSL_ALERT_CLOSE_NOTIFY) {
++			*status = SSLSOCKET_CLOSE_NOTIFY;
++			goto readZero;
++		}
++		out2("SSL: Closing on client alert\n");
++		goto readError;
++/*
++	We have a partial record, we need to read more data off the socket.
++	If we have a completely full conn->insock buffer, we'll need to grow it
++	here so that we CAN read more data when called the next time.
++*/
++	case SSL_PARTIAL:
++#ifdef DEBUG
++		out2("SSL_PARTIAL\n");
++#endif
++		if (cp->insock.start == cp->insock.buf && cp->insock.end == 
++				(cp->insock.buf + cp->insock.size)) {
++			if (cp->insock.size > SSL_MAX_BUF_SIZE) {
++				goto readError;
++			}
++			cp->insock.size *= 2;
++			cp->insock.start = cp->insock.buf = 
++				(unsigned char *)realloc(cp->insock.buf, cp->insock.size);
++			cp->insock.end = cp->insock.buf + (cp->insock.size / 2);
++		}
++		if (!performRead) {
++			performRead = 1;
++			free(cp->inbuf.buf);
++			cp->inbuf.buf = NULL;
++			goto readMore;
++		} else {
++			goto readZero;
++		}
++/*
++	The out buffer is too small to fit the decoded or response
++	data.  Increase the size of the buffer and call decode again
++*/
++	case SSL_FULL:
++#ifdef DEBUG
++		out2("SSL_FULL\n");
++#endif
++		cp->inbuf.size *= 2;
++		if (cp->inbuf.buf != (unsigned char*)buf) {
++			free(cp->inbuf.buf);
++			cp->inbuf.buf = NULL;
++		}
++		cp->inbuf.start = cp->inbuf.end = cp->inbuf.buf = 
++			(unsigned char *)malloc(cp->inbuf.size);
++		goto decodeMore;
++	}
++/*
++	We consolidated some of the returns here because we must ensure
++	that conn->inbuf is cleared if pointing at caller's buffer, otherwise
++	it will be freed later on.
++*/
++readZero:
++	if (cp->inbuf.buf == (unsigned char*)buf) {
++		cp->inbuf.buf = NULL;
++	}
++	return 0;
++readError:
++	if (cp->inbuf.buf == (unsigned char*)buf) {
++		cp->inbuf.buf = NULL;
++	}
++	return -1;
++}
++
++/******************************************************************************/
++/*
++	Example sslWrite functionality.  Takes care of encoding the input buffer
++	and sending it out on the connection.
++
++	Return codes are as follows:
++
++	-1 return code is an error.  If a socket level error, error code is
++		contained in status.  If using a non-blocking socket
++		implementation the caller should check for non-fatal errors such as
++		WOULD_BLOCK before closing the connection.  A zero value
++		in status indicates an error with this routine.
++
++	A positive integer return value indicates the number of bytes succesfully
++		written on the connection.  Should always match the len parameter.
++
++	0 return code indicates the write must be called again with the same
++		parameters.
++*/
++int sslWrite(sslConn_t *cp, char *buf, int len, int *status)
++{
++	int		rc;
++
++	*status = 0;
++/*
++	Pack the buffered socket data (if any) so that start is at zero.
++*/
++	if (cp->outsock.buf < cp->outsock.start) {
++		if (cp->outsock.start == cp->outsock.end) {
++			cp->outsock.start = cp->outsock.end = cp->outsock.buf;
++		} else {
++			memmove(cp->outsock.buf, cp->outsock.start, cp->outsock.end - cp->outsock.start);
++			cp->outsock.end -= (cp->outsock.start - cp->outsock.buf);
++			cp->outsock.start = cp->outsock.buf;
++		}
++	}
++/*
++	If there is buffered output data, the caller must be trying to
++	send the same amount of data as last time.  We don't support 
++	sending additional data until the original buffered request has
++	been completely sent.
++*/
++	if (cp->outBufferCount > 0 && len != cp->outBufferCount) {
++		sslAssert(len != cp->outBufferCount);
++		return -1;
++	}
++/*
++	If we don't have buffered data, encode the caller's data
++*/
++	if (cp->outBufferCount == 0) {
++retryEncode:
++		rc = matrixSslEncode(cp->ssl, (unsigned char *)buf, len, &cp->outsock);
++		switch (rc) {
++		case SSL_ERROR:
++			return -1;
++		case SSL_FULL:
++			if (cp->outsock.size > SSL_MAX_BUF_SIZE) {
++				return -1;
++			}
++			cp->outsock.size *= 2;
++			cp->outsock.buf = 
++				(unsigned char *)realloc(cp->outsock.buf, cp->outsock.size);
++			cp->outsock.end = cp->outsock.buf + (cp->outsock.end - cp->outsock.start);
++			cp->outsock.start = cp->outsock.buf;
++			goto retryEncode;
++		}
++	}
++/*
++	We've got data to send.
++*/
++	rc = send(cp->fd, (char *)cp->outsock.start, 
++		(int)(cp->outsock.end - cp->outsock.start), MSG_NOSIGNAL);
++	if (rc == SOCKET_ERROR) {
++		*status = getSocketError();
++		return -1;
++	}
++	cp->outsock.start += rc;
++/*
++	If we wrote it all return the length, otherwise remember the number of
++	bytes passed in, and return 0 to be called again later.
++*/
++	if (cp->outsock.start == cp->outsock.end) {
++		cp->outBufferCount = 0;
++		return len;
++	}
++	cp->outBufferCount = len;
++	return 0;
++}
++
++/******************************************************************************/
++/*
++	Send a close alert
++*/
++void sslWriteClosureAlert(sslConn_t *cp)
++{
++	if (cp != NULL) {
++		cp->outsock.start = cp->outsock.end = cp->outsock.buf;
++			matrixSslEncodeClosureAlert(cp->ssl, &cp->outsock);
++		setSocketNonblock(cp->fd);
++		send(cp->fd, cp->outsock.start,
++			(int)(cp->outsock.end - cp->outsock.start), MSG_NOSIGNAL);
++	}
++}
++
++/******************************************************************************/
++/*
++	Server initiated rehandshake.  Builds and sends the HELLO_REQUEST message
++*/
++void sslRehandshake(sslConn_t *cp)
++{
++	matrixSslEncodeHelloRequest(cp->ssl, &cp->outsock);
++	socketWrite(cp->fd, &cp->outsock);
++	cp->outsock.start = cp->outsock.end = cp->outsock.buf;
++}
++
++/******************************************************************************/
++/*
++	Close a seesion that was opened with sslAccept or sslConnect and
++	free the insock and outsock buffers
++*/
++void sslFreeConnection(sslConn_t **cpp)
++{
++	sslConn_t	*conn;
++
++	conn = *cpp;
++	matrixSslDeleteSession(conn->ssl);
++	conn->ssl = NULL;
++	if (conn->insock.buf) {
++		free(conn->insock.buf);
++		conn->insock.buf = NULL;
++	}
++	if (conn->outsock.buf) {
++		free(conn->outsock.buf);
++		conn->outsock.buf = NULL;
++	}
++	if (conn->inbuf.buf) {
++		free(conn->inbuf.buf);
++		conn->inbuf.buf = NULL;
++	}
++	free(conn);
++	*cpp = NULL;
++}
++
++/******************************************************************************/
++/*
++	free the insock and outsock buffers
++*/
++void sslFreeConnectionBuffers(sslConn_t **cpp)
++{
++	sslConn_t	*conn;
++
++	conn = *cpp;
++	if (conn->insock.buf) {
++		free(conn->insock.buf);
++		conn->insock.buf = NULL;
++	}
++	if (conn->outsock.buf) {
++		free(conn->outsock.buf);
++		conn->outsock.buf = NULL;
++	}
++	if (conn->inbuf.buf) {
++		free(conn->inbuf.buf);
++		conn->inbuf.buf = NULL;
++	}
++}
++
++/******************************************************************************/
++/*
++	Set the socket to non blocking mode and perform a few extra tricks
++	to make sure the socket closes down cross platform
++*/
++void socketShutdown(SOCKET sock)
++{
++	char	buf[32];
++
++	if (sock != INVALID_SOCKET) {
++		setSocketNonblock(sock);
++		if (shutdown(sock, 1) >= 0) {
++			while (recv(sock, buf, sizeof(buf), 0) > 0);
++		}
++		closesocket(sock);
++	}
++}
++
++/******************************************************************************/
++/*
++	Perform a blocking write of data to a socket
++*/
++static int socketWrite(SOCKET sock, sslBuf_t *out)
++{
++	unsigned char	*s;
++	int				bytes;
++
++	s = out->start;
++	while (out->start < out->end) {
++		bytes = send(sock, out->start, (int)(out->end - out->start), MSG_NOSIGNAL);
++		if (bytes == SOCKET_ERROR) {
++			return -1;
++		}
++		out->start += bytes;
++	}
++	return (int)(out->start - s);
++}
++
++/******************************************************************************/
++/*
++	Turn on socket blocking mode (and set CLOEXEC on LINUX for kicks).
++*/
++void setSocketBlock(SOCKET sock)
++{
++#if _WIN32
++	int		block = 0;
++	ioctlsocket(sock, FIONBIO, &block);
++#elif LINUX
++	fcntl(sock, F_SETFL, fcntl(sock, F_GETFL) & ~O_NONBLOCK);
++	fcntl(sock, F_SETFD, FD_CLOEXEC);
++#endif
++}
++
++/******************************************************************************/
++/*
++	Turn off socket blocking mode.
++*/
++void setSocketNonblock(SOCKET sock)
++{
++#if _WIN32
++	int		block = 1;
++	ioctlsocket(sock, FIONBIO, &block);
++#elif LINUX
++	fcntl(sock, F_SETFL, fcntl(sock, F_GETFL) | O_NONBLOCK);
++#endif
++}
++
++/******************************************************************************/
++/*
++	Disable the Nagle algorithm for less latency in RPC
++	http://www.faqs.org/rfcs/rfc896.html
++	http://www.w3.org/Protocols/HTTP/Performance/Nagle/
++*/
++void setSocketNodelay(SOCKET sock)
++{
++#if _WIN32
++	BOOL	tmp = TRUE;
++#else
++	int		tmp = 1;
++#endif /* WIN32 */
++	setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *)&tmp, sizeof(tmp));
++}
++
++/******************************************************************************/
++/*
++	Set a breakpoint in this function to catch asserts.
++	This function is called whenever an assert is triggered.  Useful because
++	VisualStudio often won't show the right line of code if DebugBreak() is 
++	called directly, and abort() may not be desireable on LINUX.
++*/
++void breakpoint()
++{
++	static int preventInline = 0;
++#if _WIN32
++	DebugBreak();
++#elif LINUX
++	abort();
++#endif
++}
++
++
++
++/******************************************************************************/
++/*
++ 	Parse an ASCII command line string.  Assumes a NULL terminated space 
++ 	separated list of command line arguments.  Uses this info to create an argv
++ 	array.
++ 
++ 	Notes:
++ 		handles double quotes
++ 		args gets hacked up!  can't pass in static string!
++ 		not thread safe, so should be called b4 any thread creation
++ 		we currently hardcode argv[0] cause none of our apps need it
++ */
++
++#if WINCE || VXWORKS
++
++void parseCmdLineArgs(char *args, int *pargc, char ***pargv)
++{
++	char			**argv;
++	char			*ptr;
++	int				size, i;
++
++/*
++ *	Figure out the number of elements in our argv array.  
++ *	We know we need an argv array of at least 3, since we have the
++ *	program name, an argument, and a NULL in the array.
++ */
++	for (size = 3, ptr = args; ptr && *ptr != '\0'; ptr++) {
++		if (isspace(*ptr)) {
++			size++;
++			while (isspace(*ptr)) {
++				ptr++;
++			}
++			if (*ptr == '\0') {
++				break;
++			}
++		}
++	}
++/*
++ *	This is called from main, so don't use sslMalloc here or
++ *	all the stats will be wrong.
++ */
++	argv = (char**) malloc(size * sizeof(char*));
++	*pargv = argv;
++
++	for (i = 1, ptr = args; ptr && *ptr != '\0'; i++) {
++		while (isspace(*ptr)) {
++			ptr++;
++		}
++		if (*ptr == '\0')  {
++			break;
++		}
++/*
++ *		Handle double quoted arguments.  Treat everything within
++ *		the double quote as one arg.
++ */
++		if (*ptr == '"') {
++			ptr++;
++			argv[i] = ptr;
++			while ((*ptr != '\0') && (*ptr != '"')) {
++				ptr++;
++			}
++		} else {
++			argv[i] = ptr;
++			while (*ptr != '\0' && !isspace(*ptr)) {
++				ptr++;
++			}
++		}
++		if (*ptr != '\0') {
++			*ptr = '\0';
++			ptr++;
++		}
++	}
++	argv[i] = NULL;
++	*pargc = i ;
++
++	argv[0] = "PeerSec";
++	for (ptr = argv[0]; *ptr; ptr++) {
++		if (*ptr == '\\') {
++			*ptr = '/';
++		}
++	}
++}
++#endif /* WINCE || VXWORKS */
++
++#ifdef WINCE
++
++/******************************************************************************/
++/*
++ 	The following functions implement a unixlike time() function for WINCE.
++
++	NOTE: this code is copied from the os layer in win.c to expose it for use
++	in example applications.
++ */
++
++static FILETIME YearToFileTime(WORD wYear)
++{	
++	SYSTEMTIME sbase;
++	FILETIME fbase;
++
++	sbase.wYear         = wYear;
++	sbase.wMonth        = 1;
++	sbase.wDayOfWeek    = 1; //assumed
++	sbase.wDay          = 1;
++	sbase.wHour         = 0;
++	sbase.wMinute       = 0;
++	sbase.wSecond       = 0;
++	sbase.wMilliseconds = 0;
++
++	SystemTimeToFileTime( &sbase, &fbase );
++
++	return fbase;
++}
++
++time_t time() {
++
++	__int64 time1, time2, iTimeDiff;
++	FILETIME fileTime1, fileTime2;
++	SYSTEMTIME  sysTime;
++
++/*
++	Get 1970's filetime.
++*/
++	fileTime1 = YearToFileTime(1970);
++
++/*
++	Get the current filetime time.
++*/
++	GetSystemTime(&sysTime);
++	SystemTimeToFileTime(&sysTime, &fileTime2);
++
++
++/* 
++	Stuff the 2 FILETIMEs into their own __int64s.
++*/	
++	time1 = fileTime1.dwHighDateTime;
++	time1 <<= 32;				
++	time1 |= fileTime1.dwLowDateTime;
++
++	time2 = fileTime2.dwHighDateTime;
++	time2 <<= 32;				
++	time2 |= fileTime2.dwLowDateTime;
++
++/*
++	Get the difference of the two64-bit ints.
++
++	This is he number of 100-nanosecond intervals since Jan. 1970.  So
++	we divide by 10000 to get seconds.
++ */
++	iTimeDiff = (time2 - time1) / 10000000;
++	return (int)iTimeDiff;
++}
++#endif /* WINCE */
++
++/******************************************************************************/
++
++
++
+--- ucspi-tcp-0.88/sslSocket.h.matrixssl	2005-01-07 13:08:36.590683656 +0100
++++ ucspi-tcp-0.88/sslSocket.h	2005-01-07 13:09:42.034734648 +0100
+@@ -0,0 +1,170 @@
++/*
++ *	vim:set ts=4:
++ * 
++ *	socketLayer.h
++ *	Release $Name: MATRIXSSL_1_2_2_OPEN $
++ *
++ *	Sample SSL socket layer header for MatrixSSL
++ */
++/*
++ *	Copyright (c) PeerSec Networks, 2002-2004. All Rights Reserved.
++ *	The latest version of this code is available at http://www.matrixssl.org
++ *
++ *	This software is open source; you can redistribute it and/or modify
++ *	it under the terms of the GNU General Public License as published by
++ *	the Free Software Foundation; either version 2 of the License, or
++ *	(at your option) any later version.
++ *
++ *	This General Public License does NOT permit incorporating this software 
++ *	into proprietary programs.  If you are unable to comply with the GPL, a 
++ *	commercial license for this software may be purchased from PeerSec Networks
++ *	at http://www.peersec.com
++ *	
++ *	This program is distributed in WITHOUT ANY WARRANTY; without even the 
++ *	implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
++ *	See the GNU General Public License for more details.
++ *	
++ *	You should have received a copy of the GNU General Public License
++ *	along with this program; if not, write to the Free Software
++ *	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *	http://www.gnu.org/copyleft/gpl.html
++ */
++/******************************************************************************/
++
++#ifndef _h_SSLSOCKET
++#define _h_SSLSOCKET
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include <matrixssl/matrixSsl.h>
++#if defined(__linux__)
++#define LINUX 1
++#endif
++/*
++	OS specific macros
++*/
++#if WIN32 || WINCE
++	#include	<windows.h>
++	#include	<winsock.h>
++	#define		fcntl(A, B, C)
++	#define		MSG_NOSIGNAL	0
++	#define		WOULD_BLOCK	WSAEWOULDBLOCK
++	#define		getSocketError()  WSAGetLastError()
++#elif LINUX
++	#include	<sys/socket.h>
++	#include	<netinet/in.h>
++	#include	<netinet/tcp.h>
++	#include	<arpa/inet.h>
++#ifdef OSX
++	#include	<sys/socket.h>
++	#define		MSG_NOSIGNAL	0
++#endif /* OSX */
++	#include	<string.h>
++	#include	<errno.h>
++	#define		SOCKET_ERROR -1
++	#define		getSocketError() errno 
++	#define		WOULD_BLOCK	EAGAIN
++	#define		closesocket close
++	#define		MAKEWORD(A, B)
++	#define		WSAStartup(A, B)
++	#define		WSACleanup()
++	#define		INVALID_SOCKET -1
++	typedef int	WSADATA;
++	typedef int	SOCKET;
++#elif VXWORKS
++	#include	<types.h>
++	#include	<socket.h>
++	#include	<netinet/in.h>
++	#include	<netinet/tcp.h>
++	#include	<fcntl.h>
++	#include	<errno.h>
++	#define		fcntl(A, B, C) ioctl(A, B, C)
++	#define		SOCKET_ERROR -1
++	#define		getSocketError() errno 
++	#define		WOULD_BLOCK	EAGAIN
++	#define		closesocket close
++	#define		MAKEWORD(A, B)
++	#define		WSAStartup(A, B)
++	#define		WSACleanup()
++	#define		INVALID_SOCKET -1
++	#define		MSG_NOSIGNAL	0
++	typedef int	WSADATA;
++	typedef int	SOCKET;
++#endif /* OS macros */
++
++#ifdef DEBUG
++extern void breakpoint();
++#define sslAssert(C) if (C) ; else {printf("%s:%d sslAssert(%s)\n",\
++						__FILE__, __LINE__, #C); breakpoint(); }
++#else
++#define sslAssert(C)
++#endif
++
++#ifndef min
++#define min(a,b)	(((a) < (b)) ? (a) : (b))
++#endif /* min */
++
++/*
++	sslRead and sslWrite status values
++*/
++#define SSLSOCKET_EOF			0x1
++#define SSLSOCKET_CLOSE_NOTIFY	0x2
++
++/*
++	Connection structure
++*/
++typedef struct {
++	ssl_t				*ssl;
++	sslBuf_t			inbuf;
++	sslBuf_t			insock;
++	sslBuf_t			outsock;
++	int					outBufferCount;
++	SOCKET				fd;
++} sslConn_t;
++
++/*
++	Secure Socket apis
++*/
++extern int			sslConnect(sslConn_t **cp, SOCKET fd, sslKeys_t *keys,
++						sslSessionId_t *id, short cipherSuite,
++						int (*certValidator)(sslCertInfo_t *t, void *arg), void *userdata);
++extern int			sslAccept(sslConn_t **cp, SOCKET fd, sslKeys_t *keys,
++						int (*certValidator)(sslCertInfo_t *t, void *arg), int flags);
++extern void			sslRehandshake(sslConn_t *cp);
++extern sslConn_t	*sslDoHandshake(sslConn_t *conn, short cipherSuite);
++extern void			sslFreeConnection(sslConn_t **cp);
++extern void			sslFreeConnectionBuffers(sslConn_t **cpp);
++
++extern int	sslRead(sslConn_t *cp, char *buf, int len, int *status);
++extern int	sslWrite(sslConn_t *cp, char *buf, int len, int *status);
++extern void	sslWriteClosureAlert(sslConn_t *cp);
++
++/*
++	Socket apis
++*/
++extern SOCKET	socketListen(short port, int *err);
++extern SOCKET	socketAccept(SOCKET listenfd, int *err);
++extern SOCKET	socketConnect(char *ip, short port, int *err);
++extern void		socketShutdown(SOCKET sock);
++
++extern void setSocketBlock(SOCKET sock);
++extern void setSocketNonblock(SOCKET sock);
++extern void setSocketNodelay(SOCKET sock);
++
++#if WINCE || VXWORKS
++extern void	parseCmdLineArgs(char *args, int *pargc, char ***pargv);
++#endif /* WINCE || VXWORKS */
++
++#if WINCE
++extern time_t time();
++#endif /* WINCE */
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* _h_SSLSOCKET */
++
++/******************************************************************************/

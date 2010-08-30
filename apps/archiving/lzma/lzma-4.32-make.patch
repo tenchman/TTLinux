@@ -1,0 +1,12 @@
+--- lzma-4.32/C/7zip/Compress/LZMA_Alone/makefile.gcc.make	Tue Dec 20 15:50:33 2005
++++ lzma-4.32/C/7zip/Compress/LZMA_Alone/makefile.gcc	Tue Dec 20 15:50:47 2005
+@@ -5,8 +5,7 @@
+ RM = rm -f
+ CFLAGS = -c -I ../../../
+ 
+-OBJS = \
+-  LzmaAlone.o \
++OBJS = LzmaAlone.o \
+   LzmaBench.o \
+   LzmaRam.o \
+   LzmaRamDecode.o \

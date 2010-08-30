@@ -1,0 +1,432 @@
+--- ipsec-tools-0.7/src/include-glibc/net/pfkeyv2.h.diet	2006-09-09 18:22:08.000000000 +0200
++++ ipsec-tools-0.7/src/include-glibc/net/pfkeyv2.h	2007-10-25 21:35:09.000000000 +0200
+@@ -3,6 +3,7 @@
+ #ifndef __NET_PFKEYV2_H_
+ #define __NET_PFKEYV2_H_ 1
+ 
++#include <asm/types.h>
+ #include <stdint.h>
+ #include <linux/pfkeyv2.h>
+ 
+--- ipsec-tools-0.7/src/racoon/backupsa.c.diet	2007-08-01 13:52:19.000000000 +0200
++++ ipsec-tools-0.7/src/racoon/backupsa.c	2007-10-25 21:35:09.000000000 +0200
+@@ -276,9 +276,9 @@
+ 		GETNEXTNUM(sa_args.a_keylen, strtoul);
+ 		GETNEXTNUM(sa_args.flags, strtoul);
+ 		GETNEXTNUM(sa_args.l_alloc, strtoul);
+-		GETNEXTNUM(sa_args.l_bytes, strtouq);
+-		GETNEXTNUM(sa_args.l_addtime, strtouq);
+-		GETNEXTNUM(sa_args.l_usetime, strtouq);
++		GETNEXTNUM(sa_args.l_bytes, strtoull);
++		GETNEXTNUM(sa_args.l_addtime, strtoull);
++		GETNEXTNUM(sa_args.l_usetime, strtoull);
+ 		GETNEXTNUM(sa_args.seq, strtoul);
+ 
+ #undef GETNEXTNUM
+--- ipsec-tools-0.7/src/racoon/algorithm.c.diet	2006-10-06 14:02:27.000000000 +0200
++++ ipsec-tools-0.7/src/racoon/algorithm.c	2007-10-25 21:35:09.000000000 +0200
+@@ -111,9 +111,11 @@
+ 		eay_idea_encrypt,	eay_idea_decrypt,
+ 		eay_idea_weakkey,	eay_idea_keylen, },
+ #endif
++#ifdef HAVE_OPENSSL_BLOWFISH_H
+ { "blowfish",	algtype_blowfish,	OAKLEY_ATTR_ENC_ALG_BLOWFISH,	8,
+ 		eay_bf_encrypt,		eay_bf_decrypt,
+ 		eay_bf_weakkey,		eay_bf_keylen, },
++#endif
+ #ifdef HAVE_OPENSSL_RC5_H
+ { "rc5",	algtype_rc5,		OAKLEY_ATTR_ENC_ALG_RC5,	8,
+ 		eay_rc5_encrypt,	eay_rc5_decrypt,
+@@ -122,9 +124,11 @@
+ { "3des",	algtype_3des,		OAKLEY_ATTR_ENC_ALG_3DES,	8,
+ 		eay_3des_encrypt,	eay_3des_decrypt,
+ 		eay_3des_weakkey,	eay_3des_keylen, },
++#ifdef HAVE_OPENSSL_CAST_H
+ { "cast",	algtype_cast128,	OAKLEY_ATTR_ENC_ALG_CAST,	8,
+ 		eay_cast_encrypt,	eay_cast_decrypt,
+ 		eay_cast_weakkey,	eay_cast_keylen, },
++#endif
+ { "aes",	algtype_aes,	OAKLEY_ATTR_ENC_ALG_AES,	16,
+ 		eay_aes_encrypt,	eay_aes_decrypt,
+ 		eay_aes_weakkey,	eay_aes_keylen, },
+@@ -150,12 +154,16 @@
+ 		NULL,			NULL,
+ 		NULL,			eay_rc5_keylen, },
+ #endif
++#ifdef HAVE_OPENSSL_CAST_H
+ { "cast",	algtype_cast128,	IPSECDOI_ESP_CAST,		8,
+ 		NULL,			NULL,
+ 		NULL,			eay_cast_keylen, },
++#endif
++#ifdef HAVE_OPENSSL_BLOWFISH_H
+ { "blowfish",	algtype_blowfish,	IPSECDOI_ESP_BLOWFISH,		8,
+ 		NULL,			NULL,
+ 		NULL,			eay_bf_keylen, },
++#endif
+ { "des-iv32",	algtype_des_iv32,	IPSECDOI_ESP_DES_IV32,		8,
+ 		NULL,			NULL,
+ 		NULL,			eay_des_keylen, },
+--- ipsec-tools-0.7/src/racoon/eaytest.c.diet	2007-06-06 17:36:38.000000000 +0200
++++ ipsec-tools-0.7/src/racoon/eaytest.c	2007-10-25 21:35:09.000000000 +0200
+@@ -541,8 +541,10 @@
+ 
+ 	n = 0;
+ 	while ((dp = readdir(dirp)) != NULL) {
++#ifndef __dietlibc__
+ 		if (dp->d_type != DT_REG)
+ 			continue;
++#endif
+ 		if (strcmp(dp->d_name + strlen(dp->d_name) - 4, "cert"))
+ 			continue;
+ 		snprintf(buf, sizeof(buf), "%s/%s", path, dp->d_name);
+@@ -683,19 +685,23 @@
+ 			  eay_aes_encrypt, eay_aes_decrypt) < 0)
+ 	  return -1;
+ 
++#ifdef HAVE_OPENSSL_BLOWFISH_H
+ 	if (ciphertest_1 ("BLOWFISH",
+ 			  &data, 8,
+ 			  &key, key.l,
+ 			  &iv0, 8,
+ 			  eay_bf_encrypt, eay_bf_decrypt) < 0)
+ 	  return -1;
++#endif
+ 
++#ifdef HAVE_OPENSSL_CAST_H
+ 	if (ciphertest_1 ("CAST",
+ 			  &data, 8,
+ 			  &key, key.l,
+ 			  &iv0, 8,
+ 			  eay_cast_encrypt, eay_cast_decrypt) < 0)
+ 	  return -1;
++#endif
+ 	
+ #ifdef HAVE_OPENSSL_IDEA_H
+ 	if (ciphertest_1 ("IDEA",
+--- ipsec-tools-0.7/src/racoon/nattraversal.c.diet	2006-09-09 18:22:09.000000000 +0200
++++ ipsec-tools-0.7/src/racoon/nattraversal.c	2007-10-25 21:35:09.000000000 +0200
+@@ -36,6 +36,7 @@
+ #include <sys/param.h>
+ 
+ #ifdef __linux__
++#include <asm/types.h>
+ #include <linux/udp.h>
+ #endif
+ #if defined(__NetBSD__) || defined (__FreeBSD__)
+--- /dev/null	2007-10-22 23:57:16.948005620 +0200
++++ ipsec-tools-0.7/src/racoon/ns.h	2007-10-25 21:35:09.000000000 +0200
+@@ -0,0 +1,49 @@
++#ifndef _NS_H_
++#define	_NS_H_
++
++#ifndef u_char
++#define u_char unsigned char
++#endif
++
++#define NS_GET16(s, cp) do { \
++	register u_char *t_cp = (u_char *)(cp); \
++	(s) = ((uint16_t)t_cp[0] << 8) \
++	    | ((uint16_t)t_cp[1]) \
++	    ; \
++	(cp) += NS_INT16SZ; \
++} while (0)
++
++#define NS_GET32(l, cp) do { \
++	register u_char *t_cp = (u_char *)(cp); \
++	(l) = ((uint32_t)t_cp[0] << 24) \
++	    | ((uint32_t)t_cp[1] << 16) \
++	    | ((uint32_t)t_cp[2] << 8) \
++	    | ((uint32_t)t_cp[3]) \
++	    ; \
++	(cp) += NS_INT32SZ; \
++} while (0)
++
++#define NS_PUT16(s, cp) do { \
++	register uint16_t t_s = (uint16_t)(s); \
++	register u_char *t_cp = (u_char *)(cp); \
++	*t_cp++ = t_s >> 8; \
++	*t_cp   = t_s; \
++	(cp) += NS_INT16SZ; \
++} while (0)
++
++#define NS_PUT32(l, cp) do { \
++	register uint32_t t_l = (uint32_t)(l); \
++	register u_char *t_cp = (u_char *)(cp); \
++	*t_cp++ = t_l >> 24; \
++	*t_cp++ = t_l >> 16; \
++	*t_cp++ = t_l >> 8; \
++	*t_cp   = t_l; \
++	(cp) += NS_INT32SZ; \
++} while (0)
++
++#define	PUTSHORT  NS_PUT16
++#define	GETSHORT  NS_GET16
++#define	PUTLONG   NS_PUT32
++#define	GETLONG   NS_GET32
++
++#endif
+--- ipsec-tools-0.7/src/racoon/crypto_openssl.c.diet	2006-12-18 11:18:10.000000000 +0100
++++ ipsec-tools-0.7/src/racoon/crypto_openssl.c	2007-10-25 21:35:09.000000000 +0200
+@@ -63,8 +63,12 @@
+ #ifdef HAVE_OPENSSL_ENGINE_H
+ #include <openssl/engine.h>
+ #endif
++#ifdef HAVE_OPENSSL_BLOWFISH_H
+ #include <openssl/blowfish.h>
++#endif
++#ifdef HAVE_OPENSSL_CAST_H
+ #include <openssl/cast.h>
++#endif
+ #include <openssl/err.h>
+ #ifdef HAVE_OPENSSL_RC5_H
+ #include <openssl/rc5.h>
+@@ -1344,6 +1348,7 @@
+ }
+ #endif
+ 
++#ifdef HAVE_OPENSSL_BLOWFISH_H
+ /*
+  * BLOWFISH-CBC
+  */
+@@ -1378,6 +1383,7 @@
+ 		return -1;
+ 	return len;
+ }
++#endif
+ 
+ #ifdef HAVE_OPENSSL_RC5_H
+ /*
+@@ -1489,6 +1495,7 @@
+ 	return 192;
+ }
+ 
++#ifdef HAVE_OPENSSL_CAST_H
+ /*
+  * CAST-CBC
+  */
+@@ -1523,6 +1530,7 @@
+ 		return -1;
+ 	return len;
+ }
++#endif
+ 
+ /*
+  * AES(RIJNDAEL)-CBC
+--- ipsec-tools-0.7/src/racoon/racoonctl.c.diet	2006-10-02 09:12:26.000000000 +0200
++++ ipsec-tools-0.7/src/racoon/racoonctl.c	2007-10-25 21:35:09.000000000 +0200
+@@ -63,6 +63,7 @@
+ #include <err.h>
+ #include <sys/ioctl.h> 
+ #include <resolv.h>
++#include <termios.h>
+ 
+ #include "var.h"
+ #include "vmbuf.h"
+--- ipsec-tools-0.7/src/racoon/ipsec_doi.c.diet	2007-08-01 13:52:20.000000000 +0200
++++ ipsec-tools-0.7/src/racoon/ipsec_doi.c	2007-10-25 21:35:09.000000000 +0200
+@@ -3608,7 +3608,7 @@
+ 	if (iph1->id_p->l < sizeof(*id_b)) {
+ 		plog(LLV_ERROR, LOCATION, NULL,
+ 			"invalid value passed as \"ident\" (len=%lu)\n",
+-			(u_long)iph1->id_p->l);
++			(unsigned long)iph1->id_p->l);
+ 		return ISAKMP_NTYPE_INVALID_ID_INFORMATION;
+ 	}
+ 
+--- ipsec-tools-0.7/src/racoon/getcertsbyname.c.diet	2006-09-09 18:22:09.000000000 +0200
++++ ipsec-tools-0.7/src/racoon/getcertsbyname.c	2007-10-25 21:35:09.000000000 +0200
+@@ -58,6 +58,7 @@
+ #include <strings.h>
+ #endif
+ 
++#include "ns.h"
+ #include "netdb_dnssec.h"
+ 
+ /* XXX should it use ci_errno to hold errno instead of h_errno ? */
+--- ipsec-tools-0.7/src/racoon/missing/crypto/sha2/sha2.c.diet	2006-09-09 18:22:36.000000000 +0200
++++ ipsec-tools-0.7/src/racoon/missing/crypto/sha2/sha2.c	2007-10-25 21:35:09.000000000 +0200
+@@ -52,9 +52,11 @@
+ 
+ #include <err.h>
+ #include <string.h>
++#ifndef bcopy
+ #define bcopy(a, b, c) memcpy((b), (a), (c))
+ #define bzero(a, b) memset((a), 0, (b))
+ #define panic(a) err(1, (a))
++#endif
+ 
+ #if OPENSSL_VERSION_NUMBER >= 0x00907000L
+ #define HAVE_EVP_097
+--- ipsec-tools-0.7/src/libipsec/ipsec_dump_policy.c.diet	2007-08-01 13:52:17.000000000 +0200
++++ ipsec-tools-0.7/src/libipsec/ipsec_dump_policy.c	2007-10-25 21:35:09.000000000 +0200
+@@ -35,6 +35,7 @@
+ #include "config.h"
+ #endif
+ 
++#include <asm/types.h>
+ #include <sys/types.h>
+ #include <sys/param.h>
+ #include <sys/socket.h>
+--- ipsec-tools-0.7/src/libipsec/key_debug.c.diet	2007-08-01 13:52:18.000000000 +0200
++++ ipsec-tools-0.7/src/libipsec/key_debug.c	2007-10-25 21:35:09.000000000 +0200
+@@ -275,7 +275,7 @@
+ 	switch (id->sadb_ident_type) {
+ 	default:
+ 		printf(" type=%d id=%lu",
+-			id->sadb_ident_type, (u_long)id->sadb_ident_id);
++			id->sadb_ident_type, (unsigned long)id->sadb_ident_id);
+ 		if (len) {
+ #ifdef _KERNEL
+ 			ipsec_hexdump((caddr_t)(id + 1), len); /*XXX cast ?*/
+--- ipsec-tools-0.7/src/libipsec/pfkey_dump.c.diet	2007-08-01 13:52:18.000000000 +0200
++++ ipsec-tools-0.7/src/libipsec/pfkey_dump.c	2007-10-25 21:35:09.000000000 +0200
+@@ -409,23 +409,23 @@
+ 			str_time((long)m_lftc->sadb_lifetime_addtime));
+ 		printf("\tcurrent: %s\n", str_time(tmp_time));
+ 		printf("\tdiff: %lu(s)",
+-			(u_long)(m_lftc->sadb_lifetime_addtime == 0 ?
++			(unsigned long)(m_lftc->sadb_lifetime_addtime == 0 ?
+ 			0 : (tmp_time - m_lftc->sadb_lifetime_addtime)));
+ 
+ 		printf("\thard: %lu(s)",
+-			(u_long)(m_lfth == NULL ?
++			(unsigned long)(m_lfth == NULL ?
+ 			0 : m_lfth->sadb_lifetime_addtime));
+ 		printf("\tsoft: %lu(s)\n",
+-			(u_long)(m_lfts == NULL ?
++			(unsigned long)(m_lfts == NULL ?
+ 			0 : m_lfts->sadb_lifetime_addtime));
+ 
+ 		printf("\tlast: %s",
+ 			str_time((long)m_lftc->sadb_lifetime_usetime));
+ 		printf("\thard: %lu(s)",
+-			(u_long)(m_lfth == NULL ?
++			(unsigned long)(m_lfth == NULL ?
+ 			0 : m_lfth->sadb_lifetime_usetime));
+ 		printf("\tsoft: %lu(s)\n",
+-			(u_long)(m_lfts == NULL ?
++			(unsigned long)(m_lfts == NULL ?
+ 			0 : m_lfts->sadb_lifetime_usetime));
+ 
+ 		str_lifetime_byte(m_lftc, "current");
+@@ -436,10 +436,10 @@
+ 		printf("\tallocated: %lu",
+ 			(unsigned long)m_lftc->sadb_lifetime_allocations);
+ 		printf("\thard: %lu",
+-			(u_long)(m_lfth == NULL ?
++			(unsigned long)(m_lfth == NULL ?
+ 			0 : m_lfth->sadb_lifetime_allocations));
+ 		printf("\tsoft: %lu\n",
+-			(u_long)(m_lfts == NULL ?
++			(unsigned long)(m_lfts == NULL ?
+ 			0 : m_lfts->sadb_lifetime_allocations));
+ 	}
+ 
+@@ -457,8 +457,8 @@
+ #endif
+ 
+ 	printf("\tsadb_seq=%lu pid=%lu ",
+-		(u_long)m->sadb_msg_seq,
+-		(u_long)m->sadb_msg_pid);
++		(unsigned long)m->sadb_msg_seq,
++		(unsigned long)m->sadb_msg_pid);
+ 
+ 	/* XXX DEBUG */
+ 	printf("refcnt=%u\n", m->sadb_msg_reserved);
+@@ -620,9 +620,9 @@
+ 	}
+ 	if (m_lfth) {
+ 		printf("\tlifetime: %lu(s) ",
+-			(u_long)m_lfth->sadb_lifetime_addtime);
++			(unsigned long)m_lfth->sadb_lifetime_addtime);
+ 		printf("validtime: %lu(s)\n",
+-			(u_long)m_lfth->sadb_lifetime_usetime);
++			(unsigned long)m_lfth->sadb_lifetime_usetime);
+ 	}
+ 
+ #ifdef SADB_X_EXT_SEC_CTX
+@@ -639,9 +639,9 @@
+ #endif
+ 
+ 	printf("\tspid=%ld seq=%ld pid=%ld\n",
+-		(u_long)m_xpl->sadb_x_policy_id,
+-		(u_long)m->sadb_msg_seq,
+-		(u_long)m->sadb_msg_pid);
++		(unsigned long)m_xpl->sadb_x_policy_id,
++		(unsigned long)m->sadb_msg_seq,
++		(unsigned long)m->sadb_msg_pid);
+ 
+ 	/* XXX TEST */
+ 	printf("\trefcnt=%u\n", m->sadb_msg_reserved);
+--- ipsec-tools-0.7/src/setkey/setkey.c.diet	2007-08-01 13:52:23.000000000 +0200
++++ ipsec-tools-0.7/src/setkey/setkey.c	2007-10-25 21:35:09.000000000 +0200
+@@ -773,7 +773,7 @@
+ 	pfkey_align(msg, mhp);
+ 	pfkey_check(mhp);
+ 
+-	printf("%02lu%02lu", (u_long)(cur % 3600) / 60, (u_long)(cur % 60));
++	printf("%02lu%02lu", (unsigned long)(cur % 3600) / 60, (unsigned long)(cur % 60));
+ 
+ 	printf(" %-3s", STR_OR_ID(msg->sadb_msg_satype, satype));
+ 
+@@ -788,20 +788,20 @@
+ 	ltc = (struct sadb_lifetime *)mhp[SADB_EXT_LIFETIME_CURRENT];
+ 	if (lts && lth && ltc) {
+ 		if (ltc->sadb_lifetime_addtime == 0)
+-			t = (u_long)0;
++			t = (unsigned long)0;
+ 		else
+-			t = (u_long)(cur - ltc->sadb_lifetime_addtime);
++			t = (unsigned long)(cur - ltc->sadb_lifetime_addtime);
+ 		if (t >= 1000)
+ 			strlcpy(buf, " big/", sizeof(buf));
+ 		else
+-			snprintf(buf, sizeof(buf), " %3lu/", (u_long)t);
++			snprintf(buf, sizeof(buf), " %3lu/", (unsigned long)t);
+ 		printf("%s", buf);
+ 
+-		t = (u_long)lth->sadb_lifetime_addtime;
++		t = (unsigned long)lth->sadb_lifetime_addtime;
+ 		if (t >= 1000)
+ 			strlcpy(buf, "big", sizeof(buf));
+ 		else
+-			snprintf(buf, sizeof(buf), "%-3lu", (u_long)t);
++			snprintf(buf, sizeof(buf), "%-3lu", (unsigned long)t);
+ 		printf("%s", buf);
+ 	} else
+ 		printf(" ??\?/???");	/* backslash to avoid trigraph ??/ */
+--- ipsec-tools-0.7/configure.ac.diet	2007-08-09 18:16:37.000000000 +0200
++++ ipsec-tools-0.7/configure.ac	2007-10-25 21:40:08.000000000 +0200
+@@ -26,7 +26,7 @@
+ 	LDFLAGS="-Wl,-R/usr/pkg/lib $LDFLAGS"
+ 	;;
+ *linux*)
+-	LIBS="$LIBS -lresolv"
++	LIBS="$LIBS"
+ 	INSTALL_OPTS="-o bin -g bin"
+ 	INCLUDE_GLIBC="include-glibc"
+ 	RPM="rpm"
+@@ -248,6 +248,10 @@
+ 
+ # checking camellia
+ AC_CHECK_HEADERS([openssl/camellia.h])
++# checking blowfish
++AC_CHECK_HEADERS([openssl/blowfish.h])
++# checking cast
++AC_CHECK_HEADERS([openssl/cast.h])
+ 
+ 
+ # Option --enable-adminport 
+@@ -728,7 +732,12 @@
+ case $host in
+ 	*linux*)
+ 		AC_TRY_COMPILE([
++		#define _LINUX_TYPES_H
+ 		#include <inttypes.h>
++		typedef uint16_t __le16;
++		typedef uint16_t __be16;
++		typedef uint32_t __le32;
++		typedef uint32_t __be32;
+ 		#include <linux/ipsec.h>
+ 			], [
+ 			int fwd = IPSEC_DIR_FWD;

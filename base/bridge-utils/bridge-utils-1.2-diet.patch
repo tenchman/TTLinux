@@ -1,0 +1,44 @@
+--- bridge-utils-1.2/brctl/brctl.c.diet	2007-06-06 21:00:12.000000000 +0200
++++ bridge-utils-1.2/brctl/brctl.c	2007-06-06 21:01:03.000000000 +0200
+@@ -19,7 +19,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+-#include <sys/errno.h>
++#include <errno.h>
+ #include <getopt.h>
+ 
+ #include "libbridge.h"
+--- bridge-utils-1.2/libbridge/libbridge.h.diet	2007-06-06 20:59:43.000000000 +0200
++++ bridge-utils-1.2/libbridge/libbridge.h	2007-06-06 20:57:40.000000000 +0200
+@@ -20,7 +20,7 @@
+ #define _LIBBRIDGE_H
+ 
+ #include <net/if.h>
+-#include <linux/if_bridge.h>
++// #include <linux/if_bridge.h>
+ 
+ struct bridge_id
+ {
+--- bridge-utils-1.2/libbridge/libbridge_if.c.diet	2007-06-06 20:59:27.000000000 +0200
++++ bridge-utils-1.2/libbridge/libbridge_if.c	2007-06-06 20:58:40.000000000 +0200
+@@ -20,7 +20,7 @@
+ #include <stdlib.h>
+ #include <errno.h>
+ #include <string.h>
+-#include <sys/fcntl.h>
++#include <fcntl.h>
+ #include <sys/ioctl.h>
+ 
+ #include "libbridge.h"
+--- bridge-utils-1.2/libbridge/libbridge_devif.c.diet	2007-06-06 20:56:29.000000000 +0200
++++ bridge-utils-1.2/libbridge/libbridge_devif.c	2007-06-06 20:56:42.000000000 +0200
+@@ -23,7 +23,7 @@
+ #include <errno.h>
+ #include <string.h>
+ #include <dirent.h>
+-#include <sys/fcntl.h>
++#include <fcntl.h>
+ 
+ #include "libbridge.h"
+ #include "libbridge_private.h"

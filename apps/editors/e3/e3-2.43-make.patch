@@ -1,0 +1,30 @@
+--- e3-2.43/Makefile.make	2003-09-23 14:19:03.000000000 +0200
++++ e3-2.43/Makefile	2003-09-23 14:21:52.000000000 +0200
+@@ -8,7 +8,7 @@
+ #OS=W32 	** please use a separate make.bat for W9x **
+ 
+ # Set this to gzexe or upx if you want compression
+-COMPRESS=gzexe
++COMPRESS=upx
+ 
+ # 2. edit dest dir prefix if you want....
+ 
+@@ -160,11 +160,13 @@
+ else
+ 	install -d $(PREFIX) $(BINDIR) $(MANDIR)
+ 	install -m 755 e3 $(BINDIR)
+-	ln -sf $(BINDIR)/e3 $(BINDIR)/e3ws
+-	ln -sf $(BINDIR)/e3 $(BINDIR)/e3em
+-	ln -sf $(BINDIR)/e3 $(BINDIR)/e3pi
+-	ln -sf $(BINDIR)/e3 $(BINDIR)/e3vi
+-	ln -sf $(BINDIR)/e3 $(BINDIR)/e3ne
++	(cd $(BINDIR); \
++	  ln -sf e3 e3ws; \
++	  ln -sf e3 e3em; \
++	  ln -sf e3 e3pi; \
++	  ln -sf e3 e3vi; \
++	  ln -sf e3 e3ne; \
++	);
+ 	install -m 644 e3.man $(MANDIR)/e3.$(MANSEC)
+ endif
+ 

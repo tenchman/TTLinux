@@ -1,0 +1,75 @@
+--- dietlibc-0.32/dietfeatures.h.features	2009-03-12 22:58:47.000000000 +0100
++++ dietlibc-0.32/dietfeatures.h	2009-06-10 21:10:07.000000000 +0200
+@@ -7,7 +7,11 @@
+ #define WANT_FLOATING_POINT_IN_SCANF
+ #define WANT_CHARACTER_CLASSES_IN_SCANF
+ #define WANT_NULL_PRINTF
+-/* #define WANT_ERROR_PRINTF */
++#define WANT_N_PRINTF
++#define WANT_A_PRINTF
++#define WANT_MALLOC_IN_PRINTF
++#define WANT_ERROR_PRINTF
++#define WANT_FULL_GETTEXT
+ #define WANT_LONGLONG_PRINTF
+ #define WANT_LONGLONG_SCANF
+ 
+@@ -17,7 +21,7 @@
+ /* want fread to read() directly if size of data is larger than buffer?
+  * This costs a few bytes but is worth it if the application is already
+  * buffering. */
+-#define WANT_FREAD_OPTIMIZATION
++/* #define WANT_FREAD_OPTIMIZATION */
+ 
+ /* this is only for meaningful for ttyname and sysconf_cpus so far */
+ #define SLASH_PROC_OK
+@@ -29,10 +33,10 @@
+ #define WANT_TLS
+ 
+ /* make the startcode, etc. dynamic aware ({con,de}structors) */
+-/* #define WANT_DYNAMIC */
++#define WANT_DYNAMIC
+ 
+ /* GDB support in the dynamic linker */
+-#define WANT_LD_SO_GDB_SUPPORT
++/* #define WANT_LD_SO_GDB_SUPPORT */
+ 
+ /* do you want smaller or faster string routines? */
+ #define WANT_FASTER_STRING_ROUTINES
+@@ -50,7 +54,7 @@
+ 
+ /* you need to define this if you want to run your programs with large
+  * file support on kernel 2.2 or 2.0 */
+-#define WANT_LARGEFILE_BACKCOMPAT
++/* #define WANT_LARGEFILE_BACKCOMPAT */
+ 
+ /* do you want localtime(3) to read /etc/localtime?
+  * Needed for daylight saving time etc. */
+@@ -87,13 +91,13 @@
+ /* This enables zeroconf DNS aka Rendezvous aka Bonjour. */
+ /* This code will try zeroconf DNS if you ask for host.local or if you
+  * ask for an unqualified hostname */
+-#define WANT_PLUGPLAY_DNS
++/* #define WANT_PLUGPLAY_DNS */
+ 
+ /* do you want that malloc(0) return a pointer to a "zero-length" object
+  * that is realloc-able; means realloc(..,size) gives a NEW object (like a
+  * call to malloc(size)).
+  * WARNING: this violates C99 */
+-/* #define WANT_MALLOC_ZERO */
++#define WANT_MALLOC_ZERO
+ 
+ /* do you want free to overwrite freed data immediately, in the hope of
+  * catching people accessing pointers after they were freed?  This does
+@@ -115,10 +119,11 @@
+ /* ProPolice is part of gcc 4.1 and up, there were patches for earlier
+  * versions.  To make use of this, compile your application with
+  * -fstack-protector. */
++#if 0
+ #if (__GNUC__>4) || ((__GNUC__==4) && (__GNUC_MINOR__>=1))
+ #define WANT_SSP
+ #endif
+-
++#endif
+ 
+ 
+ /* stop uncommenting here ;-) */

@@ -1,0 +1,23 @@
+--- openswan-3.0.06/Makefile.inc.make	2007-01-16 00:58:29.000000000 +0100
++++ openswan-3.0.06/Makefile.inc	2007-05-11 14:46:22.000000000 +0200
+@@ -49,7 +49,7 @@
+ endif
+ 
+ -include ${OPENSWANSRCDIR}/Makefile.ver
+-IPSECVERSION:=${IPSECBASEVERSION}$(shell ${OPENSWANSRCDIR}/packaging/utils/setlocalversion ${OPENSWANSRCDIR})
++IPSECVERSION:=${IPSECBASEVERSION}
+ export IPSECVERSION
+ 
+ # include OSDEP/ARCH specific makefiles, if any.
+@@ -303,9 +303,9 @@
+ # include support for KEY RR 
+ # this will become false in the future, as all OE sites transition to
+ # using TXT instead of KEY records.  See references to 'Flag Day'
+-USE_KEYRR?=true
++USE_KEYRR?=false
+ 
+ # include support for 2.4 KLIPS and 2.6 KLIPS in pluto
+-USE_KLIPS?=true
++USE_KLIPS?=false
+ 
+ # KLIPS needs PFKEYv2, but sometimes we want PFKEY without KLIPS

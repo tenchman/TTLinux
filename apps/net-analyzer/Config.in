@@ -1,0 +1,5 @@
+menu "Network analyzer"
+  source "apps/net-analyzer/netcat/Config.in"
+  source "apps/net-analyzer/snort/Config.in"
+  source "apps/net-analyzer/tcpdump/Config.in"
+endmenu

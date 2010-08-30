@@ -1,0 +1,226 @@
+--- dietlibc-0.32/lib/execl.c.environ	2003-10-29 17:49:57.000000000 +0100
++++ dietlibc-0.32/lib/execl.c	2009-06-10 22:16:39.000000000 +0200
+@@ -18,7 +18,7 @@ int execl( const char *path,...) {
+     for (i=0; i<n; ++i)
+       argv[i]=va_arg(bak,char *);
+     va_end (bak);
+-    return execve(path,argv,environ);
++    return execve(path,argv,__environ);
+   }
+   va_end (bak);
+   errno=ENOMEM;
+--- dietlibc-0.32/lib/getenv.c.environ	2001-08-14 18:56:50.000000000 +0200
++++ dietlibc-0.32/lib/getenv.c	2009-06-10 22:16:39.000000000 +0200
+@@ -1,16 +1,18 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
++extern char **__environ;
++
+ extern char *getenv(const char *s)
+ {
+   int i;
+   unsigned int len;
+ 
+-  if (!environ || !s) return 0;
++  if (!__environ || !s) return 0;
+   len = strlen(s);
+-  for (i = 0;environ[i];++i)
+-    if ((memcmp(environ[i],s,len)==0) && (environ[i][len] == '='))
+-      return environ[i] + len + 1;
++  for (i = 0;__environ[i];++i)
++    if ((memcmp(__environ[i],s,len)==0) && (__environ[i][len] == '='))
++      return __environ[i] + len + 1;
+   return 0;
+ }
+ 
+--- dietlibc-0.32/lib/putenv.c.environ	2007-11-09 20:13:14.000000000 +0100
++++ dietlibc-0.32/lib/putenv.c	2009-06-10 22:17:45.000000000 +0200
+@@ -2,6 +2,8 @@
+ #include <string.h>
+ #include <errno.h>
+ 
++extern char **__environ;
++
+ int putenv(const char *string) {
+   size_t len;
+   int envc;
+@@ -10,13 +12,13 @@ int putenv(const char *string) {
+   const char **ep;
+   char **newenv;
+   static char **origenv;
+-  if (!origenv) origenv=environ;
++  if (!origenv) origenv=__environ;
+   if (!(tmp=strchr(string,'='))) {
+     len=strlen(string);
+     remove=1;
+   } else
+     len=tmp-string;
+-  for (envc=0, ep=(const char**)environ; (ep && *ep); ++ep) {
++  for (envc=0, ep=(const char**)__environ; (ep && *ep); ++ep) {
+     if (*string == **ep &&
+ 	!memcmp(string,*ep,len) &&
+ 	(*ep)[len]=='=') {
+@@ -31,15 +33,15 @@ int putenv(const char *string) {
+     ++envc;
+   }
+   if (tmp) {
+-    newenv = (char**) realloc(environ==origenv?0:environ,
++    newenv = (char**) realloc(__environ==origenv?0:__environ,
+ 			      (envc+2)*sizeof(char*));
+     if (!newenv) return -1;
+-    if (envc && (environ==origenv)) {
++    if (envc && (__environ==origenv)) {
+       memcpy(newenv,origenv,envc*sizeof(char*));
+     }
+     newenv[envc]=(char*)string;
+     newenv[envc+1]=0;
+-    environ=newenv;
++    __environ=newenv;
+   }
+   return 0;
+ }
+--- dietlibc-0.32/lib/exec_lib.c.environ	2006-04-04 10:15:59.000000000 +0200
++++ dietlibc-0.32/lib/exec_lib.c	2009-06-10 22:16:39.000000000 +0200
+@@ -2,7 +2,7 @@
+ #include <paths.h>
+ #include <alloca.h>
+ 
+-extern char **environ;
++extern char **__environ;
+ 
+ int __exec_shell(const char *file, char *const argv[]);
+ int __exec_shell(const char *file, char *const argv[]) {
+@@ -16,6 +16,6 @@ int __exec_shell(const char *file, char 
+   shell_argv[1] = file;
+   for (; i > 1; i--)
+     shell_argv[i] = argv[i - 1];
+-  return execve(_PATH_BSHELL, (char*const*)shell_argv, environ);
++  return execve(_PATH_BSHELL, (char*const*)shell_argv, __environ);
+ }
+ 
+--- dietlibc-0.32/lib/execv.c.environ	2001-05-31 19:03:41.000000000 +0200
++++ dietlibc-0.32/lib/execv.c	2009-06-10 22:16:39.000000000 +0200
+@@ -7,7 +7,7 @@
+ #include "dietfeatures.h"
+ 
+ int execv(const char *file, char *const argv[]) {
+-  if (execve(file,argv,environ)==-1) {
++  if (execve(file,argv,__environ)==-1) {
+     if (errno==ENOEXEC)
+       __exec_shell(file,argv);
+   }
+--- dietlibc-0.32/lib/execvp.c.environ	2004-03-07 22:44:51.000000000 +0100
++++ dietlibc-0.32/lib/execvp.c	2009-06-10 22:16:39.000000000 +0200
+@@ -11,7 +11,7 @@ int execvp(const char *file, char *const
+   char *cur,*next;
+   char buf[PATH_MAX];
+   if (strchr((char*)file,'/')) {
+-    if (execve(file,argv,environ)==-1) {
++    if (execve(file,argv,__environ)==-1) {
+       if (errno==ENOEXEC)
+ 	__exec_shell(file,argv);
+       return -1;
+@@ -35,7 +35,7 @@ int execvp(const char *file, char *const
+       if (len+(next-cur)>=PATH_MAX-2) goto error;
+       memmove(&buf[next-cur+1],file,strlen(file)+1);
+     }
+-    if (execve(buf,argv,environ)==-1) {
++    if (execve(buf,argv,__environ)==-1) {
+       if (errno==ENOEXEC)
+ 	return __exec_shell(buf,argv);
+       if ((errno!=EACCES) && (errno!=ENOENT) && (errno!=ENOTDIR)) return -1;
+--- dietlibc-0.32/libugly/system.c.environ	2002-02-23 22:06:17.000000000 +0100
++++ dietlibc-0.32/libugly/system.c	2009-06-10 22:16:39.000000000 +0200
+@@ -6,8 +6,6 @@
+ #include "dietfeatures.h"
+ #include "binshstr.h"
+ 
+-extern char **environ;
+-
+ int __libc_system (const char *line);
+ 
+ int __libc_system (const char *line)
+@@ -59,7 +57,7 @@ undo:
+     sigaction(SIGQUIT, &quit, (struct sigaction*)0);
+     sigprocmask(SIG_SETMASK,&omask,0);
+ 
+-    execve(__binsh,(char *const *)nargs, environ);
++    execve(__binsh,(char *const *)nargs, __environ);
+     _exit(127);
+   }
+   save = errno;
+--- dietlibc-0.32/libugly/popen.c.environ	2008-03-11 20:34:17.000000000 +0100
++++ dietlibc-0.32/libugly/popen.c	2009-06-10 22:16:39.000000000 +0200
+@@ -3,8 +3,6 @@
+ #include <fcntl.h>
+ #include "binshstr.h"
+ 
+-extern char **environ;
+-
+ FILE *popen(const char *command, const char *type) {
+   int pfd[2];
+   int fd0;
+@@ -24,7 +22,7 @@ FILE *popen(const char *command, const c
+     close(pfd[!fd0]); close(fd0);
+     dup2(pfd[fd0],fd0); close(pfd[fd0]);
+     argv[2]=command;
+-    execve(__binsh,(char*const*)argv,environ);
++    execve(__binsh,(char*const*)argv,__environ);
+     _exit(127);
+   }
+   close(pfd[fd0]);
+--- dietlibc-0.32/dyn_start.c.environ	2009-06-10 21:54:33.000000000 +0200
++++ dietlibc-0.32/dyn_start.c	2009-06-10 22:16:39.000000000 +0200
+@@ -65,6 +65,7 @@ int stackgap(int argc,char* argv[],char*
+ #ifndef __DYN_LIB_SHARED
+ /* pre main, post _start */
+ extern __attribute__((section(".init"))) void _init(void);
++extern char **__environ;
+ 
+ int _dyn_start(int argc, char **argv, char **envp, structor dl_init);
+ int _dyn_start(int argc, char **argv, char **envp, structor dl_init)
+@@ -87,7 +88,7 @@ int _dyn_start(int argc, char **argv, ch
+     __register_frame_info(__EH_FRAME_BEGIN__, &ob);
+   }
+ #endif
+-
++  __environ = envp;
+ #ifdef WANT_STACKGAP
+   return stackgap(argc, argv, envp);
+ #else
+--- dietlibc-0.32/syscalls.s/environ.S.environ	2004-09-28 02:01:30.000000000 +0200
++++ dietlibc-0.32/syscalls.s/environ.S	2009-06-10 22:16:39.000000000 +0200
+@@ -2,16 +2,16 @@
+ .align 8
+ #include <endian.h>
+ 
++.type __environ,object
+ .type environ,object
++.global __environ
+ .weak environ
+-.type __environ,object
+-.weak __environ
+ __environ:
+-environ:
+ #if __WORDSIZE == 64
+ 	.quad 0
+ #else
+ 	.long 0
+ #endif
++environ = __environ
+ .size environ,.-environ
+ .size __environ,.-__environ
+--- dietlibc-0.32/libcompat/clearenv.c.environ	2005-08-29 15:12:10.000000000 +0200
++++ dietlibc-0.32/libcompat/clearenv.c	2009-06-10 22:16:39.000000000 +0200
+@@ -1,7 +1,9 @@
+ #define _GNU_SOURCE
+ #include <stdlib.h>
+ 
++extern char **__environ;
++
+ int clearenv(void) {
+-  environ=0;
++  __environ=0;
+   return 0;
+ }

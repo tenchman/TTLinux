@@ -1,0 +1,104 @@
+--- openswan-3.0.06/linux/net/ipsec/pfkey_v2_build.c.frank	2007-05-09 15:59:09.000000000 +0200
++++ openswan-3.0.06/linux/net/ipsec/pfkey_v2_build.c	2007-05-09 16:04:45.000000000 +0200
+@@ -53,7 +53,7 @@
+ #else /* __KERNEL__ */
+ 
+ # include <sys/types.h>
+-# include <sys/errno.h>
++# include <errno.h>
+ # include <netinet/in.h>
+ # include <stdlib.h>
+ # include <stdio.h>
+--- openswan-3.0.06/linux/net/ipsec/pfkey_v2_debug.c.frank	2007-05-09 16:09:43.000000000 +0200
++++ openswan-3.0.06/linux/net/ipsec/pfkey_v2_debug.c	2007-05-09 16:10:04.000000000 +0200
+@@ -40,7 +40,7 @@
+ 
+ # include <sys/types.h>
+ # include <linux/types.h>
+-# include <linux/errno.h>
++# include <errno.h>
+ 
+ #endif /* __KERNEL__ */
+ 
+--- openswan-3.0.06/linux/net/ipsec/pfkey_v2_ext_bits.c.frank	2007-05-09 16:06:14.000000000 +0200
++++ openswan-3.0.06/linux/net/ipsec/pfkey_v2_ext_bits.c	2007-05-09 16:06:35.000000000 +0200
+@@ -50,7 +50,7 @@
+ #else /* __KERNEL__ */
+ 
+ # include <sys/types.h>
+-# include <sys/errno.h>
++# include <errno.h>
+ # include <stdio.h>
+ #endif
+ 
+--- openswan-3.0.06/linux/net/ipsec/pfkey_v2_parse.c.frank	2007-05-09 16:08:36.000000000 +0200
++++ openswan-3.0.06/linux/net/ipsec/pfkey_v2_parse.c	2007-05-09 16:08:59.000000000 +0200
+@@ -56,7 +56,7 @@
+ #else /* __KERNEL__ */
+ 
+ # include <sys/types.h>
+-# include <sys/errno.h>
++# include <errno.h>
+ # include <stdio.h>
+ 
+ # include <openswan.h>
+
+--- openswan-3.0.06/include/linux/errqueue.h.diet	2007-05-10 09:52:04.000000000 +0200
++++ openswan-3.0.06/include/linux/errqueue.h	2007-05-10 09:51:52.000000000 +0200
+@@ -0,0 +1,23 @@
++#ifndef _LINUX_ERRQUEUE_H
++#define _LINUX_ERRQUEUE_H 1
++
++struct sock_extended_err
++{
++	__u32	ee_errno;	
++	__u8	ee_origin;
++	__u8	ee_type;
++	__u8	ee_code;
++	__u8	ee_pad;
++	__u32   ee_info;
++	__u32   ee_data;
++};
++
++#define SO_EE_ORIGIN_NONE	0
++#define SO_EE_ORIGIN_LOCAL	1
++#define SO_EE_ORIGIN_ICMP	2
++#define SO_EE_ORIGIN_ICMP6	3
++
++#define SO_EE_OFFENDER(ee)	((struct sockaddr*)((ee)+1))
++
++
++#endif
+--- openswan-3.0.06/lib/liblwres/unix/include/lwres/netdb.h.diet	2007-01-16 00:58:29.000000000 +0100
++++ openswan-3.0.06/lib/liblwres/unix/include/lwres/netdb.h	2007-05-10 09:48:54.000000000 +0200
+@@ -21,6 +21,8 @@
+ #define LWRES_NETDB_H 1
+ 
+ #include <stddef.h>	/* Required on FreeBSD (and  others?) for size_t. */
++#include <sys/types.h>
++#include <sys/socket.h>
+ #include <netdb.h>	/* Contractual provision. */
+ 
+ #include <lwres/lang.h>
+--- openswan-3.0.06/programs/pluto/xauth.c.diet	2007-01-16 00:58:29.000000000 +0100
++++ openswan-3.0.06/programs/pluto/xauth.c	2007-05-10 09:53:01.000000000 +0200
+@@ -33,7 +33,7 @@
+ #include <arpa/inet.h>
+ #include <limits.h>
+ 
+-#if defined(linux)
++#if defined(linux) && !defined(__dietlibc__)
+ /* is supposed to be in unistd.h, but it isn't on linux */
+ #include <crypt.h> 
+ #endif
+--- openswan-3.0.06/programs/pluto/sysdep_linux.c.diet	2007-01-16 00:58:29.000000000 +0100
++++ openswan-3.0.06/programs/pluto/sysdep_linux.c	2007-05-10 09:55:04.000000000 +0200
+@@ -22,7 +22,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <errno.h>
+-#include <wait.h>
++#include <sys/wait.h>
+ #include <unistd.h>
+ #include <fcntl.h>
+ #include <sys/ioctl.h>

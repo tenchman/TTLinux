@@ -1,0 +1,730 @@
+diff -urN -bB nsm-1.0.5/include/check.h nsm_work/include/check.h
+--- nsm-1.0.5/include/check.h	2003-07-04 12:29:57.000000000 +0200
++++ nsm_work/include/check.h	2004-04-07 15:35:07.000000000 +0200
+@@ -39,6 +39,7 @@
+ typedef enum chkrtn
+ {
+    CHKRTN_OK,
++   CHKRTN_EXOK,
+    CHKRTN_NEED_CONTENT,
+    CHKRTN_REFUSED,
+    CHKRTN_ERROR,
+diff -urN -bB nsm-1.0.5/lib/authorization.c nsm_work/lib/authorization.c
+--- nsm-1.0.5/lib/authorization.c	2003-10-17 11:12:25.000000000 +0200
++++ nsm_work/lib/authorization.c	2004-04-13 11:55:40.000000000 +0200
+@@ -70,6 +70,21 @@
+ 
+ static int check_src_loop ( FILE *addr_file , struct sockaddr_in *src, bool *err ) ;
+ 
++#ifdef WITH_TINYAD
++int check_external_group_permissions( char *login ,
++				      char** ipaddr,
++				      int nb_ip,
++				      struct sockaddr_in *src ,
++				      char *dest ,
++				      char *service ,
++				      unsigned short portsrc,
++				      unsigned short  portdest,
++				      nsm_addr_t **addr_rtn,
++				      config_t *config,
++				      bool get_addr_list);
++char *get_external_groups(char *login, bool *err);
++#endif
++
+ #ifdef WITH_ORANGEFILTER
+ static int get_categories ( FILE *file, nsm_addr_t **addr_rtn );
+ #endif
+@@ -248,7 +263,7 @@
+    }
+    
+    free ( service_lower );
+-   
++  nsmlog(ULM_ERROR,"addr_open: %s",addr_file);
+    return fopen ( addr_file , "r" ) ;
+ }
+ 
+@@ -1093,7 +1109,7 @@
+                  ptr->max_times[i] = ptr->max_times[i] + 1 ;
+                  ptr->times[i] = realloc ( ptr->times[i] ,
+                                            ( ptr->max_times[i] + 1 ) * sizeof (
+-hours_t ) ) ;
++										    hours_t ) ) ;
+                  ptr->times[i][ptr->max_times[i]].beg_hour = -1 ;
+                  ptr->times[i][ptr->max_times[i]].beg_min  = -1 ;
+                  ptr->times[i][ptr->max_times[i]].end_hour = -1 ;
+@@ -1307,7 +1324,6 @@
+          }
+       }
+    }
+-  
+    return ptr ;
+ }
+ 
+@@ -1726,6 +1742,39 @@
+    }
+    
+    /* check group permission */
++#ifdef WITH_TINYAD
++  {
++    int res_tmp;
++#ifdef DEBUG
++    printf("check_and_get_addr: Checking external groups permissions\n");
++#endif
++    /* external groups
++     * get ERROR_NOT_FOUND when user has no groups, in that case
++     * keep the result of user's permissions check. Else adapt result of
++     * groups permissions check
++     */
++    res_tmp= check_external_group_permissions(
++					      login,
++					      host?host->h_addr_list:(char**)tab_ip, 
++					      host?host->h_length:1, 
++					      src,
++					      dest,
++					      service,
++					      local_port,
++					      port,
++					      addr_rtn,
++					      config,
++					      get_addr_list
++					      );
++    if (res_tmp != ERROR_NOT_FOUND)
++      result=res_tmp;
++     
++    /* i would think, return if authorized, else check common permissions */
++    if ( result == AUTHORIZED )
++      return (result);
++  }
++#else /* WITH_TINYAD */
++
+ #ifdef DEBUG
+    printf ( "check_and_get_addr: Checking groups permissions\n" ) ;
+ #endif
+@@ -1754,8 +1804,11 @@
+ #ifdef DEBUG
+ 	    printf( "check_and_get_addr: Checking from %s\n" , group_name ) ;
+ #endif
++
+ 	    addr_file = addr_open ( group_name , service , config ) ;
+ 	    
++	    
++	    
+ 	    if ( addr_file == NULL )
+ 	    {
+ 	       continue ;
+@@ -1916,6 +1973,9 @@
+       return (result);
+    }
+ 
++
++#endif /* WITH_TINYAD */   
++
+    /* check common permission */
+ #ifdef DEBUG
+    printf ( "check_and_get_addr: Checking common permissions\n" ) ;
+@@ -1958,7 +2018,6 @@
+ #endif
+       }
+    }
+-   
+    return result ;
+ }
+ 
+@@ -2031,6 +2090,7 @@
+          {
+             if ( addr->cmds[command] == false )
+             {
++		  printf("check_and_get_addr_loop: %s\n" , command_name[command] ) ;
+                nsmlog ( ULM_DEBUG , "%s" , command_name[command] ) ;
+             }
+          }
+@@ -2272,7 +2332,7 @@
+ 
+ /*
+   make the string for the host in the form of host:port
+- */
++*/
+ void
+ make_autoconnection_host (nsm_addr_t * addr, char * dest, int dest_len)
+ {
+@@ -2311,7 +2371,7 @@
+ 
+ /*
+   iterates thru the address file and find a unique destination
+- */
++*/
+ int
+ find_autoconnection_address (FILE * addr_file, struct sockaddr_in * src, 
+                              nsm_addr_t * dest_addr)
+@@ -2519,3 +2579,245 @@
+    return result;
+ }
+ 
++
++#ifdef WITH_TINYAD
++
++/* ------------------------------------------------------------------------- *
++ * Function check_external_group_permissions.
++ * Uses tinyAD demon and local files to verify group permissions
++ * ------------------------------------------------------------------------- */
++int check_external_group_permissions( char *login ,
++				      char** ipaddr,
++				      int nb_ip,
++				      struct sockaddr_in *src ,
++				      char *dest , 
++				      char *service ,
++				      unsigned short portsrc,
++				      unsigned short  portdest,
++				      nsm_addr_t **addr_rtn,
++				      config_t *config,
++				      bool get_addr_list)
++{
++  FILE *addr_file;
++  int result=UNAUTHORIZED_SERVICE,res_tmp;
++  char *group;
++  int fd;
++  char *buf,*tmp;
++  bool err,deny;
++
++  int len=2048,s=0,i,r;
++
++
++  group=get_external_groups(login,&err);
++
++  if (!group)
++    return ERROR_NOT_FOUND;
++
++  buf=group;
++  while(1) {
++    char group_path[MAXPATHLEN+1]; 
++    tmp = strchr(group,'\n');
++    if (!tmp)
++      break;
++    *tmp='\0';
++    tmp++;
++    
++    snprintf(group_path,MAXPATHLEN+1,"%s/%s",config->groups,group); 
++    
++    addr_file = addr_open ( group , service , config ) ;
++      
++    if ( addr_file)
++      {
++	res_tmp = check_and_get_addr_loop( addr_file, 
++					   ipaddr,
++					   nb_ip,	 
++					   src, 
++					   portsrc ,
++					   portdest,
++					   select_serviceport(service),
++					   service,
++					   &deny,
++					   addr_rtn,
++					   &err);
++	fclose ( addr_file ) ;
++  
++	if (err) {
++	  nsmlog(ULM_WARNING, "Syntax error in : permission for %s, %s",
++		 group_path,service);
++	  free(buf);
++	  return ERROR;
++	}
++#ifdef DEBUG
++	printf("check_external_group_permissions: checking %s = %d\n",group_path,res_tmp);
++#endif
++
++	if ( res_tmp == AUTHORIZED )
++	  {
++#ifdef WITH_ORANGEFILTER 
++	    FILE * cat_file  = addr_open ( group_path , "categories" , config);
++	    if (cat_file != NULL)
++	      {
++		printf("Group Categories\n");
++		get_categories(cat_file, addr_rtn);
++		fclose( cat_file ) ;
++	      }
++#endif       
++	    result = AUTHORIZED;
++	    /*      	      if ( get_addr_list ) */
++	    /* 		addr_rtn = &((*addr_rtn)->next); */
++	    /* 	      else  */
++	    break;
++	  }
++	else if ( result != AUTHORIZED ) 
++	  {
++	    result = res_tmp;
++	  }
++      } else {
++      result=ERROR_NOT_FOUND;
++    }
++    group=tmp;
++  }
++  free(buf);
++  return result;
++}
++
++
++
++char *get_external_groups(char *login, bool *err)
++{
++  int fd;
++  char *buf,*tmp;
++
++  int len=2048,s=0,i,r;
++  struct sockaddr_in server;
++
++  fd_set rfds;
++  struct timeval tv;
++
++
++#ifdef DEBUG
++  printf("get_external_groups: fetching external groups\n");
++#endif
++
++  *err=true;
++
++  fd = socket(AF_INET, SOCK_STREAM, 0) ;
++  if (fd < 0)
++    {
++      nsmlog (ULM_WARNING, "external: no socket");
++      return NULL;
++    }
++
++  /* switch to unix sockets instead of inet? */
++  server.sin_family = AF_INET;
++  server.sin_addr.s_addr = inet_addr("127.0.0.1"); /* just for test!!! */
++  server.sin_port = htons(1066) ;
++
++  if (connect(fd, (struct sockaddr *) &server, sizeof server) > 0)  {
++    nsmlog (ULM_WARNING, "external: cannot connect");
++    return NULL;
++  }
++  
++  /* send command ugroups <login> to retrieve all groups of the user */
++  len=11+strlen(login);
++  buf = malloc(len);
++  snprintf(buf,len,"%s %s\r\n","ugroups",login);
++
++    
++
++
++  FD_ZERO(&rfds);
++  FD_SET(fd, &rfds);
++  tv.tv_sec = 10;
++  tv.tv_usec = 0;
++  
++  if (select(fd+1,NULL,&rfds,NULL,&tv)) {
++    write(fd,buf,len);
++    len=27;
++    buf = realloc(buf,len);
++    if (!buf) {
++      return NULL;
++    }
++    memset(buf,0,len);
++    while (1) {
++      tv.tv_sec = 10;
++      tv.tv_usec = 0;
++  
++      if (select(fd+1,&rfds,NULL,NULL,&tv)) {
++	r=read(fd, buf+s, len-s);
++	if (r > 0) {
++#ifdef DEBUG
++	  printf("get_external_groups: read %d with content \n%s\n",r,buf);
++#endif
++	  s+=r;
++	  if (s>=8 && !strncmp(buf+s-8,"GADSEND\n",8) ) {
++	    *err=false;
++	    tmp=buf+s-8;
++	    memset(tmp,0,8);
++	    --tmp;
++	    *tmp='\n';
++	    close(fd);
++#ifdef DEBUG
++	    printf("get_external_groups: --- groups found ---\n");
++	    write(1,buf,strlen(buf));
++#endif
++	    return buf;
++	  }
++	  if (s>=10 &&!strncmp(buf+s-10,"GADSERROR\n",10) ) {
++#ifdef DEBUG
++	    printf("get_external_groups: GADSERROR\n");
++#endif
++	    break;
++	  }
++	  if (s=len) {
++	    len+=s;
++#ifdef DEBUG
++	    printf("get_external_groups: resize in buffer to %d\n",len);
++#endif
++	    buf=realloc(buf,len);
++#ifdef DEBUG
++	    printf("get_external_groups: new buf \n%s\n",buf);
++#endif
++	  }
++	  continue;
++	}
++#ifdef DEBUG
++	printf("get_external_groups: read failed");
++	nsmlog (ULM_WARNING, "get_external_groups: read error");
++#endif
++	break;
++      }
++      printf("get_external_groups: select for read failed");
++      break;
++    }
++  }
++  close(fd);
++  free(buf);
++  return NULL;
++}
++
++
++
++
++
++
++
++#endif /* WITH_TINYAD */
++
++
++int select_serviceport(char *service) 
++{
++  /* init default port */
++  if ( strcasecmp ( service , "telnet" ) == 0 )
++    return 23 ;   /* getservbyname */
++  else if ( strcasecmp ( service , "http" ) == 0 )
++    return 80 ;   /* getservbyname */
++  else if ( strcasecmp ( service , "https" ) == 0 )
++    return 443 ;   /* getservbyname */
++  else if ( strcasecmp ( service , "ftp" ) == 0 )
++    return 21 ;   /* getservbyname */
++  else if (strcasecmp ( service , "sqlnet") == 0)
++    return SQLNET_DEFAULT_PORT;
++  else if (strcasecmp ( service , "netbios") == 0)
++    return NETBIOS_DEFAULT_PORT;
++}
+diff -urN -bB nsm-1.0.5/lib/check.c nsm_work/lib/check.c
+--- nsm-1.0.5/lib/check.c	2003-07-04 12:29:58.000000000 +0200
++++ nsm_work/lib/check.c	2004-04-07 15:22:07.000000000 +0200
+@@ -3732,7 +3732,8 @@
+  *
+  * Subject : Url filtering
+  * looking for the first perm that deny or accept the url
+- * and return CHKRTN_REFUSED if deny, CHKRTN_OK else.
++ * and return CHKRTN_REFUSED if deny, CHKRTN_EXOK when 
++ * explicitly accepted, else CHKRTN_OK else.
+  *
+  * --------------------------------------------------------------------------
+  */
+@@ -3747,6 +3748,7 @@
+     {
+       if (MultiMatch (url, perm->accept_file, true))
+       {
++	return CHKRTN_EXOK;
+ 	break;
+       }
+       else if (MultiMatch (url, perm->deny_file, true))
+@@ -3779,7 +3781,7 @@
+  *    - nsm_addr_t              *Perm
+  *      Pointer to the first item of permissions
+  *      which are ordered like : 
+- *       - user permission
++ *       - user Permission
+  *       - group permission
+  *       - global permission
+  *
+@@ -4532,6 +4534,7 @@
+   }
+   else
+   {
++    /* AD */    nsmlog(ULM_USAGE,"using filterfile: %s", filename);
+     f = fopen (filename, "r");
+   }
+ 
+diff -urN -bB nsm-1.0.5/lib/init-config.c nsm_work/lib/init-config.c
+--- nsm-1.0.5/lib/init-config.c	2003-04-22 11:10:27.000000000 +0200
++++ nsm_work/lib/init-config.c	2004-03-05 10:35:44.000000000 +0100
+@@ -712,6 +713,11 @@
+ 	     config->users, login) ;
+    user_stream = fopen ( user_file , "r" ) ;
+    if ( user_stream == NULL ) {
++#ifdef WITH_TINYAD
++     /* if tinyad is used, user does not need its own file */
++     /* this may mean that login is wrong, but we must ignore that */
++     return user;
++#endif /* WITH_TINYAD */
+       nsm_user_free (user);
+       return NULL ;
+    }
+@@ -1006,7 +1012,9 @@
+    default:
+       break;
+    }
++#ifdef WITH_VIRUSSCAN
+    print_key_value ( user_stream , "viruscheck" ,(user->viruscheck) ? "yes" : "no" );
++#endif
+    print_key_value ( user_stream , "password"      , user->password ) ;
+    print_key_value ( user_stream , "securenet-key" , user->securenet_key ) ;
+    print_key_value ( user_stream , "activcard"     , user->activcard ) ;
+diff -urN -bB nsm-1.0.5/nsm-httpd/nsm-httpd.c nsm_work/nsm-httpd/nsm-httpd.c
+--- nsm-1.0.5/nsm-httpd/nsm-httpd.c	2003-07-28 15:09:36.000000000 +0200
++++ nsm_work/nsm-httpd/nsm-httpd.c	2004-04-13 10:36:13.000000000 +0200
+@@ -377,7 +377,11 @@
+   config_http->reverse        = false;
+ #endif
+   config_http->forcedigestmd5 = false;
++#ifdef WITH_TINYAD
++  config_http->authenticate   = AUTH_PASSWORD; 
++#else
+   config_http->authenticate   = true; 
++#endif
+   config_http->cookies        = true;
+   config_http->filter_path    = NULL;
+   config_http->proxy_host     = NULL;
+@@ -642,6 +646,7 @@
+   bool need_to_do_filtering = false;
+   unsigned long addr;
+   unsigned char msg[1024];
++  int res;
+   // int one=1;
+ 
+   /* set the timeout of the socket with the one read in config file */
+@@ -691,7 +696,7 @@
+   /* init filter for adress returned */
+   {
+     nsm_addr_t *tmp = perm;
+-    int res;
++    int res = CHKRTN_OK;
+     while (tmp) {
+       res = http_filter_get (tmp->filter_file, tmp);
+       if (res < 0) {
+@@ -707,10 +712,12 @@
+   }
+ 
+ #ifdef WITH_ORANGEFILTER
+-  if (config_http->ofcd) {
++  { 
+     unsigned char msgbuf[2048];
+     unsigned char msg[4096];
+ 
++
++  if (config_http->ofcd) {
+     nsm_addr_t *tmp = perm;
+     while (tmp) {
+       if (tmp->categories) {
+@@ -730,15 +737,17 @@
+       case CHKRTN_OK:
+ 	 break;
+       case CHKRTN_REFUSED:
+-	strcpy(msg,
+-	    "Access to this document denied, because it belongs to one "
+-	    "or more categories you are not allowed to view.<ul>");
+-	strcat(msg, msgbuf);
+-	strcat(msg, "</ul>If you think this is an error, please contact your firewall administrator!");
+-	send_reply (&request, 403, NULL, msg);
+-	nsmlog (ULM_WARNING,
+-	     "Access denied by Content filtering");
+-	exit (EXIT_SUCCESS);
++/* 	strcpy(msg, */
++/* 	    "Access to this document denied, because it belongs to one " */
++/* 	    "or more categories you are not allowed to view.<ul>"); */
++/* 	strcat(msg, msgbuf); */
++/* 	strcat(msg, "</ul>If you think this is an error, please contact your firewall administrator!"); */
++/* 	send_reply (&request, 403, NULL, msg); */
++/* 	nsmlog (ULM_WARNING, */
++/* 	     "Access denied by Content filtering"); */
++/* 	exit (EXIT_SUCCESS); */
++        res = CHKRTN_REFUSED; 
++	/* for whitelist support. HttpFilter must check if URL is explicitly allowed */
+ 	break;
+       
+       case CHKRTN_UNKNOWN:
+@@ -769,6 +778,24 @@
+ 				 &query_content,
+ 				 &(request.body_length), NULL, NULL, NULL)) {
+     case CHKRTN_OK:
++#ifdef WITH_ORANGEFILTER
++      if ( res == CHKRTN_REFUSED) {
++	unsigned char msgbuf[2048];
++	unsigned char msg[4096];
++	strcpy(msg,
++	       "Access to this document denied, because it belongs to one "
++	       "or more categories you are not allowed to view.<ul>");
++	strcat(msg, msgbuf);
++	strcat(msg, "</ul>If you think this is an error, please contact your firewall administrator!");
++	send_reply (&request, 403, NULL, msg);
++	nsmlog (ULM_WARNING,
++		"Access denied by Content filtering");
++	exit (EXIT_SUCCESS);
++      }
++#endif
++      /* nothing to do */
++      break;
++    case CHKRTN_EXOK:
+       /* nothing to do */
+       break;
+     case CHKRTN_NEED_CONTENT:
+@@ -791,7 +818,9 @@
+     }
+   }
+   /* open_session */
+-
++#ifdef WITH_ORANGEFILTER
++  }
++#endif
+ #ifdef WITH_GTMP
+   session = open_session (config->gtmp, usercred.username, src, dest,
+ 			  ssl ? "https" : "http");
+@@ -1377,13 +1404,90 @@
+ } /* }}} */
+ 
+ 
++#ifdef WITH_TINYAD
++/* ------------------------------------------------------------------------- *
++ * Function extern_check. Uses tinyAD demon to verify password
++ * ------------------------------------------------------------------------- */
++
++bool extern_check(char *user,char *pass)
++{
++  int fd;
++  char *buf,*tmp;
++  int len,s=0,r;
++  struct sockaddr_in server;
++
++  fd_set rfds;
++  struct timeval tv;
++
++  /* switch to unix sockets instead of inet? */
++  fd = socket(AF_INET, SOCK_STREAM, 0) ;
++  if (fd < 0)
++    {
++      nsmlog (ULM_WARNING, "external: no socket");
++       return(false);
++    }
++
++  server.sin_family = AF_INET;
++  server.sin_addr.s_addr = inet_addr("127.0.0.1"); /* just for test!!! */
++  server.sin_port = htons(1066) ;
++  if (connect(fd, (struct sockaddr *) &server, sizeof server) < 0)
++    {
++      nsmlog (ULM_WARNING, "external: cannot connect");
++      return(false); 
++    }
++  /* send command password <login> <password> */
++  len = 12+strlen(user)+strlen(pass);
++  buf = malloc(len);
++  snprintf(buf,len,"%s %s %s\n","password",user,pass);
++
++  FD_ZERO(&rfds);
++  FD_SET(fd, &rfds);
++  tv.tv_sec = 10;
++  tv.tv_usec = 0;
++  
++  if (select(fd+1,NULL,&rfds,NULL,&tv)) {
++    write(fd,buf,len);
++    len=12;
++    buf = realloc(buf,len);
++    if (!buf) {
++      return (false);
++    }
++    memset(buf,0,len);
++    while (1) {
++      tv.tv_sec = 10;
++      tv.tv_usec = 0;
++  
++      if (select(fd+1,&rfds,NULL,NULL,&tv)) {
++	r=read(fd, buf+s, len-s);
++	if (r >= 0) {
++	  s+=r;
++	  if (s>=8 && !strncmp(buf+s-8,"GADSEND\n",8) ) {
++	    free(buf);
++	    close(fd);
++	    return(true);
++	  }
++	  if (s>=10 &&!strncmp(buf+s-10,"GADSERROR\n",10) ) {
++	    break;
++	  }
++	  break;
++	}
++	break;
++      }
++      break;
++    }
++  }
++  close(fd);
++  free(buf);
++  return (false);
++}
++#endif
++
+ /* ------------------------------------------------------------------------- *
+  * Function : digest_check
+  * ------------------------------------------------------------------------- */
+ bool digest_check(char *pass, CREDENTIALS *cred)
+ {
+   HASHHEX HA1;
+-  
+   if (cred->authtype == AUTHTYPE_DIGEST) {
+     HASHHEX Response;
+     
+@@ -1439,7 +1543,6 @@
+       cred->stale = false;
+     }
+   } else {
+-    
+     DigestCalcSecret(cred->username, cred->realm, cred->password, HA1);
+     if (strcasecmp(pass,HA1)) return(false); 
+   }
+@@ -1462,7 +1565,11 @@
+     OUT user_t ** user_rtn)
+ {
+   char   *service;
++#ifdef WITH_TINYAD
++  auth_t auth = AUTH_PASSWORD;
++#else
+   auth_t auth = AUTH_DEFAULT;
++#endif
+   int    check;
+   int    timeout;
+   time_t now;
+@@ -1562,6 +1670,7 @@
+     auth = (!*addr_rtn || (*addr_rtn)->auth == AUTH_DEFAULT ?
+ 	    user->auth : (*addr_rtn)->auth);
+ 
++#ifndef WITH_TINYAD 
+     switch (auth) {
+     case AUTH_DEFAULT:
+       break;
+@@ -1650,13 +1758,19 @@
+     default:
+       break;
+     }
++#else
++    if (!extern_check(usercred.username,usercred.password)) {
++      return 0;
++    }
++#endif /* ! WITH_TINYAD */
++ 
+ 
+     /* the password is no longer needed */
+ 
+     if (usercred.password != NULL) memset (usercred.password, 0, strlen (usercred.password));
+-
++#ifndef WITH_TINYAD
+     exit_on_expired_account(user, request);
+-  
++#endif  
+   } // config_http->authenticate
+   
+   switch (check) {
+@@ -1744,9 +1858,11 @@
+ 
+     time (&user->lastlogin);
+     user->numfailure = 0;
++#ifndef WITH_TINYAD
+     if (!nsm_user_write (user, config, &ulm)) {
+       nsmlog (ULM_WARNING, "Error writing user file");
+     }
++#endif
+ 
+     if (usercred.stale) {
+       return 1;

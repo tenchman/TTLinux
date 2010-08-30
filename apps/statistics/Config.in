@@ -1,0 +1,8 @@
+# vim:set syntax=kconfig:
+
+menu "Statistics"
+source "apps/statistics/collectd/Config.in"
+source "apps/statistics/rrdtool/Config.in"
+source "apps/statistics/hddtemp/Config.in"
+source "apps/statistics/lm_sensors/Config.in"
+endmenu

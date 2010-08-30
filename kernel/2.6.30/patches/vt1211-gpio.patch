@@ -1,0 +1,421 @@
+diff -up ./drivers/gpio/Kconfig.gpio ./drivers/gpio/Kconfig
+--- ./drivers/gpio/Kconfig.gpio	2009-05-25 14:57:14.000000000 +0200
++++ ./drivers/gpio/Kconfig	2009-05-25 14:57:51.000000000 +0200
+@@ -0,0 +1,178 @@
++#
++# GPIO infrastructure and expanders
++#
++
++config ARCH_WANT_OPTIONAL_GPIOLIB
++	bool
++	help
++	  Select this config option from the architecture Kconfig, if
++	  it is possible to use gpiolib on the architecture, but let the
++	  user decide whether to actually build it or not.
++	  Select this instead of ARCH_REQUIRE_GPIOLIB, if your architecture does
++	  not depend on GPIOs being available, but rather let the user
++	  decide whether he needs it or not.
++
++config ARCH_REQUIRE_GPIOLIB
++	bool
++	select GPIOLIB
++	help
++	  Platforms select gpiolib if they use this infrastructure
++	  for all their GPIOs, usually starting with ones integrated
++	  into SOC processors.
++	  Selecting this from the architecture code will cause the gpiolib
++	  code to always get built in.
++
++
++
++menuconfig GPIOLIB
++	bool "GPIO Support"
++	depends on ARCH_WANT_OPTIONAL_GPIOLIB || ARCH_REQUIRE_GPIOLIB
++	select GENERIC_GPIO
++	help
++	  This enables GPIO support through the generic GPIO library.
++	  You only need to enable this, if you also want to enable
++	  one or more of the GPIO expansion card drivers below.
++
++	  If unsure, say N.
++
++if GPIOLIB
++
++config DEBUG_GPIO
++	bool "Debug GPIO calls"
++	depends on DEBUG_KERNEL
++	help
++	  Say Y here to add some extra checks and diagnostics to GPIO calls.
++	  The checks help ensure that GPIOs have been properly initialized
++	  before they are used and that sleeping calls aren not made from
++	  nonsleeping contexts.  They can make bitbanged serial protocols
++	  slower.  The diagnostics help catch the type of setup errors
++	  that are most common when setting up new platforms or boards.
++
++config GPIO_SYSFS
++	bool "/sys/class/gpio/... (sysfs interface)"
++	depends on SYSFS && EXPERIMENTAL
++	help
++	  Say Y here to add a sysfs interface for GPIOs.
++
++	  This is mostly useful to work around omissions in a system's
++	  kernel support.  Those are common in custom and semicustom
++	  hardware assembled using standard kernels with a minimum of
++	  custom patches.  In those cases, userspace code may import
++	  a given GPIO from the kernel, if no kernel driver requested it.
++
++	  Kernel drivers may also request that a particular GPIO be
++	  exported to userspace; this can be useful when debugging.
++
++# put expanders in the right section, in alphabetical order
++
++comment "Memory mapped GPIO expanders:"
++
++config GPIO_XILINX
++	bool "Xilinx GPIO support"
++	depends on PPC_OF
++	help
++	  Say yes here to support the Xilinx FPGA GPIO device
++
++comment "I2C GPIO expanders:"
++
++config GPIO_MAX732X
++	tristate "MAX7319, MAX7320-7327 I2C Port Expanders"
++	depends on I2C
++	help
++	  Say yes here to support the MAX7319, MAX7320-7327 series of I2C
++	  Port Expanders. Each IO port on these chips has a fixed role of
++	  Input (designated by 'I'), Push-Pull Output ('O'), or Open-Drain
++	  Input and Output (designed by 'P'). The combinations are listed
++	  below:
++
++	  8 bits:	max7319 (8I), max7320 (8O), max7321 (8P),
++		  	max7322 (4I4O), max7323 (4P4O)
++
++	  16 bits:	max7324 (8I8O), max7325 (8P8O),
++		  	max7326 (4I12O), max7327 (4P12O)
++
++	  Board setup code must specify the model to use, and the start
++	  number for these GPIOs.
++
++config GPIO_PCA953X
++	tristate "PCA953x, PCA955x, and MAX7310 I/O ports"
++	depends on I2C
++	help
++	  Say yes here to provide access to several register-oriented
++	  SMBus I/O expanders, made mostly by NXP or TI.  Compatible
++	  models include:
++
++	  4 bits:	pca9536, pca9537
++
++	  8 bits:	max7310, pca9534, pca9538, pca9554, pca9557
++
++	  16 bits:	pca9535, pca9539, pca9555
++
++	  This driver can also be built as a module.  If so, the module
++	  will be called pca953x.
++
++config GPIO_PCF857X
++	tristate "PCF857x, PCA{85,96}7x, and MAX732[89] I2C GPIO expanders"
++	depends on I2C
++	help
++	  Say yes here to provide access to most "quasi-bidirectional" I2C
++	  GPIO expanders used for additional digital outputs or inputs.
++	  Most of these parts are from NXP, though TI is a second source for
++	  some of them.  Compatible models include:
++
++	  8 bits:   pcf8574, pcf8574a, pca8574, pca8574a,
++	            pca9670, pca9672, pca9674, pca9674a,
++	  	    max7328, max7329
++
++	  16 bits:  pcf8575, pcf8575c, pca8575,
++	            pca9671, pca9673, pca9675
++
++	  Your board setup code will need to declare the expanders in
++	  use, and assign numbers to the GPIOs they expose.  Those GPIOs
++	  can then be used from drivers and other kernel code, just like
++	  other GPIOs, but only accessible from task contexts.
++
++	  This driver provides an in-kernel interface to those GPIOs using
++	  platform-neutral GPIO calls.
++
++config GPIO_TWL4030
++	tristate "TWL4030, TWL5030, and TPS659x0 GPIOs"
++	depends on TWL4030_CORE
++	help
++	  Say yes here to access the GPIO signals of various multi-function
++	  power management chips from Texas Instruments.
++
++comment "PCI GPIO expanders:"
++
++config GPIO_BT8XX
++	tristate "BT8XX GPIO abuser"
++	depends on PCI && VIDEO_BT848=n
++	help
++	  The BT8xx frame grabber chip has 24 GPIO pins than can be abused
++	  as a cheap PCI GPIO card.
++
++	  This chip can be found on Miro, Hauppauge and STB TV-cards.
++
++	  The card needs to be physically altered for using it as a
++	  GPIO card. For more information on how to build a GPIO card
++	  from a BT8xx TV card, see the documentation file at
++	  Documentation/bt8xxgpio.txt
++
++	  If unsure, say N.
++
++comment "SPI GPIO expanders:"
++
++config GPIO_MAX7301
++	tristate "Maxim MAX7301 GPIO expander"
++	depends on SPI_MASTER
++	help
++	  gpio driver for Maxim MAX7301 SPI GPIO expander.
++
++config GPIO_MCP23S08
++	tristate "Microchip MCP23S08 I/O expander"
++	depends on SPI_MASTER
++	help
++	  SPI driver for Microchip MCP23S08 I/O expander.  This provides
++	  a GPIO interface supporting inputs and outputs.
++
++endif
+diff -up ./drivers/gpio/Makefile.gpio ./drivers/gpio/Makefile
+--- ./drivers/gpio/Makefile.gpio	2009-05-25 14:58:29.000000000 +0200
++++ ./drivers/gpio/Makefile	2009-05-25 11:48:29.000000000 +0200
+@@ -12,3 +12,5 @@ obj-$(CONFIG_GPIO_PCF857X)	+= pcf857x.o
+ obj-$(CONFIG_GPIO_TWL4030)	+= twl4030-gpio.o
+ obj-$(CONFIG_GPIO_XILINX)	+= xilinx_gpio.o
+ obj-$(CONFIG_GPIO_BT8XX)	+= bt8xxgpio.o
++obj-$(CONFIG_GPIO_VT1211)	+= vt1211.o
++obj-$(CONFIG_VT1211_GPIO)	+= vt1211.o
+diff -up ./drivers/gpio/vt1211.c.gpio ./drivers/gpio/vt1211.c
+--- ./drivers/gpio/vt1211.c.gpio	2009-05-25 14:56:52.000000000 +0200
++++ ./drivers/gpio/vt1211.c	2009-05-25 14:37:20.000000000 +0200
+@@ -0,0 +1,226 @@
++
++/* 
++ * Minor device numbers are allocated sequentially starting from zero,
++ * GPIO pins are numbered 20 - 27 for port 2, 30 - 37 port 3 etc, thus
++ * the minor device number corresponds to the pin number interpreted as
++ * octal with 020 (octal) subtracted.
++ *   port #2:  0 -  7
++ *   port #3:  8 - 15
++ *   ...
++ *   port #6: 40 - 47
++ */
++
++#include <linux/fs.h>
++#include <linux/module.h>
++#include <linux/errno.h>
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <linux/platform_device.h>
++#include <linux/cdev.h>
++#include <linux/ioport.h>
++#include <linux/pci.h>
++#include <linux/delay.h> /* msleep() */
++#include <asm/uaccess.h>
++#include <asm/io.h>
++#include <linux/spinlock.h>
++#include <linux/gpio.h>
++
++#define DRVNAME "vt1211-gpio"
++/* GPIO port count */
++#define VT1211_GPIO_COUNT 7
++
++/* I/O block size, only ports 2-6 are mapped, 1 byte for each port */
++#define VT1211_GPIO_SIZE 5
++
++/* Get configuration data register address from configuration index
++ * register address
++ */
++#define CDR_ADDR(cirAddr) ((cirAddr) + 1)
++
++/********************************************************/
++
++MODULE_AUTHOR("m. lay");
++MODULE_DESCRIPTION("vt1211 gpio driver");
++MODULE_LICENSE("GPL");
++
++static unsigned char cir_addr;
++module_param(cir_addr, byte, 0);
++MODULE_PARM_DESC(cir_addr, " W83627DHG control index register address (0x2E or 0x4E)");
++
++static uint gpio_base = 0xffff;
++module_param(gpio_base, uint, 0440);
++MODULE_PARM_DESC(gpio_base, " GPIO base address");
++
++static unsigned char portmask = 0x30;
++module_param(portmask, byte, 0);
++MODULE_PARM_DESC(portmask, " GPIO port mask (default 0x04: port 3 enabled)");
++
++//static unsigned char outmask[1 + W83627DHG_GPIO_COUNT];
++//module_param_array(outmask, byte, NULL, 0);
++//MODULE_PARM_DESC(outmask, " GPIO output lines bitmasks, one for each port");
++
++/********************************************************/
++
++//spinlock_t gpio_lock;
++static DEFINE_MUTEX(gpio_lock);
++
++/* tell the chip we want to use gpio */
++static void vt1211_enterConfig(unsigned char cirAddress)
++{
++	outb_p(0x87, cirAddress);
++	outb_p(0x87, cirAddress);
++}
++static void vt1211_exitConfig(unsigned char cirAddress)
++{
++	outb(0xAA, cirAddress);
++}
++
++
++static int getRegister(unsigned char reg)
++{
++	outb(reg, cir_addr);
++	//msleep(20);
++	return(inb(CDR_ADDR(cir_addr)));
++}
++
++static int vt1211_test(unsigned char cirAddress)
++{
++	unsigned short dev_id;
++
++	vt1211_enterConfig(cirAddress);
++	outb(0x20, cirAddress);
++	dev_id = inb(CDR_ADDR(cirAddress));
++	vt1211_exitConfig(cirAddress);
++
++	printk(KERN_DEBUG "Read device ID 0x%04X at 0x%02X\n",
++	       dev_id, cirAddress);
++
++	return(dev_id == 0x3C);
++}
++
++//static void vt1211_select_ldn(
++
++static unsigned int vt1211_get_gpiobase(unsigned char cir_addr)
++{
++	unsigned int baseaddr = 0;
++	
++	outb(0x60, cir_addr);
++	baseaddr = inb(CDR_ADDR(cir_addr)) << 8 ;
++	outb(0x61, cir_addr);
++	baseaddr += inb(CDR_ADDR(cir_addr));
++	printk(KERN_INFO "VIA VT1211 GPIO at base 0x%04X\n",baseaddr);
++
++	return(baseaddr);
++}
++
++
++/* see gpio.h */
++static struct gpio_chip vt1211_gpiochip = {
++	.label		= "vt1211",
++	.owner		= THIS_MODULE,
++	//.base           = gpio_base,
++	.ngpio		= VT1211_GPIO_COUNT,
++	.can_sleep	= 0,
++};
++
++static int __devinit vt1211_probe(struct platform_device *pdev){
++	
++	int rc=0, port=5;
++	unsigned char byte = 0;
++
++	/* test control register addresses */
++	if (vt1211_test(0x2E)) {
++		cir_addr = 0x2E;
++	}
++	else if (vt1211_test(0x4E)) {
++		cir_addr = 0x4E;
++	}
++	else {
++		printk(KERN_WARNING "VIA VT1211 chip not found!\n");
++		rc = -ENODEV;
++	}
++
++	if (rc == 0) {
++		printk(KERN_INFO
++		       "Found VIA VT1211 chip, CIR address 0x%02X\n",
++		       cir_addr);
++	}
++	
++	gpio_base = vt1211_get_gpiobase(cir_addr);
++	vt1211_gpiochip.base = gpio_base;
++	
++	/* select logical device 8(gpio) on the chip */
++	outb(0x7, cir_addr);
++	outb(0x8, CDR_ADDR(cir_addr));
++
++	/* enable gpio */
++	outb(0x30, cir_addr);
++	byte = inb(CDR_ADDR(cir_addr)) | 0x1 ;
++	outb(0x30, cir_addr);
++	outb(byte, CDR_ADDR(cir_addr));
++	byte=0;
++
++	/* setup gpio */
++	while (port < 7){
++		outb(0xF0, cir_addr); // gpio portselect
++		byte = inb(CDR_ADDR(cir_addr)) & 0xF8; // select port 5
++		byte |= port;
++		outb(0xF0, cir_addr);
++		outb(byte, CDR_ADDR(cir_addr));
++		if (port == 5){
++			outb(0xF2, cir_addr); // polarity 0=normal
++			outb(0, CDR_ADDR(cir_addr));
++			outb(0xF1, cir_addr); // direction 0=input
++			outb(0, CDR_ADDR(cir_addr));
++		}else{
++			outb(0xF2, cir_addr); // polarity 0=normal
++			outb(0, CDR_ADDR(cir_addr));
++			outb(0xF1, cir_addr); // direction 0=input
++			outb(1, CDR_ADDR(cir_addr));
++			
++		}
++		port++;
++	}
++
++
++	//vt1211_gpiochip.dev = &pdev->dev;
++
++	rc = gpiochip_add(&vt1211_gpiochip);
++	if ( rc < 0 ) dev_err(&pdev->dev, "error registering vt1211 gpiochip %d\n",rc);
++
++ 	
++
++	return(rc);
++
++}
++
++static int __devexit vt1211_remove(struct platform_device * pdev)
++{
++	return(gpiochip_remove(&vt1211_gpiochip));
++
++}
++
++
++static struct platform_driver vt1211_driver = {
++	.driver = {
++		.owner = THIS_MODULE,
++		.name = DRVNAME,
++	},
++	.probe  = vt1211_probe,
++	.remove = __devexit_p(vt1211_remove),
++};
++
++
++static int __init vt1211_init(void)
++{
++	return platform_driver_register(&vt1211_driver);
++}
++
++static void __exit vt1211_exit(void){
++	platform_driver_unregister(&vt1211_driver);
++}
++
++
++module_init(vt1211_init);
++module_exit(vt1211_exit);
++

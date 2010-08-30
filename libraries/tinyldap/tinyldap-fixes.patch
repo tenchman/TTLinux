@@ -1,0 +1,84 @@
+diff -up tinyldap-20080311/addindex.c.fixes tinyldap-20080311/addindex.c
+--- tinyldap-20080311/addindex.c.fixes	2008-03-11 12:28:37.000000000 +0100
++++ tinyldap-20080311/addindex.c	2008-03-11 12:49:45.000000000 +0100
+@@ -1,7 +1,7 @@
+ #include <stdlib.h>
+ #include <unistd.h>
+ #include <sys/mman.h>
+-#include <sys/fcntl.h>
++#include <fcntl.h>
+ #include <string.h>
+ #include <strings.h>
+ #include <errno.h>
+diff -up tinyldap-20080311/mstorage_add.c.fixes tinyldap-20080311/mstorage_add.c
+--- tinyldap-20080311/mstorage_add.c.fixes	2008-03-11 12:28:37.000000000 +0100
++++ tinyldap-20080311/mstorage_add.c	2008-03-11 12:49:45.000000000 +0100
+@@ -2,7 +2,7 @@
+ #include <stdlib.h>
+ #include <unistd.h>
+ #include <sys/mman.h>
+-#include <sys/fcntl.h>
++#include <fcntl.h>
+ #include <sys/shm.h>
+ #include <stdio.h>
+ #include "byte.h"
+@@ -19,7 +19,7 @@ unsigned long mstorage_increment=4*PAGE_
+ /* Sadly, mremap is only available on Linux */
+ /* Please petition your congressman^Woperating system vendor to include it! */
+ 
+-long mstorage_add(mstorage_t* p,const char* s,unsigned long n) {
++long mstorage_add(mstorage_t* p,const char* s,size_t n) {
+   if (p->mapped-p->used<n) {
+     if (!p->root) {
+       /* nothing allocated.  mmap /dev/zero */
+diff -up tinyldap-20080311/tinyldap.c.fixes tinyldap-20080311/tinyldap.c
+--- tinyldap-20080311/tinyldap.c.fixes	2008-03-11 12:28:37.000000000 +0100
++++ tinyldap-20080311/tinyldap.c	2008-03-11 12:49:45.000000000 +0100
+@@ -18,10 +18,8 @@
+ #include "ip6.h"
+ #ifdef __FreeBSD__
+ #include <sys/types.h>
+-#include <sys/wait.h>
+-#else
+-#include <wait.h>
+ #endif
++#include <sys/wait.h>
+ #endif
+ #include "case.h"
+ #include <signal.h>
+diff -up tinyldap-20080311/parse.c.fixes tinyldap-20080311/parse.c
+--- tinyldap-20080311/parse.c.fixes	2008-03-11 12:28:37.000000000 +0100
++++ tinyldap-20080311/parse.c	2008-03-11 12:49:45.000000000 +0100
+@@ -4,7 +4,7 @@
+ #include <alloca.h>
+ #include <inttypes.h>
+ #include <unistd.h>
+-#include <sys/fcntl.h>
++#include <fcntl.h>
+ #include <sys/mman.h>
+ #include <sys/shm.h>
+ #include <stdlib.h>
+diff -up tinyldap-20080311/mstorage_add_bin.c.fixes tinyldap-20080311/mstorage_add_bin.c
+--- tinyldap-20080311/mstorage_add_bin.c.fixes	2008-03-11 12:28:37.000000000 +0100
++++ tinyldap-20080311/mstorage_add_bin.c	2008-03-11 12:49:45.000000000 +0100
+@@ -6,7 +6,7 @@
+  *   char 0;
+  *   uint32 len;
+  *   char data[len] */
+-long mstorage_add_bin(mstorage_t* p,const char* s,unsigned long n) {
++long mstorage_add_bin(mstorage_t* p,const char* s,size_t n) {
+   unsigned int i;
+   static char zero;
+   long x;
+diff -up tinyldap-20080311/ldap_match_sre.c.fixes tinyldap-20080311/ldap_match_sre.c
+--- tinyldap-20080311/ldap_match_sre.c.fixes	2008-03-11 12:52:48.000000000 +0100
++++ tinyldap-20080311/ldap_match_sre.c	2008-03-11 12:53:03.000000000 +0100
+@@ -45,7 +45,7 @@ static int ldap_match_present_sre(struct
+ }
+ 
+ static int substrmatch(struct Substring* x,struct string* s,int ignorecase) {
+-  int (*diff)(const void* a, unsigned long len, const void* b);
++  int (*diff)(const void* a, size_t len, const void* b);
+   if (ignorecase)
+     diff=case_diffb;
+   else

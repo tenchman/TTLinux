@@ -1,0 +1,16 @@
+# vim:set syntax=kconfig:
+config CONFIG_QMAIL
+  bool "QMail - A modern replacement for sendmail"
+  default y
+  select CONFIG_MATRIXSSL
+  help
+	Qmail is a small, fast, secure replacement for the sendmail package,
+	which is the program that actually receives, routes, and delivers
+	electronic mail.  *** Note: Be sure and read the documentation as there
+	are some small but very significant differences between sendmail and
+	qmail and the programs that interact with them.
+	(Decsription shameless ripped from: qmail-1.03-1.i386.rpm)
+
+	http://www.qmail.org
+
+source "apps/mail/greylisting-spp/Config.in"

@@ -1,0 +1,175 @@
+--- procps-3.2.7/ps/common.h.diet	2005-01-27 04:43:22.000000000 +0100
++++ procps-3.2.7/ps/common.h	2006-06-25 11:01:32.000000000 +0200
+@@ -15,6 +15,7 @@
+ #include "../proc/procps.h"
+ #include "../proc/escape.h"
+ #include "../proc/readproc.h"
++#include <sys/shm.h>
+ 
+ #if 0
+ #define trace(args...) printf(## args)
+--- procps-3.2.7/ps/global.c.diet	2005-10-30 01:43:34.000000000 +0200
++++ procps-3.2.7/ps/global.c	2006-06-25 11:01:32.000000000 +0200
+@@ -19,7 +19,7 @@
+ #include <string.h>
+ #include <sys/stat.h>
+ #include <fcntl.h>
+-                     
++#include <termios.h>                     
+ 
+ #include "common.h"
+ 
+--- procps-3.2.7/proc/module.mk.diet	2004-09-23 15:10:42.000000000 +0200
++++ procps-3.2.7/proc/module.mk	2006-06-25 11:01:32.000000000 +0200
+@@ -17,7 +17,7 @@
+ # numbers for future use, the ELF soname can be set equal to the
+ # file name until some future date when a stable ABI is declared.
+ 
+-SHARED     := 1
++SHARED     := 0
+ 
+ # for lib$(NAME).so and /usr/include/($NAME) and such
+ NAME       :=  proc
+--- procps-3.2.7/proc/sysinfo.c.diet	2006-06-25 08:41:48.000000000 +0200
++++ procps-3.2.7/proc/sysinfo.c	2006-06-25 19:11:41.000000000 +0200
+@@ -208,6 +208,7 @@
+ 
+ static void init_libproc(void) __attribute__((constructor));
+ static void init_libproc(void){
++#if 0
+   have_privs = check_for_privs();
+   // ought to count CPUs in /proc/stat instead of relying
+   // on glibc, which foolishly tries to parse /proc/cpuinfo
+@@ -225,6 +226,9 @@
+     fputs("2.4+ kernel w/o ELF notes? -- report this\n", stderr);
+   }
+   old_Hertz_hack();
++#else
++  Hertz = 100;
++#endif
+ }
+ 
+ #if 0
+@@ -326,7 +330,7 @@
+ /***********************************************************************/
+ 
+ static void getrunners(unsigned int *restrict running, unsigned int *restrict blocked) {
+-  struct direct *ent;
++  struct dirent *ent;
+   DIR *proc;
+ 
+   *running=0;
+--- procps-3.2.7/proc/sysinfo.h.diet	2006-06-25 08:41:48.000000000 +0200
++++ procps-3.2.7/proc/sysinfo.h	2006-06-25 11:01:32.000000000 +0200
+@@ -1,7 +1,11 @@
+ #ifndef PROC_SYSINFO_H
+ #define PROC_SYSINFO_H
+ #include <sys/types.h>
++#ifdef __dietlibc__
++#include <dirent.h>
++#else
+ #include <sys/dir.h>
++#endif
+ #include "procps.h"
+ 
+ EXTERN_C_BEGIN
+--- procps-3.2.7/proc/readproc.c.diet	2006-06-16 10:18:13.000000000 +0200
++++ procps-3.2.7/proc/readproc.c	2006-06-25 11:01:32.000000000 +0200
+@@ -23,7 +23,11 @@
+ #include <unistd.h>
+ #include <signal.h>
+ #include <fcntl.h>
++#ifdef __dietlibc__
++#include <dirent.h>
++#else
+ #include <sys/dir.h>
++#endif
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ 
+@@ -698,7 +702,7 @@
+ // This finds processes in /proc in the traditional way.
+ // Return non-zero on success.
+ static int simple_nextpid(PROCTAB *restrict const PT, proc_t *restrict const p) {
+-  static struct direct *ent;		/* dirent handle */
++  static struct dirent *ent;		/* dirent handle */
+   char *restrict const path = PT->path;
+   for (;;) {
+     ent = readdir(PT->procfs);
+@@ -716,7 +720,7 @@
+ // This finds tasks in /proc/*/task/ in the traditional way.
+ // Return non-zero on success.
+ static int simple_nexttid(PROCTAB *restrict const PT, const proc_t *restrict const p, proc_t *restrict const t, char *restrict const path) {
+-  static struct direct *ent;		/* dirent handle */
++  static struct dirent *ent;		/* dirent handle */
+   if(PT->taskdir_user != p->tgid){
+     if(PT->taskdir){
+       closedir(PT->taskdir);
+--- procps-3.2.7/watch.c.diet	2006-06-17 11:18:38.000000000 +0200
++++ procps-3.2.7/watch.c	2006-06-25 11:01:32.000000000 +0200
+@@ -24,6 +24,7 @@
+ #include <unistd.h>
+ #include <termios.h>
+ #include <locale.h>
++#include <termios.h>
+ #include "proc/procps.h"
+ 
+ #ifdef FORCE_8BIT
+--- procps-3.2.7/vmstat.c.diet	2006-06-25 08:41:48.000000000 +0200
++++ procps-3.2.7/vmstat.c	2006-06-25 11:01:32.000000000 +0200
+@@ -23,8 +23,8 @@
+ #include <unistd.h>
+ #include <sys/types.h>
+ #include <sys/ioctl.h>
+-#include <sys/dir.h>
+ #include <dirent.h>
++#include <termios.h>
+ 
+ #include "proc/sysinfo.h"
+ #include "proc/version.h"
+--- procps-3.2.7/top.c.diet	2006-06-25 08:41:48.000000000 +0200
++++ procps-3.2.7/top.c	2006-06-25 11:01:32.000000000 +0200
+@@ -33,6 +33,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <termios.h>
+ 
+ // Foul POS defines all sorts of stuff...
+ #include <term.h>
+@@ -41,7 +42,7 @@
+ #include <termios.h>
+ #include <time.h>
+ #include <unistd.h>
+-#include <values.h>
++#include <float.h>
+ 
+ #include "proc/devname.h"
+ #include "proc/wchan.h"
+@@ -1804,7 +1805,7 @@
+       .  we tolerate NO whitespace and NO switches -- maybe too tolerant? */
+    static const char usage[] =
+       " -hv | -bcisSH -d delay -n iterations [-u user | -U user] -p pid [,pid ...]";
+-   float tmp_delay = MAXFLOAT;
++   float tmp_delay = FLT_MAX;
+    char *p;
+ 
+    while (*args) {
+@@ -1909,7 +1910,7 @@
+    } /* end: while (*args) */
+ 
+       /* fixup delay time, maybe... */
+-   if (MAXFLOAT != tmp_delay) {
++   if (FLT_MAX != tmp_delay) {
+       if (Secure_mode || tmp_delay < 0)
+          msg_save("Delay time Not changed");
+       else
+@@ -2384,7 +2385,7 @@
+       Screen_rows = wz.ws_row;
+    }
+ 
+-   if (Batch) Screen_rows = MAXINT;
++   if (Batch) Screen_rows = INT_MAX;
+ 
+    env_columns = getenv("COLUMNS");
+    if(env_columns && *env_columns){

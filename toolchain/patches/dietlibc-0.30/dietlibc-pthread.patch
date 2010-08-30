@@ -1,0 +1,112 @@
+--- dietlibc-0.30/libpthread/pthread_mutexattr_setkind_np.c.pthread	2003-08-18 19:32:53.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_mutexattr_setkind_np.c	2008-05-14 21:42:14.000000000 +0200
+@@ -12,3 +12,5 @@ int pthread_mutexattr_setkind_np(pthread
+   }
+   return EINVAL;
+ }
++int pthread_mutexattr_settype(pthread_mutexattr_t*attr,int kind)
++__attribute__((alias("pthread_mutexattr_setkind_np")));
+--- dietlibc-0.30/libpthread/pthread_internal.c.pthread	2004-06-07 19:05:03.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_internal.c	2008-05-16 00:25:49.000000000 +0200
+@@ -204,10 +225,11 @@ static int __thread_cleanup(_pthread_des
+ }
+ 
+ /* suspend till timeout or restart signal / in NO_ASYNC_CANCEL */
+-void __thread_suspend_till(_pthread_descr this,int cancel,const struct timespec*abstime) {
++int __thread_suspend_till(_pthread_descr this,int cancel,const struct timespec*abstime) {
+   sigset_t newmask,oldmask;
+   struct timeval tv;
+   struct timespec reg;
++  int retval = 0;
+ 
+   gettimeofday(&tv,0);
+   reg.tv_nsec=abstime->tv_nsec-tv.tv_usec*1000;
+@@ -225,9 +247,13 @@ void __thread_suspend_till(_pthread_desc
+ 
+   while(this->p_sig!=PTHREAD_SIG_RESTART) {
+     if (cancel && (this->cancelstate==PTHREAD_CANCEL_ENABLE) && this->canceled) break;
+-    if (reg.tv_sec<0||__libc_nanosleep(&reg,&reg)==0) break;
++    if (reg.tv_sec<0||__libc_nanosleep(&reg,&reg)==0) {
++      retval = ETIMEDOUT;
++      break;
++    }
+   }
+   sigprocmask(SIG_SETMASK,&oldmask,0);
++  return retval;
+ }
+ 
+ /* suspend till restart signal */
+--- dietlibc-0.30/libpthread/pthread_cond_timedwait.c.pthread	2003-08-18 19:32:52.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_cond_timedwait.c	2008-05-14 21:42:14.000000000 +0200
+@@ -8,6 +8,7 @@ int pthread_cond_timedwait(pthread_cond_
+ 		      const struct timespec*abstime) {
+   _pthread_descr this=__thread_self();
+   _pthread_descr*tmp;
++  int retval;
+ 
+   if (mutex->owner!=this) return EINVAL;
+ 
+@@ -25,7 +26,7 @@ int pthread_cond_timedwait(pthread_cond_
+   /* Aeh yeah / wait till condition-signal or timout (or cancel) */
+   pthread_mutex_unlock(mutex);
+ 
+-  __thread_suspend_till(this,1,abstime);
++  retval = __thread_suspend_till(this,1,abstime);
+ 
+   pthread_mutex_lock(mutex);
+ 
+@@ -40,7 +41,7 @@ int pthread_cond_timedwait(pthread_cond_
+ 
+   __NO_ASYNC_CANCEL_END_(this);
+ 
+-  return 0;
++  return retval;
+ }
+ 
+ 
+--- dietlibc-0.30/libpthread/pthread_mutexattr_getkind_np.c.pthread	2003-08-18 19:32:53.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_mutexattr_getkind_np.c	2008-05-14 21:42:14.000000000 +0200
+@@ -8,3 +8,5 @@ int pthread_mutexattr_getkind_np(const p
+   *kind=attr->__mutexkind;
+   return 0;
+ }
++int pthread_mutexattr_gettype(const pthread_mutexattr_t*attr,int*kind)
++__attribute__((alias("pthread_mutexattr_getkind_np")));
+--- dietlibc-0.30/libpthread/thread_internal.h.pthread	2005-09-21 09:33:08.000000000 +0200
++++ dietlibc-0.30/libpthread/thread_internal.h	2008-05-14 21:42:15.000000000 +0200
+@@ -126,7 +134,7 @@ int __thread_join_cleanup(struct _pthrea
+ 
+ void __thread_restart(struct _pthread_descr_struct*td);
+ void __thread_suspend(struct _pthread_descr_struct*td,int cancel);
+-void __thread_suspend_till(struct _pthread_descr_struct*td,int cancel,const struct timespec*abstime);
++int __thread_suspend_till(struct _pthread_descr_struct*td,int cancel,const struct timespec*abstime);
+ 
+ void __thread_testcancel(struct _pthread_descr_struct*td);
+ int __thread_setcanceltype(int type,int*oldtype,struct _pthread_descr_struct*td);
+--- dietlibc-0.30/include/pthread.h.pthread	2005-03-15 09:51:22.000000000 +0100
++++ dietlibc-0.30/include/pthread.h	2008-05-14 21:42:14.000000000 +0200
+@@ -58,6 +58,14 @@ enum {
+ #define PTHREAD_MUTEX_RECURSIVE_NP PTHREAD_MUTEX_RECURSIVE_NP
+   PTHREAD_MUTEX_ERRORCHECK_NP,
+ #define PTHREAD_MUTEX_ERRORCHECK_NP PTHREAD_MUTEX_ERRORCHECK_NP
++  PTHREAD_MUTEX_NORMAL = PTHREAD_MUTEX_FAST_NP,
++#define PTHREAD_MUTEX_NORMAL PTHREAD_MUTEX_NORMAL
++  PTHREAD_MUTEX_RECURSIVE = PTHREAD_MUTEX_RECURSIVE_NP,
++#define PTHREAD_MUTEX_RECURSIVE PTHREAD_MUTEX_RECURSIVE
++  PTHREAD_MUTEX_ERRORCHECK = PTHREAD_MUTEX_ERRORCHECK_NP,
++#define PTHREAD_MUTEX_ERRORCHECK PTHREAD_MUTEX_ERRORCHECK
++  PTHREAD_MUTEX_DEFAULT = PTHREAD_MUTEX_NORMAL
++#define PTHREAD_MUTEX_DEFAULT PTHREAD_MUTEX_DEFAULT
+ };
+ 
+ enum {
+@@ -86,6 +94,9 @@ int pthread_mutexattr_destroy(pthread_mu
+ int pthread_mutexattr_getkind_np(const pthread_mutexattr_t*attr,int*kind);
+ int pthread_mutexattr_setkind_np(pthread_mutexattr_t*attr,int kind);
+ 
++int pthread_mutexattr_gettype(const pthread_mutexattr_t*attr,int*kind);
++int pthread_mutexattr_settype(pthread_mutexattr_t*attr,int kind);
++
+ int pthread_mutex_init(pthread_mutex_t*mutex,
+ 		const pthread_mutexattr_t*mutexattr);
+ int pthread_mutex_lock(pthread_mutex_t*mutex);

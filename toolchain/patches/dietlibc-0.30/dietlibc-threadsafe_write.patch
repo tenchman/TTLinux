@@ -1,0 +1,51 @@
+--- dietlibc-0.30/libstdio/fflush.c.iosubsys	2008-05-16 21:28:02.000000000 +0200
++++ dietlibc-0.30/libstdio/fflush.c	2008-05-16 21:42:51.000000000 +0200
+@@ -33,7 +33,7 @@ int fflush_unlocked(FILE *stream) {
+     }
+     stream->bs=stream->bm=0;
+   } else {
+-    if (stream->bm && write(stream->fd,stream->buf,stream->bm)!=(ssize_t)stream->bm) {
++    if (stream->bm && __libc_write(stream->fd,stream->buf,stream->bm)!=(ssize_t)stream->bm) {
+       stream->flags|=ERRORINDICATOR;
+       return -1;
+     }
+--- dietlibc-0.30/libstdio/vprintf.c.iosubsys	2005-09-21 09:33:08.000000000 +0200
++++ dietlibc-0.30/libstdio/vprintf.c	2008-05-16 21:26:55.000000000 +0200
+@@ -4,12 +4,13 @@
+ 
+ int __stdio_outs(const char *s,size_t len) __attribute__((weak));
+ int __stdio_outs(const char *s,size_t len) {
+-  return (write(1,s,len)==(ssize_t)len)?1:0;
++  return (__libc_write(1,s,len)==(ssize_t)len)?1:0;
+ }
+ 
+-int vprintf(const char *format, va_list ap)
++int __vprintf(const char *format, va_list ap)
+ {
+   struct arg_printf _ap = { 0, (int(*)(void*,size_t,void*)) __stdio_outs };
+   return __v_printf(&_ap,format,ap);
+ }
+ 
++int vprintf(const char *format, va_list arg_ptr) __attribute__((weak,alias("__vprintf")));
+--- dietlibc-0.30/libstdio/vfdprintf.c.iosubsys	2008-05-16 21:25:52.000000000 +0200
++++ dietlibc-0.30/libstdio/vfdprintf.c	2008-05-16 21:26:07.000000000 +0200
+@@ -5,7 +5,7 @@
+ #include "dietstdio.h"
+ 
+ static int __fwrite(void*ptr, size_t nmemb, int fd) {
+-  return write(fd,ptr,nmemb);
++  return __libc_write(fd,ptr,nmemb);
+ }
+ 
+ int vfdprintf(int fd, const char *format, va_list arg_ptr)
+--- dietlibc-0.30/libstdio/puts.c.iosubsys	2008-05-16 21:44:38.000000000 +0200
++++ dietlibc-0.30/libstdio/puts.c	2008-05-16 21:45:36.000000000 +0200
+@@ -5,7 +5,7 @@
+ 
+ int __stdio_outs(const char *s,size_t len) __attribute__((weak));
+ int __stdio_outs(const char *s,size_t len) {
+-  return (write(1,s,len)==(ssize_t)len)?1:0;
++  return (__libc_write(1,s,len)==(ssize_t)len)?1:0;
+ }
+ 
+ int puts(const char *s) {

@@ -1,0 +1,19 @@
+--- maildrop-2.0.1/rfc2045/reformime.c.charset	2005-12-14 16:34:07.000000000 +0100
++++ maildrop-2.0.1/rfc2045/reformime.c	2005-12-14 16:38:13.000000000 +0100
+@@ -597,6 +597,16 @@
+ 		}
+ 		strcat(strcpy(f, "CONTENT_TYPE="), content_type_s);
+ 		putenv(f);
++		f=malloc(strlen(charset_s)
++			+sizeof("CHARSET="));
++		if (!f)
++		{
++			perror("malloc");
++			exit(1);
++		}
++		strcat(strcpy(f, "CHARSET="), charset_s);
++		putenv(f);
++		
+ 		close(0);
+ 		dup(pipefd[0]);
+ 		close(pipefd[0]);

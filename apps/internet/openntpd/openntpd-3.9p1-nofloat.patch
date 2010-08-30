@@ -1,0 +1,54 @@
+--- openntpd-3.9p1/ntpd.c.nofloat	2006-05-14 07:29:23.000000000 +0200
++++ openntpd-3.9p1/ntpd.c	2008-07-17 21:57:53.000000000 +0200
+@@ -16,6 +16,7 @@
+  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  */
+ 
++#define _GNU_SOURCE
+ #include "includes.h"
+ 
+ RCSID("$Release: OpenNTPD "OPENNTPD_VERSION" $");
+@@ -334,9 +335,9 @@ ntpd_adjtime(double d)
+ 
+ 	if (d >= (double)LOG_NEGLIGEE / 1000 ||
+ 	    d <= -1 * (double)LOG_NEGLIGEE / 1000)
+-		log_info("adjusting local clock by %fs", d);
++		log_info("adjusting local clock by %ds", (int)d);
+ 	else
+-		log_debug("adjusting local clock by %fs", d);
++		log_debug("adjusting local clock by %ds", (int)d);
+ 	d_to_tv(d, &tv);
+ 	if (adjtime(&tv, &olddelta) == -1)
+ 		log_warn("adjtime failed");
+@@ -373,5 +374,5 @@ ntpd_settime(double d)
+ 	tval = curtime.tv_sec;
+ 	strftime(buf, sizeof(buf), "%a %b %e %H:%M:%S %Z %Y",
+ 	    localtime(&tval));
+-	log_info("set local clock to %s (offset %fs)", buf, d);
++	log_info("set local clock to %s (offset %ds)", buf, (int)d);
+ }
+--- openntpd-3.9p1/client.c.nofloat	2008-07-17 21:53:26.000000000 +0200
++++ openntpd-3.9p1/client.c	2008-07-17 21:55:15.000000000 +0200
+@@ -237,9 +237,9 @@ client_dispatch(struct ntp_peer *p, u_in
+ 	if (p->reply[p->shift].delay < 0) {
+ 		interval = error_interval();
+ 		set_next(p, interval);
+-		log_info("reply from %s: negative delay %f",
++		log_info("reply from %s: negative delay %d",
+ 		    log_sockaddr((struct sockaddr *)&p->addr->ss),
+-		    p->reply[p->shift].delay);
++		    (int)p->reply[p->shift].delay);
+ 		return (0);
+ 	}
+ 	p->reply[p->shift].error = (T2 - T1) - (T3 - T4);
+@@ -275,10 +275,6 @@ client_dispatch(struct ntp_peer *p, u_in
+ 		p->trustlevel++;
+ 	}
+ 
+-	log_debug("reply from %s: offset %f delay %f, "
+-	    "next query %ds", log_sockaddr((struct sockaddr *)&p->addr->ss),
+-	    p->reply[p->shift].offset, p->reply[p->shift].delay, interval);
+-
+ 	client_update(p);
+ 	if (settime)
+ 		priv_settime(p->reply[p->shift].offset);

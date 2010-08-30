@@ -1,0 +1,43 @@
+#!/bin/bash
+
+LIBPRETENDROOT="${LIBPRETENDROOT:-/usr/lib/libpretendroot.so}"
+
+if [ ! -f "$LIBPRETENDROOT" -a -e libpretendroot.so ] ; then
+	LIBPRETENDROOT="libpretendroot.so"
+fi
+
+if [ ! -f "$LIBPRETENDROOT" ]; then
+	echo "$LIBPRETENDROOT is missing!" >&2
+	exit 1
+fi
+
+if [ ! -n "$PRETENDROOTDIR" ]; then
+	echo 'You must set $PRETENDROOTDIR first!' >&2
+	exit 1
+fi
+
+# Canonicalize the environment variables
+LIBPRETENDROOT="$(readlink -f "$LIBPRETENDROOT")"
+PRETENDROOTDIR="$(readlink -f "$PRETENDROOTDIR")"
+
+if [ ! -n "$LD_PRELOAD" ]; then
+	LD_PRELOAD="$LIBPRETENDROOT"
+else
+	# This is The Right Way (tm)
+	# Appending the new library to the old LD_PRELOAD would suck.
+	LD_PRELOAD="$LIBPRETENDROOT $LD_PRELOAD"
+fi
+export LD_PRELOAD PRETENDROOTDIR
+
+[ -n     "$USER" ] &&     USER=root
+[ -n "$USERNAME" ] && USERNAME=root
+[ -n  "$LOGNAME" ] &&  LOGNAME=root
+
+if [ $# = 0 ]; then
+	prog="$SHELL"
+else
+	prog="$1"
+	shift
+fi
+exec "$prog" "$@"
+

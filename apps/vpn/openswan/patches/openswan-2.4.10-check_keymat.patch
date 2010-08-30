@@ -1,0 +1,106 @@
+diff -up openswan2-2.4.10/programs/pluto/ikev1_quick.c.check_keymat openswan2-2.4.10/programs/pluto/ikev1_quick.c
+--- openswan2-2.4.10/programs/pluto/ikev1_quick.c.check_keymat	2007-11-02 02:28:36.000000000 +0100
++++ openswan2-2.4.10/programs/pluto/ikev1_quick.c	2007-12-12 11:26:25.000000000 +0100
+@@ -188,6 +188,81 @@ emit_subnet_id(ip_subnet *net
+     return TRUE;
+ }
+ 
++static int
++check_keymat(struct state *st, u_int8_t protoid, struct ipsec_proto_info *pi)
++{
++    switch (protoid)
++    {
++    case PROTO_IPSEC_ESP:
++	    switch (pi->attrs.transid)
++	    {
++	    case ESP_NULL:
++	    case ESP_DES:
++	    case ESP_3DES:
++	    case ESP_AES:
++		break;
++
++	    default:
++#ifdef KERNEL_ALG
++		if((kernel_alg_esp_enc_keylen(pi->attrs.transid))>0)
++			break;
++#endif
++		loglog(RC_LOG_SERIOUS, "unsupported ESP encryption type: %d",
++		    pi->attrs.transid);
++		return -1;
++	    }
++
++	    switch (pi->attrs.auth)
++	    {
++	    case AUTH_ALGORITHM_NONE:
++	    case AUTH_ALGORITHM_HMAC_MD5:
++	    case AUTH_ALGORITHM_HMAC_SHA1:
++		break;
++	    default:
++#ifdef KERNEL_ALG
++	      if (kernel_alg_esp_auth_ok(pi->attrs.auth, NULL) == NULL)
++		break;
++#endif
++	    case AUTH_ALGORITHM_DES_MAC:
++		loglog(RC_LOG_SERIOUS, "unsupported ESP auth algorithm type: %d",
++		    pi->attrs.auth);
++		return -1;
++	      
++	    }
++	    break;
++
++    case PROTO_IPSEC_AH:
++	    switch (pi->attrs.transid)
++	    {
++	    case AH_MD5:
++	    case AH_SHA:
++		break;
++	    default:
++		loglog(RC_LOG_SERIOUS, "unsupported AH auth encryption type: %d",
++		    pi->attrs.auth);
++		return -1;
++	    }
++	    break;
++
++    default:
++	loglog(RC_LOG_SERIOUS, "unsupported protocol type: %d",
++	    pi->attrs.auth);
++	return -1;
++    }
++}
++
++static int
++check_keymats(struct state *st)
++{
++    int ret = 0;
++    if (st->st_ah.present)
++	ret = check_keymat(st, PROTO_IPSEC_AH, &st->st_ah);
++    if (!ret && st->st_esp.present)
++	check_keymat(st, PROTO_IPSEC_ESP, &st->st_esp);
++    return ret;
++}
++
++
+ /*
+  * Produce the new key material of Quick Mode.
+  * RFC 2409 "IKE" section 5.5
+@@ -257,7 +332,7 @@ compute_proto_keymat(struct state *st
+ 		break;
+ 	    default:
+ #ifdef KERNEL_ALG
+-	      if (kernel_alg_esp_auth_ok(pi->attrs.auth, NULL)) {
++	      if (kernel_alg_esp_auth_ok(pi->attrs.auth, NULL) == NULL) {
+ 		needed_len += kernel_alg_esp_auth_keylen(pi->attrs.auth);
+ 		break;
+ 	      } 
+@@ -1905,7 +1980,10 @@ quick_inI1_outR1_cryptotail(struct qke_c
+     }
+     
+     openswan_log("responding to Quick Mode {msgid:%08x}", st->st_msgid);
+-
++    
++    if (check_keymats(st))
++	return STF_FAIL + NO_PROPOSAL_CHOSEN;	/* ??? */
++    
+     /**** finish reply packet: Nr [, KE ] [, IDci, IDcr ] ****/
+     
+     {

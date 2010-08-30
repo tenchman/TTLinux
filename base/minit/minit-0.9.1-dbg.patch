@@ -1,0 +1,42 @@
+--- minit-0.9.1/minit.c.dbg	2004-09-08 09:00:55.613686376 +0200
++++ minit-0.9.1/minit.c	2004-09-08 09:18:11.301237936 +0200
+@@ -125,7 +125,6 @@
+   return (root[service].pid!=0);
+ }
+ 
+-#undef debug
+ void handlekilled(pid_t killed) {
+   int i;
+ #ifdef debug
+@@ -243,7 +242,13 @@
+     if (fd>=0) {
+       pid_t p2;
+       close(fd);
++#ifdef debug
++      write(2,"waiting for sync ...",21);
++#endif
+       p2=waitpid(p,0,0);
++#ifdef debug
++      write(2," OK\n",4);
++#endif
+       return 1;
+     }
+     return p;
+@@ -271,7 +276,7 @@
+   char *s=0;
+   pid_t pid;
+   if (service<0) return 0;
+-#if 0
++#ifdef debug
+   write(1,"startservice ",13);
+   write(1,root[service].name,str_len(root[service].name));
+   write(1,"\n",1);
+@@ -298,7 +303,7 @@
+     }
+     pid=startnodep(service,pause);
+ 
+-#if 0
++#ifdef debug
+     write(1,"started service ",17);
+     write(1,root[service].name,str_len(root[service].name));
+     write(1," -> ",4);

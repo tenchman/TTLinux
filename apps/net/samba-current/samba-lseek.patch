@@ -1,0 +1,51 @@
+--- source/libsmb/libsmb_compat.c.diet	2007-07-30 21:55:30.000000000 +0200
++++ source/libsmb/libsmb_compat.c	2007-07-30 21:55:42.000000000 +0200
+@@ -23,6 +23,7 @@
+ */
+ 
+ 
++#define _UNISTD_H
+ #include "includes.h"
+ 
+ #include "include/libsmb_internal.h"
+--- source/modules/vfs_default.c.diet	2007-07-30 17:44:45.000000000 +0200
++++ source/modules/vfs_default.c	2007-07-30 17:45:03.000000000 +0200
+@@ -19,6 +19,7 @@
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ */
+ 
++#define _UNISTD_H
+ #include "includes.h"
+ 
+ #undef DBGC_CLASS
+--- source/modules/vfs_full_audit.c.diet	2007-07-30 21:56:58.000000000 +0200
++++ source/modules/vfs_full_audit.c	2007-07-30 21:57:14.000000000 +0200
+@@ -58,6 +58,7 @@
+  */
+ 
+ 
++#define _UNISTD_H
+ #include "includes.h"
+ 
+ extern userdom_struct current_user_info;
+--- source/printing/nt_printing.c.diet	2007-05-11 00:09:34.000000000 +0200
++++ source/printing/nt_printing.c	2007-07-30 21:51:34.000000000 +0200
+@@ -20,6 +20,7 @@
+  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+  */
+ 
++#define _UNISTD_H
+ #include "includes.h"
+ 
+ extern struct current_user current_user;
+--- source/smbd/reply.c.diet	2007-07-30 17:43:16.000000000 +0200
++++ source/smbd/reply.c	2007-07-30 17:43:36.000000000 +0200
+@@ -23,7 +23,7 @@
+    This file handles most of the reply_ calls that the server
+    makes to handle specific protocols
+ */
+-
++#define _UNISTD_H
+ #include "includes.h"
+ 
+ /* look in server.c for some explanation of these variables */

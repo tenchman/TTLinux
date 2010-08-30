@@ -1,0 +1,59 @@
+--- openvpn-2.0.6/ssl.h.openssl	2005-12-13 18:10:00.000000000 +0100
++++ openvpn-2.0.6/ssl.h	2006-04-05 13:11:17.000000000 +0200
+@@ -27,11 +27,14 @@
+ 
+ #if defined(USE_CRYPTO) && defined(USE_SSL)
+ 
++#include <openssl/opensslconf.h>
+ #include <openssl/ssl.h>
+ #include <openssl/bio.h>
+ #include <openssl/rand.h>
+ #include <openssl/err.h>
++#ifndef OPENSSL_NO_PKCS12
+ #include <openssl/pkcs12.h>
++#endif
+ #include <openssl/x509v3.h>
+ 
+ #include "basic.h"
+--- openvpn-2.0.6/syshead.h.openssl	2005-12-08 21:57:49.000000000 +0100
++++ openvpn-2.0.6/syshead.h	2006-04-05 13:13:02.000000000 +0200
+@@ -25,6 +25,10 @@
+ #ifndef SYSHEAD_H
+ #define SYSHEAD_H
+ 
++#if defined(USE_SSL) || defined(USE_CRYPTO)
++#include <openssl/opensslconf.h>
++#endif
++
+ #ifdef HAVE_SYS_TYPES_H
+ #include <sys/types.h>
+ #endif
+@@ -416,7 +420,7 @@
+ /*
+  * Should we include NTLM proxy functionality
+  */
+-#if defined(USE_CRYPTO) && defined(ENABLE_HTTP_PROXY)
++#if defined(USE_CRYPTO) && defined(ENABLE_HTTP_PROXY) && !defined(OPENSSL_NO_MD4) 
+ #define NTLM 1
+ #else
+ #define NTLM 0
+--- openvpn-2.0.6/ssl.c.openssl	2005-12-13 18:10:01.000000000 +0100
++++ openvpn-2.0.6/ssl.c	2006-04-05 13:11:17.000000000 +0200
+@@ -786,6 +786,7 @@
+ 
+   if (options->pkcs12_file)
+     {
++#ifndef OPENSSL_NO_PKCS12
+     /* Use PKCS #12 file for key, cert and CA certs */
+ 
+       FILE *fp;
+@@ -842,6 +843,9 @@
+                 msg (M_SSLERR, "Cannot add certificate to client CA list (SSL_CTX_add_client_CA)");
+             }
+         }
++#else
++      msg (M_SSLERR, "No PKCS#12 support in this version");
++#endif
+     }
+   else
+     {

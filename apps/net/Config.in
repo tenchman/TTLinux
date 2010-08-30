@@ -1,0 +1,10 @@
+# vim:set syntax=kconfig:
+menu "Networking"
+  source "apps/net/keepalived/Config.in"
+  source "apps/net/net-snmp/Config.in"
+  source "apps/net/samba/Config.in"
+  source "apps/net/wakelan/Config.in"
+  source "apps/net/dropbear/Config.in"
+  source "apps/net/traceroute/Config.in"
+  source "apps/net/ifplugd/Config.in"
+endmenu

@@ -1,0 +1,11 @@
+config CONFIG_RIPMIME
+  bool "ripMIME - Extracts attachments out of mailpack format emails"
+  default y
+  help
+	ripMIME is a small program which has been developed as part of the
+	commercial Xamime development (http://www.xamime.com).
+
+	ripMIME has been written with one sole purpose in mind, to extract
+	the attached files out of a MIME encoded email package.
+
+	http://www.pldaniels.com/ripmime/

@@ -1,0 +1,33 @@
+diff -up ocfs2-tools-1.2.7/configure.in.configure ocfs2-tools-1.2.7/configure.in
+--- ocfs2-tools-1.2.7/configure.in.configure	2007-09-29 02:09:07.000000000 +0200
++++ ocfs2-tools-1.2.7/configure.in	2008-03-07 13:37:06.000000000 +0100
+@@ -107,6 +107,9 @@ LDFLAGS="$LDFLAGS -lncurses"
+ READLINE_LIBS=
+ AC_CHECK_LIB(readline, readline, READLINE_LIBS=-lreadline)
+ if test "x$READLINE_LIBS" = "x"; then
++  AC_CHECK_LIB(edit, readline, READLINE_LIBS=-ledit)
++fi
++if test "x$READLINE_LIBS" = "x"; then
+   AC_MSG_ERROR([Unable to find readline library])
+ fi
+ AC_CHECK_HEADER(readline/readline.h, :,
+@@ -173,14 +176,11 @@ AC_SUBST(OCFS2_DYNAMIC_CTL)
+ 
+ BUILD_DEBUGOCFS2=
+ 
+-ocfs_tools_save_LIBS=$LIBS
+-LIBS="$LIBS -lncurses"
+-AC_CHECK_LIB(readline, readline,
+-  [AC_CHECK_HEADER(readline/readline.h,
+-    BUILD_DEBUGOCFS2=yes,
+-    [AC_MSG_WARN([readline not found, debugfs.ocfs2 will not be built])])],
+-  [AC_MSG_WARN([readline not found, debugfs.ocfs2 will not be built])])
+-LIBS=$ocfs_tools_save_LIBS
++if test "x$READLINE_LIBS" = "x"; then
++  AC_MSG_WARN([readline not found, debugfs.ocfs2 will not be built])
++else
++  BUILD_DEBUGOCFS2=yes
++fi
+ 
+ AC_SUBST(BUILD_DEBUGOCFS2)
+ 

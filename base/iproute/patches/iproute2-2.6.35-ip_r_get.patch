@@ -1,0 +1,12 @@
+diff -up iproute2-2.6.35/ip/iproute.c.ip_r_get iproute2-2.6.35/ip/iproute.c
+--- iproute2-2.6.35/ip/iproute.c.ip_r_get	2010-08-09 10:23:53.712805758 +0200
++++ iproute2-2.6.35/ip/iproute.c	2010-08-09 10:24:56.428805777 +0200
+@@ -160,7 +160,7 @@ int print_route(const struct sockaddr_nl
+ 	if (r->rtm_family == AF_INET6 && table != RT_TABLE_MAIN)
+ 		ip6_multiple_tables = 1;
+ 
+-	if (filter.cloned == !(r->rtm_flags&RTM_F_CLONED))
++	if (filter.cloned && !(r->rtm_flags&RTM_F_CLONED))
+ 		return 0;
+ 
+ 	if (r->rtm_family == AF_INET6 && !ip6_multiple_tables) {

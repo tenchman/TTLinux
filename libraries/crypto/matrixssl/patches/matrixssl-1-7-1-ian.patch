@@ -1,0 +1,129 @@
+--- matrixssl-1-7-1c-open/matrixCommon.h.ian	2005-10-26 01:13:39.000000000 +0200
++++ matrixssl-1-7-1c-open/matrixCommon.h	2005-10-26 01:11:36.000000000 +0200
+@@ -171,6 +171,7 @@
+ 	char					*sigHash;
+ 	int32					sigHashLen;
+ 	sslSubjectAltName_t		subjectAltName;
++	sslSubjectAltName_t		issuerAltName;
+ 	sslDistinguishedName_t	subject;
+ 	sslDistinguishedName_t	issuer;
+ 	struct sslCertInfo		*next;
+--- matrixssl-1-7-1c-open/src/pki/pkiInternal.h.ian	2005-10-26 01:08:45.000000000 +0200
++++ matrixssl-1-7-1c-open/src/pki/pkiInternal.h	2005-10-26 01:09:04.000000000 +0200
+@@ -160,6 +160,7 @@
+ typedef struct {
+ 	extBasicConstraints_t	bc;
+ 	extSubjectAltName_t		san;
++	extSubjectAltName_t		ian;
+ #ifdef USE_FULL_CERT_PARSE
+ 	extSubjectKeyId_t		sk;
+ 	extAuthKeyId_t			ak;
+--- matrixssl-1-7-1c-open/src/pki/x509.c.ian	2005-09-21 03:06:22.000000000 +0200
++++ matrixssl-1-7-1c-open/src/pki/x509.c	2005-10-26 01:13:09.000000000 +0200
+@@ -53,6 +53,7 @@
+ #define EXT_SUBJ_KEY_ID			3
+ #define EXT_AUTH_KEY_ID			4
+ #define EXT_ALT_SUBJECT_NAME	5
++#define EXT_ALT_ISSUER_NAME	6
+ 
+ static const struct {
+ 		unsigned char	hash[16];
+@@ -68,6 +69,8 @@
+ 		0x57, 0xb5, 0xaf, 0x7f, 0xaa, 0x31, 0xbb }, EXT_AUTH_KEY_ID },
+ 	{ { 0x5c, 0x70, 0xcb, 0xf5, 0xa4, 0x07, 0x5a, 0xcc, 0xd1,
+ 		0x55, 0xd2, 0x44, 0xdd, 0x62, 0x2c, 0x0c }, EXT_ALT_SUBJECT_NAME },
++	{ { 0xd0, 0x9e, 0xae, 0x0e, 0xdf, 0x6d, 0xc5, 0xe1, 0xca,
++		0xef, 0x96, 0xdb, 0xe0, 0x7f, 0x16, 0xf1 }, EXT_ALT_ISSUER_NAME },
+ 	{ { 0 }, -1 } /* Must be last for proper termination */
+ };
+ 
+@@ -817,6 +820,9 @@
+ 		if (curr->extensions.san.dns)	psFree(curr->extensions.san.dns);
+ 		if (curr->extensions.san.uri)	psFree(curr->extensions.san.uri);
+ 		if (curr->extensions.san.email)	psFree(curr->extensions.san.email);
++		if (curr->extensions.ian.dns)	psFree(curr->extensions.ian.dns);
++		if (curr->extensions.ian.uri)	psFree(curr->extensions.ian.uri);
++		if (curr->extensions.ian.email)	psFree(curr->extensions.ian.email);
+ #ifdef USE_FULL_CERT_PARSE
+ 		if (curr->extensions.sk.id)		psFree(curr->extensions.sk.id);
+ 		if (curr->extensions.ak.keyId)	psFree(curr->extensions.ak.keyId);
+@@ -935,6 +941,7 @@
+ 	int32				len, noid, tmpLen, critical;
+ 	char				oid[SSL_MD5_HASH_SIZE];
+ 	sslMd5Context_t		md5ctx;
++	extSubjectAltName_t	*an;
+ 
+ 	end = p + inlen;
+ 	if (inlen < 1) {
+@@ -1061,7 +1068,12 @@
+ 					extensions->bc.pathLenConstraint = -1;
+ 				}
+ 				break;
++			case EXT_ALT_ISSUER_NAME:
++				an = &extensions->ian;
++				goto dodecode;
+ 			case EXT_ALT_SUBJECT_NAME:
++				an = &extensions->san;
++dodecode:
+ 				if (getSequence(&p, (int32)(extEnd - p), &len) < 0) {
+ 					return -1;
+ 				}
+@@ -1088,36 +1100,36 @@
+ 						if (extEnd - p < tmpLen) {
+ 							return -1;
+ 						}
+-						extensions->san.dns = psMalloc(pool, tmpLen + 1);
+-						if (extensions->san.dns == NULL) {
++						an->dns = psMalloc(pool, tmpLen + 1);
++						if (an->dns == NULL) {
+ 							return -8; /* SSL_MEM_ERROR */
+ 						}
+-						memset(extensions->san.dns, 0x0, tmpLen + 1);
+-						memcpy(extensions->san.dns, p, tmpLen);
++						memset(an->dns, 0x0, tmpLen + 1);
++						memcpy(an->dns, p, tmpLen);
+ 					} else if (*p == (ASN_CONTEXT_SPECIFIC | ASN_PRIMITIVE | 6)) {
+ 						p++;
+ 						tmpLen = *p++;
+ 						if (extEnd - p < tmpLen) {
+ 							return -1;
+ 						}
+-						extensions->san.uri = psMalloc(pool, tmpLen + 1);
+-						if (extensions->san.uri == NULL) {
++						an->uri = psMalloc(pool, tmpLen + 1);
++						if (an->uri == NULL) {
+ 							return -8; /* SSL_MEM_ERROR */
+ 						}
+-						memset(extensions->san.uri, 0x0, tmpLen + 1);
+-						memcpy(extensions->san.uri, p, tmpLen);
++						memset(an->uri, 0x0, tmpLen + 1);
++						memcpy(an->uri, p, tmpLen);
+ 					} else if (*p == (ASN_CONTEXT_SPECIFIC | ASN_PRIMITIVE | 1)) {
+ 						p++;
+ 						tmpLen = *p++;
+ 						if (extEnd - p < tmpLen) {
+ 							return -1;
+ 						}
+-						extensions->san.email = psMalloc(pool, tmpLen + 1);
+-						if (extensions->san.email == NULL) {
++						an->email = psMalloc(pool, tmpLen + 1);
++						if (an->email == NULL) {
+ 							return -8; /* SSL_MEM_ERROR */
+ 						}
+-						memset(extensions->san.email, 0x0, tmpLen + 1);
+-						memcpy(extensions->san.email, p, tmpLen);
++						memset(an->email, 0x0, tmpLen + 1);
++						memcpy(an->email, p, tmpLen);
+ 					} else {
+ 						matrixStrDebugMsg("Unsupported subjectAltName type.n",
+ 							NULL);
+@@ -1458,6 +1470,9 @@
+ 		current->subjectAltName.dns = (char*)subjectCert->extensions.san.dns;
+ 		current->subjectAltName.uri = (char*)subjectCert->extensions.san.uri;
+ 		current->subjectAltName.email = (char*)subjectCert->extensions.san.email;
++		current->issuerAltName.dns = (char*)subjectCert->extensions.ian.dns;
++		current->issuerAltName.uri = (char*)subjectCert->extensions.ian.uri;
++		current->issuerAltName.email = (char*)subjectCert->extensions.ian.email;
+ 	
+ 		if (subjectCert->certAlgorithm == OID_RSA_MD5 ||
+ 				subjectCert->certAlgorithm == OID_RSA_MD2) {

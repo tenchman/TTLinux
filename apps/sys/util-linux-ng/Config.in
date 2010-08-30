@@ -1,0 +1,9 @@
+# vim:set syntax=kconfig:
+config CONFIG_UTIL_LINUX_NG
+  bool "util-linux - A collection of basic system utilities"
+  default n
+  help
+    The util-linux package contains a large variety of low-level system
+    utilities that are necessary for a Linux system to function. Among
+    others, Util-linux contains the fdisk configuration tool and the login
+    program.

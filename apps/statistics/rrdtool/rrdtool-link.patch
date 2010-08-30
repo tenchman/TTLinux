@@ -1,0 +1,27 @@
+diff -up rrdtool-1.2.23/src/Makefile.am.lib rrdtool-1.2.23/src/Makefile.am
+--- rrdtool-1.2.23/src/Makefile.am.lib	2007-11-05 14:30:40.000000000 +0100
++++ rrdtool-1.2.23/src/Makefile.am	2007-11-05 14:32:17.000000000 +0100
+@@ -118,14 +118,23 @@ bin_PROGRAMS += rrdcgi
+ endif
+ 
+ rrdcgi_SOURCES	= rrd_cgi.c
++if BUILD_MULTITHREAD
++rrdcgi_LDADD	= librrd_th.la
++else
+ rrdcgi_LDADD	= librrd.la
++endif
+ 
+ rrdupdate_SOURCES = rrdupdate.c
+ rrdupdate_LDADD	  = librrdupd.la
+ 
+ rrdtool_SOURCES = 
++if BUILD_MULTITHREAD
++rrdtool_DEPENDENCIES = rrd_tool.o librrd_th.la
++rrdtool_LDADD	= librrd_th.la
++else
+ rrdtool_DEPENDENCIES = rrd_tool.o librrd.la
+ rrdtool_LDADD	= librrd.la
++endif
+ 
+ # strftime is here because we do not usually need it. unices have propper
+ # iso date support

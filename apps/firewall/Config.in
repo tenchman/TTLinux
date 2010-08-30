@@ -1,0 +1,7 @@
+# vim:set syntax=kconfig:
+menu "Firewall"
+  source "apps/firewall/iptables/Config.in"
+  source "apps/firewall/ebtables/Config.in"
+  source "apps/firewall/conntrackd/Config.in"
+  source "apps/firewall/conntrack-tools/Config.in"
+endmenu

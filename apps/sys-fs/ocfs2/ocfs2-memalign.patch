@@ -1,0 +1,17 @@
+diff -up ocfs2-tools-1.2.7/mkfs.ocfs2/mkfs.c.memalign ocfs2-tools-1.2.7/mkfs.ocfs2/mkfs.c
+--- ocfs2-tools-1.2.7/mkfs.ocfs2/mkfs.c.memalign	2007-09-29 01:53:00.000000000 +0200
++++ ocfs2-tools-1.2.7/mkfs.ocfs2/mkfs.c	2008-03-07 15:42:28.000000000 +0100
+@@ -1585,9 +1587,11 @@ add_entry_to_directory(State *s, DirData
+ 	} else {
+ 		new_size = s->blocksize;
+ 	}
+-
++#ifdef __dietlibc__
++	posix_memalign(&new_buf, s->blocksize, new_size);
++#else
+ 	new_buf = memalign(s->blocksize, new_size);
+-
++#endif
+ 	if (new_buf == NULL) {
+ 		com_err(s->progname, 0, "Failed to grow directory");
+ 		exit(1);

@@ -1,0 +1,128 @@
+diff -up zinq-djbdns-0.07/log.c.quietlog zinq-djbdns-0.07/log.c
+--- zinq-djbdns-0.07/log.c.quietlog	2009-11-23 09:58:39.000000000 +0100
++++ zinq-djbdns-0.07/log.c	2009-11-23 10:02:11.000000000 +0100
+@@ -117,6 +117,7 @@ void log_dump(int err)
+ 
+ void log_query(uint64 *qnum,const char client[4],unsigned int port,const char id[2],const char *q,const char qtype[2])
+ {
++  return;
+   string("query "); number(*qnum); space();
+   ip(client); string(":"); hex(port >> 8); hex(port & 255);
+   string(":"); logid(id); space();
+@@ -126,6 +127,7 @@ void log_query(uint64 *qnum,const char c
+ 
+ void log_querydone(uint64 *qnum,unsigned int len)
+ {
++  return;
+   string("sent "); number(*qnum); space();
+   number(len);
+   line();
+@@ -160,6 +162,7 @@ void log_tx(const char *q,const char qty
+ {
+   int i;
+ 
++  return;
+   string("tx "); number(gluelessness); space();
+   logtype(qtype); space(); name(q); space();
+   name(control);
+@@ -179,6 +182,7 @@ void log_merge(const char *addr, const c
+ 
+ void log_cachedanswer(const char *q,const char type[2])
+ {
++  return;
+   string("cached "); logtype(type); space();
+   name(q);
+   line();
+@@ -186,24 +190,28 @@ void log_cachedanswer(const char *q,cons
+ 
+ void log_cachedcname(const char *dn,const char *dn2)
+ {
++  return;
+   string("cached cname "); name(dn); space(); name(dn2);
+   line();
+ }
+ 
+ void log_cachedns(const char *control,const char *ns)
+ {
++  return;
+   string("cached ns "); name(control); space(); name(ns);
+   line();
+ }
+ 
+ void log_cachednxdomain(const char *dn)
+ {
++  return;
+   string("cached nxdomain "); name(dn);
+   line();
+ }
+ 
+ void log_nxdomain(const char server[4],const char *q,unsigned int ttl)
+ {
++  return;
+   string("nxdomain "); ip(server); space(); number(ttl); space();
+   name(q);
+   line();
+@@ -218,6 +226,7 @@ void log_nodata(const char server[4],con
+ 
+ void log_lame(const char server[4],const char *control,const char *referral)
+ {
++  return;
+   string("lame "); ip(server); space();
+   name(control); space(); name(referral);
+   line();
+@@ -236,6 +245,7 @@ void log_rr(const char server[4],const c
+ {
+   int i;
+ 
++  return;
+   string("rr "); ip(server); space(); number(ttl); space();
+   logtype(type); space(); name(q); space();
+ 
+@@ -251,6 +261,7 @@ void log_rr(const char server[4],const c
+ 
+ void log_rrns(const char server[4],const char *q,const char *data,unsigned int ttl)
+ {
++  return;
+   string("rr "); ip(server); space(); number(ttl);
+   string(" ns "); name(q); space();
+   name(data);
+@@ -259,6 +270,7 @@ void log_rrns(const char server[4],const
+ 
+ void log_rrcname(const char server[4],const char *q,const char *data,unsigned int ttl)
+ {
++  return;
+   string("rr "); ip(server); space(); number(ttl);
+   string(" cname "); name(q); space();
+   name(data);
+@@ -267,6 +279,7 @@ void log_rrcname(const char server[4],co
+ 
+ void log_rrptr(const char server[4],const char *q,const char *data,unsigned int ttl)
+ {
++  return;
+   string("rr "); ip(server); space(); number(ttl);
+   string(" ptr "); name(q); space();
+   name(data);
+@@ -277,6 +290,7 @@ void log_rrmx(const char server[4],const
+ {
+   uint16 u;
+ 
++  return;
+   string("rr "); ip(server); space(); number(ttl);
+   string(" mx "); name(q); space();
+   uint16_unpack_big(pref,&u);
+@@ -289,6 +303,7 @@ void log_rrsoa(const char server[4],cons
+   uint32 u;
+   int i;
+ 
++  return;
+   string("rr "); ip(server); space(); number(ttl);
+   string(" soa "); name(q); space();
+   name(n1); space(); name(n2);
+@@ -306,6 +321,7 @@ void log_stats(void)
+   extern int uactive;
+   extern int tactive;
+ 
++  return;
+   string("stats ");
+   number(numqueries); space();
+   number(cache_motion); space();

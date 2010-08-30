@@ -1,0 +1,16 @@
+diff -up net-snmp-5.4.1/include/net-snmp/library/snmp.h.snmp_versions net-snmp-5.4.1/include/net-snmp/library/snmp.h
+--- net-snmp-5.4.1/include/net-snmp/library/snmp.h.snmp_versions	2006-09-15 02:48:50.000000000 +0200
++++ net-snmp-5.4.1/include/net-snmp/library/snmp.h	2007-09-19 09:49:41.000000000 +0200
+@@ -96,12 +96,8 @@ SOFTWARE.
+     /*
+      * versions based on version field 
+      */
+-#ifndef NETSNMP_DISABLE_SNMPV1
+ #define SNMP_VERSION_1	   0
+-#endif
+-#ifndef NETSNMP_DISABLE_SNMPV2C
+ #define SNMP_VERSION_2c    1
+-#endif
+ #define SNMP_VERSION_2u    2    /* not (will never be) supported by this code */
+ #define SNMP_VERSION_3     3
+ 

@@ -1,0 +1,16 @@
+--- iproute2-2.6.22/ip/xfrm_policy.c.policy	2007-07-11 03:34:14.000000000 +0200
++++ iproute2-2.6.22/ip/xfrm_policy.c	2007-09-12 19:21:40.000000000 +0200
+@@ -59,11 +59,11 @@
+ 	fprintf(stderr, "Usage: ip xfrm policy { deleteall | list } [ dir DIR ] [ SELECTOR ]\n");
+ 	fprintf(stderr, "        [ index INDEX ] [ action ACTION ] [ priority PRIORITY ]\n");
+ 	fprintf(stderr, "Usage: ip xfrm policy flush [ ptype PTYPE ]\n");
+-	fprintf(stderr, "Usage: ip xfrm count\n");
++	fprintf(stderr, "Usage: ip xfrm policy count\n");
+ 	fprintf(stderr, "PTYPE := [ main | sub ](default=main)\n");
+ 	fprintf(stderr, "DIR := [ in | out | fwd ]\n");
+ 
+-	fprintf(stderr, "SELECTOR := src ADDR[/PLEN] dst ADDR[/PLEN] [ UPSPEC ] [ dev DEV ]\n");
++	fprintf(stderr, "SELECTOR := src ADDR[/PLEN] dst ADDR[/PLEN] [ UPSPEC ]\n");
+ 
+ 	fprintf(stderr, "UPSPEC := proto PROTO [ [ sport PORT ] [ dport PORT ] |\n");
+ 	fprintf(stderr, "                        [ type NUMBER ] [ code NUMBER ] ]\n");

@@ -1,0 +1,11 @@
+--- openvpn-2.1_rc4/pkcs11-helper.c.diet	2007-04-25 23:38:46.000000000 +0200
++++ openvpn-2.1_rc4/pkcs11-helper.c	2007-10-12 20:35:20.000000000 +0200
+@@ -68,7 +68,7 @@
+  * 	- (alonbl) Release 01.00.
+  *
+  */
+-
++#include <dlfcn.h>
+ #include "pkcs11-helper-config.h"
+ 
+ #if defined(ENABLE_PKCS11H_HELPER)

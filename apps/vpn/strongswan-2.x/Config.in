@@ -1,0 +1,11 @@
+config CONFIG_STRONGSWAN
+  bool "strongswan - an Open Source implementation of IPsec for Linux"
+  default n
+  select CONFIG_GMP
+  help
+    Strongswan is an Open Source implementation of IPsec for the Linux operating
+    system. It is a code fork of the FreeS/WAN project, started by a few of the
+    developers who were growing frustrated with the politics surrounding the
+    FreeS/WAN project.
+
+    http://www.openswan.org/

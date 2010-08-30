@@ -1,0 +1,11 @@
+--- matrixssl-1-2-5/src/matrixConfig.h.config	2005-04-04 23:23:32.000000000 +0200
++++ matrixssl-1-2-5/src/matrixConfig.h	2005-07-01 19:11:01.000000000 +0200
+@@ -81,7 +81,7 @@
+ 	different threads.  The library will still be single threaded,
+ 	but will serialize access to the session cache with a mutex.
+ */
+-#define USE_MULTITHREADING
++// #define USE_MULTITHREADING
+ 
+ /******************************************************************************/
+ /*

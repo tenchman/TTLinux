@@ -1,0 +1,233 @@
+diff -Naur openswan-2.4.14/include/oswtime.h openswan-2.4.15/include/oswtime.h
+--- openswan-2.4.14/include/oswtime.h	1969-12-31 19:00:00.000000000 -0500
++++ openswan-2.4.15/include/oswtime.h	2009-06-24 23:36:59.000000000 -0400
+@@ -0,0 +1,34 @@
++/* time related functions
++ * Copyright (C) 2005 Michael Richardson <mcr@xelerance.com>
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License as published by the
++ * Free Software Foundation; either version 2 of the License, or (at your
++ * option) any later version.  See <http://www.fsf.org/copyleft/gpl.txt>.
++ *
++ * This program is distributed in the hope that it will be useful, but
++ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
++ * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++ * for more details.
++ *
++ * RCSID $Id: oswtime.h,v 1.1.2.1 2009/06/25 03:36:59 paul Exp $
++ */
++
++#ifndef _OSWTIME_H_
++#define _OSWTIME_H_
++
++extern time_t now(void);	/* careful version of time(2) */
++
++/* no time defined in time_t */
++#define UNDEFINED_TIME	0
++
++/* size of timetoa string buffer */
++#define TIMETOA_BUF	30
++
++/* display a date either in local or UTC time */
++extern char* timetoa(const time_t *timep, bool utc, char *buf, size_t blen);
++
++
++#endif
++
++
+diff -Naur openswan-2.4.14/lib/libopenswan/optionsfrom.c openswan-2.4.15/lib/libopenswan/optionsfrom.c
+--- openswan-2.4.14/lib/libopenswan/optionsfrom.c	2004-04-09 14:00:38.000000000 -0400
++++ openswan-2.4.15/lib/libopenswan/optionsfrom.c	2009-06-24 23:36:58.000000000 -0400
+@@ -12,7 +12,7 @@
+  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+  * License for more details.
+  *
+- * RCSID $Id: optionsfrom.c,v 1.7 2004-04-09 18:00:38 mcr Exp $
++ * RCSID $Id: optionsfrom.c,v 1.7.14.1 2009/06/25 03:36:58 paul Exp $
+  */
+ #include "internal.h"
+ #include "openswan.h"
+@@ -31,7 +31,7 @@
+ 
+ static const char *dowork(const char *, int *, char ***, int);
+ static const char *getanarg(FILE *, struct work *, char **);
+-static char *getline(FILE *, char *, size_t);
++static char *of_getline(FILE *, char *, size_t);
+ 
+ /*
+  - optionsfrom - add some options, taken from a file, to argc/argv
+@@ -149,7 +149,7 @@
+ 	char *endp;
+ 
+ 	while (w->pending == NULL) {	/* no pending line */
+-		if ((w->line = getline(f, w->buf, sizeof(w->buf))) == NULL)
++		if ((w->line = of_getline(f, w->buf, sizeof(w->buf))) == NULL)
+ 			return "error in line read";	/* caller checks EOF */
+ 		if (w->line[0] != '#' &&
+ 				*(w->line + strspn(w->line, " \t")) != '\0')
+@@ -171,7 +171,7 @@
+ 			if (*linep == NULL)
+ 				return "out of memory for new line";
+ 			strcpy(*linep, p);
+-		} else			/* getline already malloced it */
++		} else			/* of_getline already malloced it */
+ 			*linep = p;
+ 		return NULL;
+ 	}
+@@ -203,10 +203,10 @@
+ }
+ 
+ /*
+- - getline - read a line from the file, trim newline off
++ - of_getline - read a line from the file, trim newline off
+  */
+ static char *			/* pointer to line, NULL for eof/error */
+-getline(f, buf, bufsize)
++of_getline(f, buf, bufsize)
+ FILE *f;
+ char *buf;			/* buffer to use, if convenient */
+ size_t bufsize;			/* size of buf */
+diff -Naur openswan-2.4.14/programs/pluto/asn1.c openswan-2.4.15/programs/pluto/asn1.c
+--- openswan-2.4.14/programs/pluto/asn1.c	2004-06-29 18:55:27.000000000 -0400
++++ openswan-2.4.15/programs/pluto/asn1.c	2009-06-25 00:00:20.000000000 -0400
+@@ -11,7 +11,6 @@
+  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+  * for more details.
+  *
+- * RCSID $Id: asn1.c,v 1.9 2004-06-29 22:55:27 ken Exp $
+  */
+ 
+ #include <stdlib.h>
+@@ -22,11 +21,10 @@
+ 
+ #include "constants.h"
+ #include "oswlog.h"
+-
+-#include "defs.h"
++#include "oswtime.h"
++#include "oswalloc.h"
+ #include "asn1.h"
+ #include "oid.h"
+-#include "log.h"
+ 
+ /*  If the oid is listed in the oid_names table then the corresponding
+  *  position in the oid_names table is returned otherwise -1 is returned
+@@ -107,6 +105,14 @@
+ 	len = 256*len + *blob->ptr++;
+ 	blob->len--;
+     }
++    if (len > blob->len)
++    {
++	DBG(DBG_PARSING,
++	    DBG_log("length is larger than remaining blob size")
++	)
++	return ASN1_INVALID_LENGTH;
++    }
++
+     return len;
+ }
+ 
+@@ -226,7 +232,7 @@
+ {
+     struct tm t;
+     time_t tz_offset;
+-    u_char *eot = NULL;
++    char *eot = NULL;
+ 
+     if ((eot = memchr(utctime->ptr, 'Z', utctime->len)) != NULL)
+     {
+@@ -236,14 +242,21 @@
+     {
+ 	int tz_hour, tz_min;
+ 
+-	sscanf(eot+1, "%2d%2d", &tz_hour, &tz_min);
++	if (sscanf(eot+1, "%2d%2d", &tz_hour, &tz_min) != 2)
++	{
++	    return 0; /* error in positive timezone offset format */
++	}
++
+ 	tz_offset = 3600*tz_hour + 60*tz_min;  /* positive time zone offset */
+     }
+     else if ((eot = memchr(utctime->ptr, '-', utctime->len)) != NULL)
+     {
+ 	int tz_hour, tz_min;
+ 
+-	sscanf(eot+1, "%2d%2d", &tz_hour, &tz_min);
++	if (sscanf(eot+1, "%2d%2d", &tz_hour, &tz_min) != 2)
++	{
++	     return 0; /* error in negative timezone offset format */
++	}
+ 	tz_offset = -3600*tz_hour - 60*tz_min;  /* negative time zone offset */
+     }
+     else
+@@ -255,14 +268,22 @@
+ 	const char* format = (type == ASN1_UTCTIME)? "%2d%2d%2d%2d%2d":
+ 						     "%4d%2d%2d%2d%2d";
+ 
+-	sscanf(utctime->ptr, format, &t.tm_year, &t.tm_mon, &t.tm_mday,
+-				     &t.tm_hour, &t.tm_min);
++	if (sscanf(utctime->ptr, format, &t.tm_year, &t.tm_mon, &t.tm_mday,
++					 &t.tm_hour, &t.tm_min) != 5)
++	{
++	    return 0; /* error in time st [yy]yymmddhhmm time format */
++	}
++
+     }
+ 
+     /* is there a seconds field? */
+-    if ((eot - utctime->ptr) == ((type == ASN1_UTCTIME)?12:14))
++    if ((eot - (char *)utctime->ptr) == ((type == ASN1_UTCTIME)?12:14))
+     {
+-	sscanf(eot-2, "%2d", &t.tm_sec);
++	if (sscanf(eot-2, "%2d", &t.tm_sec) != 1)
++	{
++	    return 0; /* error in ss seconds field format */
++	}
++
+     }
+     else
+     {
+@@ -283,15 +304,18 @@
+ 	t.tm_year += 100;
+     }
+ 
+-    /* representation of month 0..11*/
++    if (t.tm_mon < 1 || t.tm_mon > 12)
++    {
++	return 0; /* error in month format */
++    }
++    /* representation of month 0..11 in struct tm */
+     t.tm_mon--;
+ 
+     /* set daylight saving time to off */
+     t.tm_isdst = 0;
+ 
+     /* compensate timezone */
+-
+-    return mktime(&t) - timezone - tz_offset;
++    return timegm(&t);
+ }
+ 
+ /*
+@@ -385,7 +409,7 @@
+ 
+     blob1->len = asn1_length(blob);
+ 
+-    if (blob1->len == ASN1_INVALID_LENGTH || blob->len < blob1->len)
++    if (blob1->len == ASN1_INVALID_LENGTH)
+     {
+ 	DBG(DBG_PARSING,
+ 	    DBG_log("L%d - %s:  length of ASN1 object invalid or too large",
+@@ -482,9 +506,9 @@
+ 	case ASN1_UTCTIME:
+ 	case ASN1_GENERALIZEDTIME:
+ 	    DBG(DBG_PARSING,
+-		time_t time = asn1totime(object, obj.type);
++		time_t timep = asn1totime(object, obj.type);
+ 		char tbuf[TIMETOA_BUF];
+-		DBG_log("  '%s'", timetoa(&time, TRUE, tbuf, sizeof(tbuf)));
++		DBG_log("  '%s'", timetoa(&timep, TRUE, tbuf, sizeof(tbuf)));
+ 	    )
+ 	    return TRUE;
+ 

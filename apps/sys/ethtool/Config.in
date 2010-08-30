@@ -1,0 +1,11 @@
+# vim:set syntax=kconfig:
+config CONFIG_ETHTOOL
+  bool "ethtool - Ethernet settings tool for PCI ethernet cards"
+  default n
+  help
+    ethtool is a Linux net driver diagnostic and tuning tool for the Linux
+    2.4.x (or later) series of kernels. Obtain information and diagnostics
+    related to  media, link  status, driver  version, PCI  (or other)  bus
+    location, and more.
+
+    http://sourceforge.net/projects/gkernel/

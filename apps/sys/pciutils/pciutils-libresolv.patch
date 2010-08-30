@@ -1,0 +1,10 @@
+--- pciutils-3.1.2/lib/configure.resolv	2009-05-17 20:05:09.000000000 +0200
++++ pciutils-3.1.2/lib/configure	2009-05-17 20:06:05.000000000 +0200
+@@ -56,7 +56,6 @@ echo >>$c "#define PCI_OS_`echo $sys | t
+ echo >$m 'WITH_LIBS='
+ 
+ echo_n "Looking for access methods..."
+-LIBRESOLV=-lresolv
+ 
+ case $sys in
+ 	linux*)

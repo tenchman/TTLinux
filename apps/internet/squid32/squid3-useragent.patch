@@ -1,0 +1,14 @@
+diff -up squid-3.1.0.7/src/adaptation/icap/ModXact.cc.useragent squid-3.1.0.7/src/adaptation/icap/ModXact.cc
+--- squid-3.1.0.7/src/adaptation/icap/ModXact.cc.useragent	2009-03-03 00:06:32.000000000 +0100
++++ squid-3.1.0.7/src/adaptation/icap/ModXact.cc	2009-03-09 16:02:14.000000000 +0100
+@@ -1109,6 +1109,10 @@ void ICAPModXact::makeRequestHeaders(Mem
+     if (TheICAPConfig.send_client_username && request)
+         makeUsernameHeader(request, buf);
+ 
++    const char *str;
++    if ((str = request->header.getStr(HDR_USER_AGENT)))
++      buf.Printf("X-Client-User-Agent: %s\r\n", str);
++
+     // fprintf(stderr, "%s\n", buf.content());
+ 
+     buf.append(ICAP::crlf, 2); // terminate ICAP header

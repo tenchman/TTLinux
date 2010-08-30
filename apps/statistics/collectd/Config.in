@@ -1,0 +1,42 @@
+# vim:set syntax=kconfig:
+config CONFIG_COLLECTD
+  bool "collectd - A daemon which collects system performance statistics"
+  default n
+  select CONFIG_NET_SNMP
+  help
+    Collectd is a small and modular daemon which collects system information
+    periodically and provides means to store the values. Included in the
+    distribution are numerous plug-ins for collecting CPU, disk, and memory
+    usage, network interface and DNS traffic, network latency, database
+    statistics, and much more. Custom statistics can easily be added in a
+    number of ways, including execution of arbitrary programs and plug-ins
+    written in Perl. Advanced features include a powerful network code to
+    collect statistics for entire setups and SNMP integration to query
+    network equipment.
+
+    http://collectd.org/
+  
+  config CONFIG_COLLECTD_RRDTOOL
+    bool "compile in support for rrdtool"
+    default n
+    depends CONFIG_COLLECTD
+    select CONFIG_RRDTOOL
+    select CONFIG_FREETYPE
+  
+  config CONFIG_COLLECTD_IPTABLES
+    bool "compile in support for iptables"
+    default y
+    depends CONFIG_COLLECTD
+    select CONFIG_IPTABLES
+  
+  config CONFIG_COLLECTD_NETLINK
+    bool "compile in netlink support"
+    default y
+    depends CONFIG_COLLECTD
+    select CONFIG_IPROUTE
+  
+  config CONFIG_COLLECTD_LM_SENSORS
+    bool "compile in support for lm_sensors"
+    default y
+    depends CONFIG_COLLECTD
+    select CONFIG_LM_SENSORS

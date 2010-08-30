@@ -1,0 +1,17 @@
+.packageheader {
+  text-align: left;
+  text-indent: 0.5em;
+  background: #eee;
+  font-size: large;
+  color: #47a;
+  border: 1px solid #00a;
+}
+
+a {
+  color: #258;
+}
+
+.summary, .license, .copyright, .url {
+  width: 10em;
+  text-indent: 1em;
+}

@@ -1,0 +1,20 @@
+--- tcpdump-3.8.2/tcpdump-stdinc.h.diet	2003-11-16 10:57:04.000000000 +0100
++++ tcpdump-3.8.2/tcpdump-stdinc.h	2004-09-29 20:14:21.376769816 +0200
+@@ -63,7 +63,7 @@
+ 
+ #endif /* __MINGW32__ */
+ 
+-#ifndef toascii
++#if !defined(toascii) || defined(__dietlibc__)
+ #define toascii(c) ((c) & 0x7f)
+ #endif
+ 
+@@ -77,7 +77,7 @@
+ #define vsnprintf _vsnprintf
+ #define RETSIGTYPE void
+ 
+-#if !defined(__MINGW32__) && !defined(__WATCOMC__)
++#if !defined(__MINGW32__) && !defined(__WATCOMC__) && !defined(__dietlibc__)
+ #undef toascii
+ #define isascii __isascii
+ #define toascii __toascii

@@ -1,0 +1,12 @@
+diff -up dietlibc-0.30/include/sys/poll.h.nfds_t dietlibc-0.30/include/sys/poll.h
+--- dietlibc-0.30/include/sys/poll.h.nfds_t	2010-08-06 08:52:36.674062447 +0200
++++ dietlibc-0.30/include/sys/poll.h	2010-08-06 08:54:01.808062108 +0200
+@@ -44,6 +44,8 @@ struct pollfd {
+   short revents;
+ };
+ 
++typedef unsigned long int nfds_t;
++
+ extern int poll(struct pollfd *ufds, unsigned int nfds, int timeout) __THROW;
+ 
+ __END_DECLS

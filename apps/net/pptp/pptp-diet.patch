@@ -1,0 +1,25 @@
+--- pptp-1.7.1/pptp.c.diet	2007-06-09 00:17:56.000000000 +0200
++++ pptp-1.7.1/pptp.c	2007-06-09 00:19:47.000000000 +0200
+@@ -44,7 +44,11 @@
+ #include "pptp_gre.h"
+ #include "version.h"
+ #if defined(__linux__)
+-#include <linux/prctl.h>
++# if defined(__dietlibc__)
++# define PR_SET_NAME    15
++# else
++# include <linux/prctl.h>
++# endif
+ #else
+ #include "inststr.h"
+ #endif
+--- pptp-1.7.1/pptp_ctrl.h.diet	2006-02-13 04:07:43.000000000 +0100
++++ pptp-1.7.1/pptp_ctrl.h	2007-06-09 00:08:24.000000000 +0200
+@@ -7,6 +7,7 @@
+ #ifndef INC_PPTP_CTRL_H
+ #define INC_PPTP_CTRL_H
+ #include <sys/types.h>
++#include <sys/select.h>
+ 
+ typedef struct PPTP_CONN PPTP_CONN;
+ typedef struct PPTP_CALL PPTP_CALL;

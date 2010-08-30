@@ -1,0 +1,23 @@
+--- c_icap-180407/c-icap.magic.mime	2006-05-13 18:54:36.000000000 +0200
++++ c_icap-180407/c-icap.magic	2007-08-13 15:10:09.000000000 +0200
+@@ -28,6 +28,7 @@
+ 0:\211PNG:PNG:PNG image data:GRAPHICS
+ 0:\000\000\001\000:ICO:MS Windows icon resource:GRAPHICS
+ 0:FWS:SWF:Shockwave Flash data:GRAPHICS
++0:FLV:SWF:Shockwave Flash data:GRAPHICS
+ 0:CWS:SWF:Shockwave Flash data:GRAPHICS
+ 
+ #STREAM
+@@ -39,6 +40,12 @@
+ 0:\377\373\220:MP3:MP3 audio stream:STREAM
+ 0:\060\046\262\165\216\146\317:ASF:WMA/WMV/ASF:STREAM
+ 0:.RMF:RMF:Real Media File:STREAM
++4:ftyp:MOV:Apple QuickTime movie:STREAM
++4:moov:MOV:video/quicktime:STREAM
++4:mdat:MOV:video/quicktime:STREAM
++4:wide:MOV:video/quicktime:STREAM
++4:skip:MOV:video/quicktime:STREAM
++
+ 
+ #Documents
+ 0:\320\317\021\340\241\261\032\341:MSOFFICE:MS Office Document:DOCUMENT

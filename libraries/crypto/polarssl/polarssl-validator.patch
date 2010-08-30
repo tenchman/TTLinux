@@ -1,0 +1,64 @@
+diff -up polarssl-0.10.1/include/polarssl/ssl.h.validator polarssl-0.10.1/include/polarssl/ssl.h
+--- polarssl-0.10.1/include/polarssl/ssl.h.validator	2009-01-25 16:28:53.000000000 +0100
++++ polarssl-0.10.1/include/polarssl/ssl.h	2009-03-10 09:21:06.000000000 +0100
+@@ -288,6 +288,10 @@ struct _ssl_context
+      */
+     unsigned char *hostname;
+     unsigned long  hostname_len;
++
++    int (*validator)(x509_cert *, int, void *);
++					/*!<  user validator function */
++    void *userdata;			/*!<  user supplied data      */
+ };
+ 
+ #ifdef __cplusplus
+@@ -314,6 +318,19 @@ int ssl_init( ssl_context *ssl );
+ void ssl_set_endpoint( ssl_context *ssl, int endpoint );
+ 
+ /**
++ * \brief          Set a user defined certificate validator
++ *
++ * \param ssl      SSL context
++ * \validator      pointer to the user defined validator function
++ * \status         the actual verify result
++ * \userdata       pointer to user data which passed as second parameter
++ *                 to validator argument
++ */
++void ssl_set_validator( ssl_context *ssl, 
++			int (*validator)( x509_cert *peer_cert, int status, void *data ),
++			void *data );
++
++/**
+  * \brief          Set the certificate verification mode
+  *
+  * \param ssl      SSL context
+diff -up polarssl-0.10.1/library/ssl_tls.c.validator polarssl-0.10.1/library/ssl_tls.c
+--- polarssl-0.10.1/library/ssl_tls.c.validator	2009-01-25 16:28:54.000000000 +0100
++++ polarssl-0.10.1/library/ssl_tls.c	2009-03-10 09:21:06.000000000 +0100
+@@ -1351,7 +1351,10 @@ int ssl_parse_certificate( ssl_context *
+         if( ret != 0 )
+             SSL_DEBUG_RET( 1, "x509_verify_cert", ret );
+ 
+-        if( ssl->authmode != SSL_VERIFY_REQUIRED )
++        if( ssl->validator != NULL )
++	    ret = ssl->validator( ssl->peer_cert, ssl->verify_result, ssl->userdata );
++
++	if( ssl->authmode != SSL_VERIFY_REQUIRED )
+             ret = 0;
+     }
+ 
+@@ -1662,6 +1665,14 @@ void ssl_set_endpoint( ssl_context *ssl,
+     ssl->endpoint   = endpoint;
+ }
+ 
++void ssl_set_validator( ssl_context *ssl, 
++			int (*validator)( x509_cert *peer_cert, int status, void *data ),
++			void *userdata )
++{
++    ssl->validator  = validator;
++    ssl->userdata   = userdata;
++}
++
+ void ssl_set_authmode( ssl_context *ssl, int authmode )
+ {
+     ssl->authmode   = authmode;

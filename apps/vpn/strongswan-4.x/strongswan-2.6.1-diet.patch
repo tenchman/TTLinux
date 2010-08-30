@@ -1,0 +1,489 @@
+--- strongswan-2.6.1/lib/libcrypto/libserpent/serpent.c.diet	2004-03-22 22:53:16.000000000 +0100
++++ strongswan-2.6.1/lib/libcrypto/libserpent/serpent.c	2006-02-04 13:47:17.000000000 +0100
+@@ -21,8 +21,10 @@
+ #include <asm/byteorder.h>
+ #else
+ #include <sys/types.h>
++#ifndef __dietlibc__
+ #include <asm/byteorder.h>
+ #endif
++#endif
+ 
+ #include "serpent.h"
+ 
+--- strongswan-2.6.1/linux/lib/libfreeswan/optionsfrom.c.diet	2004-03-15 21:35:26.000000000 +0100
++++ strongswan-2.6.1/linux/lib/libfreeswan/optionsfrom.c	2006-02-04 13:47:17.000000000 +0100
+@@ -31,7 +31,7 @@
+ 
+ static const char *dowork(const char *, int *, char ***, int);
+ static const char *getanarg(FILE *, struct work *, char **);
+-static char *getline(FILE *, char *, size_t);
++static char *Getline(FILE *, char *, size_t);
+ 
+ /*
+  - optionsfrom - add some options, taken from a file, to argc/argv
+@@ -149,7 +149,7 @@
+ 	char *endp;
+ 
+ 	while (w->pending == NULL) {	/* no pending line */
+-		if ((w->line = getline(f, w->buf, sizeof(w->buf))) == NULL)
++		if ((w->line = Getline(f, w->buf, sizeof(w->buf))) == NULL)
+ 			return "error in line read";	/* caller checks EOF */
+ 		if (w->line[0] != '#' &&
+ 				*(w->line + strspn(w->line, " \t")) != '\0')
+@@ -206,7 +206,7 @@
+  - getline - read a line from the file, trim newline off
+  */
+ static char *			/* pointer to line, NULL for eof/error */
+-getline(f, buf, bufsize)
++Getline(f, buf, bufsize)
+ FILE *f;
+ char *buf;			/* buffer to use, if convenient */
+ size_t bufsize;			/* size of buf */
+--- strongswan-2.6.1/linux/lib/libfreeswan/pfkey_v2_build.c.diet	2005-04-07 21:43:52.000000000 +0200
++++ strongswan-2.6.1/linux/lib/libfreeswan/pfkey_v2_build.c	2006-02-04 13:47:17.000000000 +0100
+@@ -36,7 +36,7 @@
+ # else /* MALLOC_SLAB */
+ #  include <linux/malloc.h> /* kmalloc() */
+ # endif /* MALLOC_SLAB */
+-# include <linux/errno.h>  /* error codes */
++# include <errno.h>  /* error codes */
+ # include <linux/types.h>  /* size_t */
+ # include <linux/interrupt.h> /* mark_bh */
+ 
+@@ -54,7 +54,7 @@
+ 
+ # include <sys/types.h>
+ # include <linux/types.h>
+-# include <linux/errno.h>
++# include <errno.h>
+ # include <malloc.h>
+ # include <string.h> /* memset */
+ 
+--- strongswan-2.6.1/linux/lib/libfreeswan/pfkey_v2_parse.c.diet	2004-06-13 22:35:07.000000000 +0200
++++ strongswan-2.6.1/linux/lib/libfreeswan/pfkey_v2_parse.c	2006-02-04 13:47:17.000000000 +0100
+@@ -37,7 +37,7 @@
+ # else /* MALLOC_SLAB */
+ #  include <linux/malloc.h> /* kmalloc() */
+ # endif /* MALLOC_SLAB */
+-# include <linux/errno.h>  /* error codes */
++# include <errno.h>  /* error codes */
+ # include <linux/types.h>  /* size_t */
+ # include <linux/interrupt.h> /* mark_bh */
+ 
+@@ -57,7 +57,7 @@
+ 
+ # include <sys/types.h>
+ # include <linux/types.h>
+-# include <linux/errno.h>
++# include <errno.h>
+ 
+ # include <freeswan.h>
+ # include "programs/pluto/constants.h" 
+--- strongswan-2.6.1/linux/lib/libfreeswan/pfkey_v2_ext_bits.c.diet	2004-03-22 22:53:18.000000000 +0100
++++ strongswan-2.6.1/linux/lib/libfreeswan/pfkey_v2_ext_bits.c	2006-02-04 13:47:17.000000000 +0100
+@@ -36,7 +36,7 @@
+ # else /* MALLOC_SLAB */
+ #  include <linux/malloc.h> /* kmalloc() */
+ # endif /* MALLOC_SLAB */
+-# include <linux/errno.h>  /* error codes */
++# include <errno.h>  /* error codes */
+ # include <linux/types.h>  /* size_t */
+ # include <linux/interrupt.h> /* mark_bh */
+ 
+@@ -51,7 +51,7 @@
+ 
+ # include <sys/types.h>
+ # include <linux/types.h>
+-# include <linux/errno.h>
++# include <errno.h>
+ #endif
+ 
+ #include <freeswan.h>
+--- strongswan-2.6.1/linux/lib/libfreeswan/pfkey_v2_debug.c.diet	2004-03-22 22:53:18.000000000 +0100
++++ strongswan-2.6.1/linux/lib/libfreeswan/pfkey_v2_debug.c	2006-02-04 13:47:17.000000000 +0100
+@@ -28,7 +28,7 @@
+ # else /* MALLOC_SLAB */
+ #  include <linux/malloc.h> /* kmalloc() */
+ # endif /* MALLOC_SLAB */
+-# include <linux/errno.h>  /* error codes */
++# include <errno.h>  /* error codes */
+ # include <linux/types.h>  /* size_t */
+ # include <linux/interrupt.h> /* mark_bh */
+ 
+@@ -40,7 +40,7 @@
+ 
+ # include <sys/types.h>
+ # include <linux/types.h>
+-# include <linux/errno.h>
++# include <errno.h>
+ 
+ #endif /* __KERNEL__ */
+ 
+--- strongswan-2.6.1/linux/include/crypto/des.h.diet	2004-03-15 21:35:25.000000000 +0100
++++ strongswan-2.6.1/linux/include/crypto/des.h	2006-02-04 13:47:17.000000000 +0100
+@@ -202,11 +202,13 @@
+ /* some stupid compilers complain because I have declared char instead
+  * of const char */
+ #ifndef __KERNEL__
++#ifndef __dietlibc__
+ #ifdef HEADER_DES_LOCL_H
+ char *crypt(const char *buf,const char *salt);
+ #else /* HEADER_DES_LOCL_H */
+ char *crypt(void);
+ #endif /* HEADER_DES_LOCL_H */
++#endif /* __dietlibc__ */
+ #endif /* __KERNEL__ */
+ #endif /* PERL5 */
+ void des_ofb_encrypt(unsigned char *in,unsigned char *out,
+--- strongswan-2.6.1/linux/include/freeswan.h.diet	2004-03-22 22:53:17.000000000 +0100
++++ strongswan-2.6.1/linux/include/freeswan.h	2006-02-04 13:47:17.000000000 +0100
+@@ -52,6 +52,7 @@
+  * we aren't really testing if the kernel has IPv6, but rather if the
+  * the include files do.
+  */
++#ifndef NET_21
+ #include <linux/version.h>
+ #ifndef KERNEL_VERSION
+ #define KERNEL_VERSION(x,y,z) (((x)<<16)+((y)<<8)+(z))
+@@ -60,6 +61,7 @@
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
+ #define NET_21
+ #endif
++#endif
+ 
+ #ifndef IPPROTO_COMP
+ #  define IPPROTO_COMP 108
+--- /dev/null	2006-01-29 15:50:32.844541250 +0100
++++ strongswan-2.6.1/linux/include/sys/queue.h	2006-02-04 13:47:17.000000000 +0100
+@@ -0,0 +1,241 @@
++/*
++ * Copyright (c) 1991, 1993
++ *	The Regents of the University of California.  All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 4. Neither the name of the University nor the names of its contributors
++ *    may be used to endorse or promote products derived from this software
++ *    without specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ *
++ *	@(#)queue.h	8.3 (Berkeley) 12/13/93
++ */
++
++#ifndef	_SYS_QUEUE_H
++#define	_SYS_QUEUE_H 1
++
++/*
++ * This file defines three types of data structures: lists, tail queues,
++ * and circular queues.
++ *
++ * A list is headed by a single forward pointer (or an array of forward
++ * pointers for a hash table header). The elements are doubly linked
++ * so that an arbitrary element can be removed without a need to
++ * traverse the list. New elements can be added to the list after
++ * an existing element or at the head of the list. A list may only be
++ * traversed in the forward direction.
++ *
++ * A tail queue is headed by a pair of pointers, one to the head of the
++ * list and the other to the tail of the list. The elements are doubly
++ * linked so that an arbitrary element can be removed without a need to
++ * traverse the list. New elements can be added to the list after
++ * an existing element, at the head of the list, or at the end of the
++ * list. A tail queue may only be traversed in the forward direction.
++ *
++ * A circle queue is headed by a pair of pointers, one to the head of the
++ * list and the other to the tail of the list. The elements are doubly
++ * linked so that an arbitrary element can be removed without a need to
++ * traverse the list. New elements can be added to the list before or after
++ * an existing element, at the head of the list, or at the end of the list.
++ * A circle queue may be traversed in either direction, but has a more
++ * complex end of list detection.
++ *
++ * For details on the use of these macros, see the queue(3) manual page.
++ */
++
++/*
++ * List definitions.
++ */
++#define LIST_HEAD(name, type)						\
++struct name {								\
++	struct type *lh_first;	/* first element */			\
++}
++
++#define LIST_ENTRY(type)						\
++struct {								\
++	struct type *le_next;	/* next element */			\
++	struct type **le_prev;	/* address of previous next element */	\
++}
++
++/*
++ * List functions.
++ */
++#define	LIST_INIT(head) {						\
++	(head)->lh_first = NULL;					\
++}
++
++#define LIST_INSERT_AFTER(listelm, elm, field) {			\
++	if (((elm)->field.le_next = (listelm)->field.le_next) != NULL)	\
++		(listelm)->field.le_next->field.le_prev =		\
++		    &(elm)->field.le_next;				\
++	(listelm)->field.le_next = (elm);				\
++	(elm)->field.le_prev = &(listelm)->field.le_next;		\
++}
++
++#define LIST_INSERT_HEAD(head, elm, field) {				\
++	if (((elm)->field.le_next = (head)->lh_first) != NULL)		\
++		(head)->lh_first->field.le_prev = &(elm)->field.le_next;\
++	(head)->lh_first = (elm);					\
++	(elm)->field.le_prev = &(head)->lh_first;			\
++}
++
++#define LIST_REMOVE(elm, field) {					\
++	if ((elm)->field.le_next != NULL)				\
++		(elm)->field.le_next->field.le_prev = 			\
++		    (elm)->field.le_prev;				\
++	*(elm)->field.le_prev = (elm)->field.le_next;			\
++}
++
++/*
++ * Tail queue definitions.
++ */
++#define TAILQ_HEAD(name, type)						\
++struct name {								\
++	struct type *tqh_first;	/* first element */			\
++	struct type **tqh_last;	/* addr of last next element */		\
++}
++
++#define TAILQ_ENTRY(type)						\
++struct {								\
++	struct type *tqe_next;	/* next element */			\
++	struct type **tqe_prev;	/* address of previous next element */	\
++}
++
++/*
++ * Tail queue functions.
++ */
++#define	TAILQ_INIT(head) {						\
++	(head)->tqh_first = NULL;					\
++	(head)->tqh_last = &(head)->tqh_first;				\
++}
++
++#define TAILQ_INSERT_HEAD(head, elm, field) {				\
++	if (((elm)->field.tqe_next = (head)->tqh_first) != NULL)	\
++		(elm)->field.tqe_next->field.tqe_prev =			\
++		    &(elm)->field.tqe_next;				\
++	else								\
++		(head)->tqh_last = &(elm)->field.tqe_next;		\
++	(head)->tqh_first = (elm);					\
++	(elm)->field.tqe_prev = &(head)->tqh_first;			\
++}
++
++#define TAILQ_INSERT_TAIL(head, elm, field) {				\
++	(elm)->field.tqe_next = NULL;					\
++	(elm)->field.tqe_prev = (head)->tqh_last;			\
++	*(head)->tqh_last = (elm);					\
++	(head)->tqh_last = &(elm)->field.tqe_next;			\
++}
++
++#define TAILQ_INSERT_AFTER(head, listelm, elm, field) {			\
++	if (((elm)->field.tqe_next = (listelm)->field.tqe_next) != NULL)\
++		(elm)->field.tqe_next->field.tqe_prev = 		\
++		    &(elm)->field.tqe_next;				\
++	else								\
++		(head)->tqh_last = &(elm)->field.tqe_next;		\
++	(listelm)->field.tqe_next = (elm);				\
++	(elm)->field.tqe_prev = &(listelm)->field.tqe_next;		\
++}
++
++#define TAILQ_REMOVE(head, elm, field) {				\
++	if (((elm)->field.tqe_next) != NULL)				\
++		(elm)->field.tqe_next->field.tqe_prev = 		\
++		    (elm)->field.tqe_prev;				\
++	else								\
++		(head)->tqh_last = (elm)->field.tqe_prev;		\
++	*(elm)->field.tqe_prev = (elm)->field.tqe_next;			\
++}
++
++/*
++ * Circular queue definitions.
++ */
++#define CIRCLEQ_HEAD(name, type)					\
++struct name {								\
++	struct type *cqh_first;		/* first element */		\
++	struct type *cqh_last;		/* last element */		\
++}
++
++#define CIRCLEQ_ENTRY(type)						\
++struct {								\
++	struct type *cqe_next;		/* next element */		\
++	struct type *cqe_prev;		/* previous element */		\
++}
++
++/*
++ * Circular queue functions.
++ */
++#define	CIRCLEQ_INIT(head) {						\
++	(head)->cqh_first = (void *)(head);				\
++	(head)->cqh_last = (void *)(head);				\
++}
++
++#define CIRCLEQ_INSERT_AFTER(head, listelm, elm, field) {		\
++	(elm)->field.cqe_next = (listelm)->field.cqe_next;		\
++	(elm)->field.cqe_prev = (listelm);				\
++	if ((listelm)->field.cqe_next == (void *)(head))		\
++		(head)->cqh_last = (elm);				\
++	else								\
++		(listelm)->field.cqe_next->field.cqe_prev = (elm);	\
++	(listelm)->field.cqe_next = (elm);				\
++}
++
++#define CIRCLEQ_INSERT_BEFORE(head, listelm, elm, field) {		\
++	(elm)->field.cqe_next = (listelm);				\
++	(elm)->field.cqe_prev = (listelm)->field.cqe_prev;		\
++	if ((listelm)->field.cqe_prev == (void *)(head))		\
++		(head)->cqh_first = (elm);				\
++	else								\
++		(listelm)->field.cqe_prev->field.cqe_next = (elm);	\
++	(listelm)->field.cqe_prev = (elm);				\
++}
++
++#define CIRCLEQ_INSERT_HEAD(head, elm, field) {				\
++	(elm)->field.cqe_next = (head)->cqh_first;			\
++	(elm)->field.cqe_prev = (void *)(head);				\
++	if ((head)->cqh_last == (void *)(head))				\
++		(head)->cqh_last = (elm);				\
++	else								\
++		(head)->cqh_first->field.cqe_prev = (elm);		\
++	(head)->cqh_first = (elm);					\
++}
++
++#define CIRCLEQ_INSERT_TAIL(head, elm, field) {				\
++	(elm)->field.cqe_next = (void *)(head);				\
++	(elm)->field.cqe_prev = (head)->cqh_last;			\
++	if ((head)->cqh_first == (void *)(head))			\
++		(head)->cqh_first = (elm);				\
++	else								\
++		(head)->cqh_last->field.cqe_next = (elm);		\
++	(head)->cqh_last = (elm);					\
++}
++
++#define	CIRCLEQ_REMOVE(head, elm, field) {				\
++	if ((elm)->field.cqe_next == (void *)(head))			\
++		(head)->cqh_last = (elm)->field.cqe_prev;		\
++	else								\
++		(elm)->field.cqe_next->field.cqe_prev =			\
++		    (elm)->field.cqe_prev;				\
++	if ((elm)->field.cqe_prev == (void *)(head))			\
++		(head)->cqh_first = (elm)->field.cqe_next;		\
++	else								\
++		(elm)->field.cqe_prev->field.cqe_next =			\
++		    (elm)->field.cqe_next;				\
++}
++#endif	/* sys/queue.h */
+--- /dev/null	2006-01-29 15:50:32.844541250 +0100
++++ strongswan-2.6.1/linux/include/linux/errqueue.h	2006-02-04 13:47:17.000000000 +0100
+@@ -0,0 +1,22 @@
++#ifndef _LINUX_ERRQUEUE_H
++#define _LINUX_ERRQUEUE_H 1
++
++struct sock_extended_err
++{
++	__u32	ee_errno;	
++	__u8	ee_origin;
++	__u8	ee_type;
++	__u8	ee_code;
++	__u8	ee_pad;
++	__u32   ee_info;
++	__u32   ee_data;
++};
++
++#define SO_EE_ORIGIN_NONE	0
++#define SO_EE_ORIGIN_LOCAL	1
++#define SO_EE_ORIGIN_ICMP	2
++#define SO_EE_ORIGIN_ICMP6	3
++
++#define SO_EE_OFFENDER(ee)	((struct sockaddr*)((ee)+1))
++
++#endif
+--- strongswan-2.6.1/programs/pluto/kernel.c.diet	2005-08-15 22:07:08.000000000 +0200
++++ strongswan-2.6.1/programs/pluto/kernel.c	2006-02-04 13:47:17.000000000 +0100
+@@ -20,7 +20,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <errno.h>
+-#include <wait.h>
++#include <sys/wait.h>
+ #include <unistd.h>
+ #include <fcntl.h>
+ #include <sys/queue.h>
+--- strongswan-2.6.1/programs/pluto/Makefile.diet	2006-01-22 22:37:27.000000000 +0100
++++ strongswan-2.6.1/programs/pluto/Makefile	2006-02-04 13:47:17.000000000 +0100
+@@ -130,7 +130,7 @@
+ # libefence is a free memory allocation debugger
+ # Solaris 2 needs -lsocket -lnsl
+ LIBSPLUTO = $(OBJSGCRYPT) $(LIBDESLITE) $(FREESWANLIB) $(IPSECPOLICY_LIBS)
+-LIBSPLUTO+= -lgmp -lresolv # -lefence
++LIBSPLUTO+= -lgmp # -lresolv -lefence
+ 
+ 
+ ifeq ($(USE_VENDORID),true)
+@@ -183,7 +183,7 @@
+ endif
+ 
+ LIBSADNS = $(FREESWANLIB)
+-LIBSADNS += -lresolv # -lefence
++LIBSADNS += # -lresolv -lefence
+ 
+ # Solaris needs -lsocket -lnsl
+ LIBSWHACK = ${FREESWANLIB}
+--- strongswan-2.6.1/programs/starter/interfaces.h.diet	2006-01-06 21:24:07.000000000 +0100
++++ strongswan-2.6.1/programs/starter/interfaces.h	2006-02-04 13:47:17.000000000 +0100
+@@ -17,7 +17,7 @@
+ #ifndef _STARTER_INTERFACES_H_
+ #define _STARTER_INTERFACES_H_
+ 
+-#include <linux/if.h>
++#include <net/if.h>
+ 
+ #include "../pluto/constants.h"
+ 
+--- strongswan-2.6.1/programs/starter/starterwhack.c.diet	2006-01-06 14:54:53.000000000 +0100
++++ strongswan-2.6.1/programs/starter/starterwhack.c	2006-02-04 13:47:17.000000000 +0100
+@@ -17,7 +17,7 @@
+ #include <sys/types.h>
+ #include <sys/socket.h>
+ #include <sys/un.h>
+-#include <linux/stddef.h>
++#include <stddef.h>
+ #include <unistd.h>
+ #include <errno.h>
+ 
+--- strongswan-2.6.1/programs/starter/interfaces.c.diet	2006-02-04 13:47:59.000000000 +0100
++++ strongswan-2.6.1/programs/starter/interfaces.c	2006-02-04 13:48:16.000000000 +0100
+@@ -16,7 +16,7 @@
+ 
+ #include <sys/socket.h>
+ #include <sys/ioctl.h>
+-#include <linux/if.h>
++#include <net/if.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <unistd.h>

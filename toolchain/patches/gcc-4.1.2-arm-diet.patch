@@ -1,0 +1,156 @@
+--- gcc-4.1.2/gcc/config/arm/linux-elf.h.diet	2005-10-10 03:04:31.000000000 +0200
++++ gcc-4.1.2/gcc/config/arm/linux-elf.h	2008-04-11 09:19:29.000000000 +0200
+@@ -53,6 +53,14 @@
+ 
+ #define LINUX_TARGET_INTERPRETER "/lib/ld-linux.so.2"
+ 
++#if defined(__dietlibc__)
++# undef LINUX_TARGET_INTERPRETER 
++# if TARGET_BIG_ENDIAN_DEFAULT
++#  define LINUX_TARGET_INTERPRETER "/opt/diet/lib-armeb/libdl.so"
++# else
++#  define LINUX_TARGET_INTERPRETER "/opt/diet/lib-arm/libdl.so"
++# endif
++#endif
+ #define LINUX_TARGET_LINK_SPEC  "%{h*} %{version:-v} \
+    %{b} \
+    %{static:-Bstatic} \
+--- gcc-4.1.2/gcc/config/arm/arm.h.diet	2005-11-04 16:02:51.000000000 +0100
++++ gcc-4.1.2/gcc/config/arm/arm.h	2008-04-11 09:23:53.000000000 +0200
+@@ -29,6 +29,15 @@
+ /* The architecture define.  */
+ extern char arm_arch_name[];
+ 
++#if defined(__dietlibc__)
++#undef MD_STARTFILE_PREFIX
++#if TARGET_BIG_ENDIAN_DEFAULT
++#define MD_STARTFILE_PREFIX "/opt/diet/lib-armeb"
++#else
++#define MD_STARTFILE_PREFIX "/opt/diet/lib-arm"
++#endif
++#endif
++
+ /* Target CPU builtins.  */
+ #define TARGET_CPU_CPP_BUILTINS()			\
+   do							\
+@@ -136,7 +145,7 @@ extern GTY(()) rtx aof_pic_label;
+ 
+ 
+ #undef  CPP_SPEC
+-#define CPP_SPEC "%(subtarget_cpp_spec)					\
++#define CPP_SPEC "-D__dietlibc__ %(subtarget_cpp_spec)			\
+ %{msoft-float:%{mhard-float:						\
+ 	%e-msoft-float and -mhard_float may not be used together}}	\
+ %{mbig-endian:%{mlittle-endian:						\
+--- gcc-4.1.2/gcc/config/t-linux-dietlibc.diet	2008-04-11 08:59:54.000000000 +0200
++++ gcc-4.1.2/gcc/config/t-linux-dietlibc	2008-04-11 08:59:54.000000000 +0200
+@@ -0,0 +1,11 @@
++T_CFLAGS = -D__dietlibc__
++
++# Compile crtbeginS.o and crtendS.o with pic.
++CRTSTUFF_T_CFLAGS_S = $(CRTSTUFF_T_CFLAGS) -fPIC
++# Compile libgcc2.a with pic.
++TARGET_LIBGCC2_CFLAGS = -fPIC
++
++# Use unwind-dw2-fde
++LIB2ADDEH = $(srcdir)/unwind-dw2.c $(srcdir)/unwind-dw2-fde.c \
++  $(srcdir)/unwind-sjlj.c $(srcdir)/unwind-c.c
++LIB2ADDEHDEP = unwind.inc unwind-dw2-fde.h
+--- gcc-4.1.2/gcc/config/linux.h.diet	2005-08-06 15:26:35.000000000 +0200
++++ gcc-4.1.2/gcc/config/linux.h	2008-04-11 09:09:54.000000000 +0200
+@@ -39,6 +39,10 @@ Boston, MA 02110-1301, USA.  */
+    object constructed before entering `main'.  */
+    
+ #undef	STARTFILE_SPEC
++#if defined(__dietlibc__)
++#define STARTFILE_SPEC \
++  "%{shared:dyn_so_start.o%s} %{!shared:%{static:start.o%s dyn_start.o%s} %{!static:dstart.o%s dyn_dstart.o%s}}"
++#else
+ #if defined HAVE_LD_PIE
+ #define STARTFILE_SPEC \
+   "%{!shared: %{pg|p|profile:gcrt1.o%s;pie:Scrt1.o%s;:crt1.o%s}} \
+@@ -48,6 +52,7 @@ Boston, MA 02110-1301, USA.  */
+   "%{!shared: %{pg|p|profile:gcrt1.o%s;:crt1.o%s}} \
+    crti.o%s %{static:crtbeginT.o%s;shared|pie:crtbeginS.o%s;:crtbegin.o%s}"
+ #endif
++#endif
+ 
+ /* Provide a ENDFILE_SPEC appropriate for GNU/Linux.  Here we tack on
+    the GNU/Linux magical crtend.o file (see crtstuff.c) which
+@@ -56,8 +62,13 @@ Boston, MA 02110-1301, USA.  */
+    GNU/Linux "finalizer" file, `crtn.o'.  */
+ 
+ #undef	ENDFILE_SPEC
++#if defined(__dietlibc__)
++#define ENDFILE_SPEC \
++  "%{shared:dyn_dstop.o%s}%{!shared:%{static:dyn_stop.o%s}%{!static:dyn_dstop.o%s}}"
++#else
+ #define ENDFILE_SPEC \
+   "%{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s"
++#endif
+ 
+ /* This is for -profile to use -lc_p instead of -lc.  */
+ #ifndef CC1_SPEC
+--- gcc-4.1.2/gcc/system.h.diet	2005-08-16 02:13:53.000000000 +0200
++++ gcc-4.1.2/gcc/system.h	2008-04-11 08:59:54.000000000 +0200
+@@ -561,8 +561,10 @@ extern int vsnprintf(char *, size_t, con
+    the most likely value of A is B.  This feature was added at some point
+    between 2.95 and 3.0.  Let's use 3.0 as the lower bound for now.  */
+ #if (GCC_VERSION < 3000)
++#ifndef __builtin_expect
+ #define __builtin_expect(a, b) (a)
+ #endif
++#endif
+ 
+ /* Redefine abort to report an internal error w/o coredump, and
+    reporting the location of the error in the source file.  */
+--- gcc-4.1.2/gcc/unwind-dw2-fde-glibc.c.diet	2005-12-16 13:42:46.000000000 +0100
++++ gcc-4.1.2/gcc/unwind-dw2-fde-glibc.c	2008-04-11 08:59:54.000000000 +0200
+@@ -35,6 +35,7 @@
+ 
+ #include "tconfig.h"
+ #include "tsystem.h"
++#define inhibit_libc
+ #ifndef inhibit_libc
+ #include <link.h>
+ #endif
+--- gcc-4.1.2/libstdc++-v3/include/c_std/std_cstdio.h.diet	2005-10-30 23:21:50.000000000 +0100
++++ gcc-4.1.2/libstdc++-v3/include/c_std/std_cstdio.h	2008-04-11 08:59:54.000000000 +0200
+@@ -143,7 +143,7 @@ namespace std
+   using ::vsprintf;
+ }
+ 
+-#if _GLIBCXX_USE_C99
++#if _GLIBCXX_USE_C99 || defined(__dietlibc__)
+ 
+ #undef snprintf
+ #undef vfscanf
+--- gcc-4.1.2/ltconfig.diet	2006-07-04 22:30:34.000000000 +0200
++++ gcc-4.1.2/ltconfig	2008-04-11 08:59:54.000000000 +0200
+@@ -604,6 +604,7 @@ host_os=`echo $host | sed 's/^\([^-]*\)-
+ # Transform linux* to *-*-linux-gnu*, to support old configure scripts.
+ case $host_os in
+ linux-gnu*) ;;
++linux-dietlibc*) ;;
+ linux*) host=`echo $host | sed 's/^\(.*-.*-linux\)\(.*\)$/\1-gnu\2/'`
+ esac
+ 
+@@ -1274,6 +1275,18 @@ linux-gnu*)
+   dynamic_linker='GNU/Linux ld.so'
+   ;;
+ 
++linux-dietlibc*)
++  version_type=linux
++  need_lib_prefix=no
++  need_version=no
++  library_names_spec='${libname}${release}.so$versuffix ${libname}${release}.so$major $libname.so'
++  soname_spec='${libname}${release}.so$major'
++  shlibpath_var=LD_LIBRARY_PATH
++  shlibpath_overrides_runpath=no
++  hardcode_into_libs=yes
++  dynamic_linker="dietlibc libdl.so"
++  ;;
++
+ netbsd*)
+   need_lib_prefix=no
+   need_version=no

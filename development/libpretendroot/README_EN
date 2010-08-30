@@ -1,0 +1,18 @@
+The libpretendroot shared library can be used through the LD_PRELOAD
+mechanism. If this variable points to libpretendroot.so (with full path),
+the dynamic linker will load this library.
+
+In case the PRETENDROOT environment variable is unset, libpretendroot does
+nothing, it simply calls the original versions of the standard library
+calls.
+
+To use this library for its purpose, you have to set this variable to point
+to a filesystem directory which is readable and writeable by the real user.
+This directory will be used to store the fake owner and group for all the
+files whose fake owner and group is different from root.root.
+
+The pretendroot script can be used to set up LD_PRELOAD.
+
+
+Egmont Koblinger <egmont@uhulinux.hu>
+2002/09/14

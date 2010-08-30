@@ -1,0 +1,51 @@
+--- drbd-8.0.7/documentation/Makefile.install	2007-11-28 13:01:48.000000000 +0100
++++ drbd-8.0.7/documentation/Makefile	2007-11-28 13:02:45.000000000 +0100
+@@ -136,14 +136,14 @@
+ 	done ; $$ok
+ 	set -e; for f in $(MANPAGES) ; do \
+ 		s=$${f##*.}; \
+-		install -v -D -m 644 $$f $(PREFIX)/usr/share/man/man$$s/$$f ; \
++		install -v -D -m 644 $$f $(DESTDIR)$(PREFIX)/share/man/man$$s/$$f ; \
+ 	done
+ 	@ set -e; for i in $(LANGS); do $(MAKE) -C $$i install; done
+ 
+ uninstall:
+ 	@ set -e; for f in $(MANPAGES) ; do \
+ 		s=$${f##*.}; \
+-		rm -v $(PREFIX)/usr/share/man/man$$s/$$f ; \
++		rm -v $(DESTDIR)$(PREFIX)/share/man/man$$s/$$f ; \
+ 	done
+ 	@ set -e; for i in $(LANGS); do $(MAKE) -C $$i uninstall; done
+ 
+--- drbd-8.0.7/user/Makefile.install	2007-11-28 13:03:55.000000000 +0100
++++ drbd-8.0.7/user/Makefile	2007-11-28 13:04:50.000000000 +0100
+@@ -73,20 +73,20 @@
+ distclean: clean
+ 
+ install:
+-	install -d $(PREFIX)/sbin/
++	install -d $(DESTDIR)$(PREFIX)/sbin/
+ 	if getent group haclient > /dev/null 2> /dev/null ; then	\
+-		install -g haclient -m 4750 drbdsetup $(PREFIX)/sbin/ ;	\
+-		install -g haclient -m 4750 drbdmeta $(PREFIX)/sbin/ ;	\
+-		install -m 755 drbdadm $(PREFIX)/sbin/ ;		\
++		install -g haclient -m 4750 drbdsetup $(DESTDIR)$(PREFIX)/sbin/ ;	\
++		install -g haclient -m 4750 drbdmeta $(DESTDIR)$(PREFIX)/sbin/ ;	\
++		install -m 755 drbdadm $(DESTDIR)$(PREFIX)/sbin/ ;		\
+ 	else								\
+-		install -m 755 drbdsetup $(PREFIX)/sbin/ ;		\
+-		install -m 755 drbdmeta $(PREFIX)/sbin/ ;		\
+-		install -m 755 drbdadm $(PREFIX)/sbin/ ; 		\
++		install -m 755 drbdsetup $(DESTDIR)$(PREFIX)/sbin/ ;		\
++		install -m 755 drbdmeta $(DESTDIR)$(PREFIX)/sbin/ ;		\
++		install -m 755 drbdadm $(DESTDIR)$(PREFIX)/sbin/ ; 		\
+ 	fi
+ 
+ uninstall:
+-	rm -f $(PREFIX)/sbin/drbdsetup
+-	rm -f $(PREFIX)/sbin/drbdadm
++	rm -f $(DESTDIR)$(PREFIX)/sbin/drbdsetup
++	rm -f $(DESTDIR)$(PREFIX)/sbin/drbdadm
+ 
+ ###dependencies
+ drbdsetup.o:       drbdtool_common.h ../drbd/linux/drbd_limits.h

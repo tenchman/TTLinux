@@ -1,0 +1,15 @@
+--- libevent-2.0.4-alpha/configure.in.fd_mask	2010-03-02 02:22:34.000000000 +0100
++++ libevent-2.0.4-alpha/configure.in	2010-05-04 14:10:02.000000000 +0200
+@@ -2,10 +2,11 @@ dnl configure.in for libevent
+ dnl Dug Song <dugsong@monkey.org>
+ AC_PREREQ(2.59c)
+ AC_INIT(event.c)
++AC_INIT(libevent ,2.0.4-alpha)
+ 
+ AC_CONFIG_MACRO_DIR([m4])
+ 
+-AM_INIT_AUTOMAKE(libevent,2.0.4-alpha)
++AM_INIT_AUTOMAKE([silent-rules])
+ AM_CONFIG_HEADER(config.h)
+ AC_DEFINE(NUMERIC_VERSION, 0x02000400, [Numeric representation of the version])
+ 

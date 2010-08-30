@@ -1,0 +1,9 @@
+config CONFIG_DYNDB
+  bool "dyndb - a dynamical database"
+  default n
+  help
+    A dyndb is database with 1 key <-> 1 value relation. The dyndb package
+    contains fast and reliable tools to create, change and read that database.
+    It also contains the library functions used by that programs.
+    
+    http://www.ohse.de/uwe/dyndb/

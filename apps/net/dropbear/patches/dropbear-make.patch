@@ -1,0 +1,11 @@
+--- dropbear-0.49/Makefile.in.make	2007-02-22 16:51:35.000000000 +0100
++++ dropbear-0.49/Makefile.in	2007-03-19 20:02:13.000000000 +0100
+@@ -159,7 +159,7 @@
+ 
+ # scp doesn't use the libs so is special.
+ scp: $(SCPOBJS)  $(HEADERS) Makefile
+-	$(CC) $(LDFLAGS) -o $@$(EXEEXT) $(SCPOBJS)
++	$(CC) $(LDFLAGS) -o $@$(EXEEXT) $(SCPOBJS) -lcompat
+ 
+ 
+ # multi-binary compilation.

@@ -1,0 +1,62 @@
+diff -up busybox-1.15.2/include/applets.h.pgrphack busybox-1.15.2/include/applets.h
+--- busybox-1.15.2/include/applets.h.pgrphack	2009-11-30 16:49:38.000000000 +0100
++++ busybox-1.15.2/include/applets.h	2009-11-30 16:52:03.000000000 +0100
+@@ -289,6 +289,7 @@ IF_OPENVT(APPLET(openvt, _BB_DIR_USR_BIN
+ IF_PASSWD(APPLET(passwd, _BB_DIR_USR_BIN, _BB_SUID_REQUIRE))
+ IF_PATCH(APPLET(patch, _BB_DIR_USR_BIN, _BB_SUID_DROP))
+ IF_PGREP(APPLET(pgrep, _BB_DIR_USR_BIN, _BB_SUID_DROP))
++IF_PGRPHACK(APPLET_ODDNAME(pgrphack, chpst, _BB_DIR_USR_BIN, _BB_SUID_DROP, pgrphack))
+ IF_PIDOF(APPLET(pidof, _BB_DIR_BIN, _BB_SUID_DROP))
+ IF_PING(APPLET(ping, _BB_DIR_BIN, _BB_SUID_MAYBE))
+ IF_PING6(APPLET(ping6, _BB_DIR_BIN, _BB_SUID_MAYBE))
+diff -up busybox-1.15.2/include/usage.h.pgrphack busybox-1.15.2/include/usage.h
+--- busybox-1.15.2/include/usage.h.pgrphack	2009-10-08 02:59:09.000000000 +0200
++++ busybox-1.15.2/include/usage.h	2009-11-30 16:49:38.000000000 +0100
+@@ -451,6 +451,10 @@
+        "account prog args"
+ #define envuidgid_full_usage "\n\n" \
+        "Set $UID to account's uid and $GID to account's gid and run PROG"
++#define pgrphack_trivial_usage \
++       "child"
++#define pgrphack_full_usage \
++       "Run a program in a separate process group."
+ #define envdir_trivial_usage \
+        "dir prog args"
+ #define envdir_full_usage "\n\n" \
+diff -up busybox-1.15.2/runit/chpst.c.pgrphack busybox-1.15.2/runit/chpst.c
+--- busybox-1.15.2/runit/chpst.c.pgrphack	2009-09-26 15:14:57.000000000 +0200
++++ busybox-1.15.2/runit/chpst.c	2009-11-30 16:49:38.000000000 +0100
+@@ -217,6 +217,12 @@ int chpst_main(int argc UNUSED_PARAM, ch
+ 			bb_show_usage();
+ 	}
+ 
++	// pgrphack
++	if (ENABLE_CHPST && applet_name[0] == 'c') {
++		*argv++;
++		opt |= OPT_P;
++	}
++	
+ 	// envdir?
+ 	if (ENABLE_ENVDIR && applet_name[3] == 'd') {
+ 		env_dir = *argv++;
+diff -up busybox-1.15.2/runit/Config.in.pgrphack busybox-1.15.2/runit/Config.in
+--- busybox-1.15.2/runit/Config.in.pgrphack	2009-09-26 15:14:57.000000000 +0200
++++ busybox-1.15.2/runit/Config.in	2009-11-30 16:49:38.000000000 +0100
+@@ -80,4 +80,9 @@ config SOFTLIMIT
+ 	help
+ 	  Sets soft resource limits as specified by options
+ 
++config PGRPHACK
++	bool "pgrphack"
++	help
++	  Runs a program in a separate process group.
++
+ endmenu
+diff -up busybox-1.15.2/runit/Kbuild.pgrphack busybox-1.15.2/runit/Kbuild
+--- busybox-1.15.2/runit/Kbuild.pgrphack	2009-09-26 15:14:57.000000000 +0200
++++ busybox-1.15.2/runit/Kbuild	2009-11-30 16:49:38.000000000 +0100
+@@ -15,3 +15,4 @@ lib-$(CONFIG_ENVDIR) += chpst.o
+ lib-$(CONFIG_ENVUIDGID) += chpst.o
+ lib-$(CONFIG_SETUIDGID) += chpst.o
+ lib-$(CONFIG_SOFTLIMIT) += chpst.o
++lib-$(CONFIG_PGRPHACK) += chpst.o

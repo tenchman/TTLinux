@@ -1,0 +1,25 @@
+--- dietlibc-0.30/i386/start.S.data_start	2006-10-30 21:06:23.000000000 +0100
++++ dietlibc-0.30/i386/start.S	2006-10-31 18:56:09.000000000 +0100
+@@ -68,3 +68,10 @@
+ .Lstart:
+ 	.size	 _start,.Lstart-_start
+ 
++/* Define a symbol for the first piece of initialized data.  */
++.data
++.globl __data_start
++__data_start:
++.long 0
++.weak data_start
++data_start = __data_start
+--- dietlibc-0.30/i386/setjmp.S.size	2006-10-26 08:50:17.000000000 +0200
++++ dietlibc-0.30/i386/setjmp.S	2006-10-26 08:51:11.000000000 +0200
+@@ -16,7 +16,8 @@
+ 	call	__sigsetjmp_internal
+ 	add	$8,%esp
+ 	ret
+-
++.size __setjmp,.-__setjmp;
++.size setjmp,.-setjmp;
+ 
+ .globl __sigsetjmp
+ .type __sigsetjmp,@function

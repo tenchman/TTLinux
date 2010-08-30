@@ -1,0 +1,432 @@
+--- zinq-djbdns-0.07/sig.h.dumpcache_v4	2009-05-03 19:53:04.000000000 +0200
++++ zinq-djbdns-0.07/sig.h	2009-05-03 19:53:04.000000000 +0200
+@@ -0,0 +1,25 @@
++#ifndef SIG_H
++#define SIG_H
++
++extern int sig_alarm;
++extern int sig_child;
++extern int sig_cont;
++extern int sig_hangup;
++extern int sig_pipe;
++extern int sig_term;
++
++extern void (*sig_defaulthandler)();
++extern void (*sig_ignorehandler)();
++
++extern void sig_catch(int,void (*)());
++#define sig_ignore(s) (sig_catch((s),sig_ignorehandler))
++#define sig_uncatch(s) (sig_catch((s),sig_defaulthandler))
++
++extern void sig_block(int);
++extern void sig_unblock(int);
++extern void sig_blocknone(void);
++extern void sig_pause(void);
++
++extern void sig_dfl(int);
++
++#endif
+--- zinq-djbdns-0.07/cache.h.dumpcache_v4	2009-05-03 00:53:45.000000000 +0200
++++ zinq-djbdns-0.07/cache.h	2009-05-03 19:53:04.000000000 +0200
+@@ -8,5 +8,7 @@ extern uint64 cache_motion;
+ extern int cache_init(unsigned long);
+ extern void cache_set(const char *,unsigned int,const char *,unsigned int,uint32);
+ extern char *cache_get(const char *,unsigned int,unsigned int *,uint32 *);
++extern int cache_dump(void);
++extern int cache_slurp(const char *);
+ 
+ #endif
+--- zinq-djbdns-0.07/cache.c.dumpcache_v4	2009-05-03 00:53:45.000000000 +0200
++++ zinq-djbdns-0.07/cache.c	2009-05-03 19:53:04.000000000 +0200
+@@ -1,3 +1,9 @@
++#include <stdio.h>
++#include <unistd.h>
++#include "env.h"
++#include "error.h"
++#include "open.h"
++#include "openreadclose.h"
+ #include "alloc.h"
+ #include "byte.h"
+ #include "uint32.h"
+@@ -206,3 +212,95 @@ int cache_init(unsigned long cachesize)
+ 
+   return 1;
+ }
++
++static int fd;
++
++static int cache_writeline(const char *buf, unsigned int len)
++{
++  int w;
++
++  while (len) {
++    w = write(fd,buf,len);
++    if (w == -1) {
++      if (errno == error_intr) continue;
++      close(fd);
++      return -1;
++    }
++    buf += w;
++    len -= w;
++  }
++  return 0;
++}
++
++int cache_dump(void)
++{
++  static char *fn;
++  static char *fntmp;
++  uint32 pos;
++  unsigned int len;
++
++  fn = env_get("DUMPCACHE");
++  if (!fn) return 999;
++  fntmp = env_get("DUMPCACHETMP");
++  if (!fntmp) return 999;
++  fd = open_trunc(fntmp);
++  if (fd == -1) return -1;
++
++  pos = oldest;
++  while (pos < unused) {
++    len = get4(pos + 4) + get4(pos + 8) + 16;
++    if (cache_writeline(x + pos + 4, len)) return -1;
++    pos += 4 + len;
++  }
++  pos = hsize;
++  while (pos < writer) {
++    len = get4(pos + 4) + get4(pos + 8) + 16;
++    if (cache_writeline(x + pos + 4, len)) return -1;
++    pos += 4 + len;
++  }
++
++  if (fsync(fd) == -1) return -1;
++  if (close(fd) == -1) return -1;
++  if (rename(fntmp,fn) == -1) return -1;
++  return 0;
++}
++
++int cache_slurp(const char *fn)
++{
++  static stralloc buf = {0};
++  char *p;
++  uint32 pos;
++  unsigned int len;
++  uint32 keylen;
++  uint32 datalen;
++  struct tai now;
++  struct tai expire;
++  int nb;
++
++  if (openreadclose(fn,&buf,16384) != 1) goto DIE;
++  tai_now(&now);
++  p = buf.s;
++  pos = 0;
++  len = buf.len;
++  nb = 0;
++  while (pos + 16 <= len) {
++    uint32_unpack(p + pos, &keylen);
++    uint32_unpack(p + pos + 4, &datalen);
++    tai_unpack(p + pos + 8, &expire);
++    pos += 16;
++    if (pos + keylen + datalen > len) break; /* missing data */
++    if (!tai_less(&expire,&now)) {
++      tai_sub(&expire,&expire,&now);
++      cache_set(p + pos, keylen, p + pos + keylen, datalen, (unsigned int)expire.x);
++    }
++    pos += keylen + datalen;
++    nb++;
++  }
++  alloc_free(buf.s); buf.s = 0;
++  return nb;
++
++ DIE:
++  alloc_free(buf.s); buf.s = 0;
++  if (errno == error_noent) return 0;
++  return -1;
++}
+--- zinq-djbdns-0.07/dnscache.c.dumpcache_v4	2009-05-03 19:53:04.000000000 +0200
++++ zinq-djbdns-0.07/dnscache.c	2009-05-03 19:53:04.000000000 +0200
+@@ -25,6 +25,8 @@
+ #include "okclient.h"
+ #include "droproot.h"
+ 
++#include "sig.h"
++
+ static int packetquery(char *buf,unsigned int len,char **q,char qtype[2],char qclass[2],char id[2])
+ {
+   unsigned int pos;
+@@ -313,6 +315,15 @@ void t_new(int fd)
+   log_tcpopen(x->ip,x->port);
+ }
+ 
++static void do_dump(void)
++{
++  int r;
++  r = cache_dump();
++  if (r < 0)
++    r = errno;
++  log_dump(r);
++}
++
+ #define FATAL "dnscache: fatal: "
+ 
+ iopause_fd *io = 0;
+@@ -484,6 +495,16 @@ int main()
+   scan_ulong(x,&cachesize);
+   if (!cache_init(cachesize))
+     strerr_die3x(111,FATAL,"not enough memory for cache of size ",x);
++#ifdef DUMPCACHE
++  x = env_get("SLURPCACHE");
++  if (x) {
++    int nb = cache_slurp(x);
++    if (nb < 0)
++      strerr_die4sys(111,FATAL,"unable to slurp cache ",x," : ");
++    else
++      log_slurp(nb);
++  }
++#endif
+ 
+   if (env_get("HIDETTL"))
+     response_hidettl();
+@@ -503,6 +524,11 @@ int main()
+       strerr_die4sys(111,FATAL,"unable to listen on TCP socket for IP ",iperr,": ");
+     }
+ 
++#ifdef DUMPCACHE
++  sig_catch(sig_alarm, do_dump);
++  sig_catch(sig_term, do_dump);
++#endif
++
+   log_startup();
+   doit();
+ }
+--- zinq-djbdns-0.07/configure.ac.dumpcache_v4	2009-05-03 00:53:45.000000000 +0200
++++ zinq-djbdns-0.07/configure.ac	2009-05-03 19:53:04.000000000 +0200
+@@ -16,6 +16,9 @@ AC_PROG_RANLIB
+ # Checks for header files.
+ AC_HEADER_DIRENT
+ 
++# Checks for some functions.
++AC_CHECK_FUNCS(sigprocmask sigaction)
++
+ # Checks for typedefs, structures, and compiler characteristics.
+ AC_C_CONST
+ AC_TYPE_OFF_T
+--- zinq-djbdns-0.07/sig.c.dumpcache_v4	2009-05-03 19:53:04.000000000 +0200
++++ zinq-djbdns-0.07/sig.c	2009-05-03 19:53:04.000000000 +0200
+@@ -0,0 +1,12 @@
++#include <signal.h>
++#include "sig.h"
++
++int sig_alarm = SIGALRM;
++int sig_child = SIGCHLD;
++int sig_cont = SIGCONT;
++int sig_hangup = SIGHUP;
++int sig_pipe = SIGPIPE;
++int sig_term = SIGTERM;
++
++void (*sig_defaulthandler)() = SIG_DFL;
++void (*sig_ignorehandler)() = SIG_IGN;
+--- zinq-djbdns-0.07/sig_pause.c.dumpcache_v4	2009-05-03 19:53:04.000000000 +0200
++++ zinq-djbdns-0.07/sig_pause.c	2009-05-03 19:53:04.000000000 +0200
+@@ -0,0 +1,14 @@
++#include <signal.h>
++#include "sig.h"
++#include "config.h"
++
++void sig_pause(void)
++{
++#ifdef HAVE_SIGPROCMASK
++  sigset_t ss;
++  sigemptyset(&ss);
++  sigsuspend(&ss);
++#else
++  sigpause(0);
++#endif
++}
+--- zinq-djbdns-0.07/Makefile.am.dumpcache_v4	2009-05-03 00:53:45.000000000 +0200
++++ zinq-djbdns-0.07/Makefile.am	2009-05-03 19:58:10.000000000 +0200
+@@ -4,7 +4,7 @@ dnsroots.global 
+ sysconf_DATA = dnsroots.global
+ 
+ noinst_LIBRARIES = alloc.a buffer.a byte.a libcdb.a dns.a env.a getopt.a \
+-libtai.a unix.a
++libtai.a unix.a sig.a
+ 
+ alloc_a_SOURCES = alloc.c alloc_re.c getln.c getln2.c \
+ stralloc_cat.c stralloc_catb.c stralloc_cats.c stralloc_copy.c \
+@@ -40,6 +40,8 @@ readclose.c seek_set.c socket_accept.c s
+ socket_listen.c socket_recv.c socket_send.c socket_tcp.c socket_udp.c \
+ ndelay.h readclose.h
+ 
++sig_a_SOURCES = sig.c sig_block.c sig_catch.c sig_pause.c sig.h
++
+ dist_bin_SCRIPTS = dnstracesort
+ 
+ bin_PROGRAMS = axfr-get axfrdns axfrdns-conf dnscache dnscache-conf \
+@@ -85,12 +87,12 @@ axfrdns_conf_LDADD          = buffer.a u
+ 
+ cachetest_SOURCES = cachetest.c cache.c buffer.h exit.h cache.h uint32.h \
+ uint64.h str.h
+-cachetest_LDADD   = libtai.a buffer.a alloc.a unix.a byte.a
++cachetest_LDADD   = libtai.a buffer.a env.a unix.a alloc.a byte.a
+ 
+ dnscache_SOURCES = dnscache.c droproot.c okclient.c log.c cache.c query.c \
+ response.c dd.c roots.c iopause.c prot.c roots.h query.h cache.h log.h \
+ okclient.h direntry.h
+-dnscache_LDADD   = dns.a env.a alloc.a buffer.a libtai.a unix.a byte.a
++dnscache_LDADD   = dns.a env.a alloc.a buffer.a libtai.a unix.a byte.a sig.a
+ 
+ dnscache_conf_SOURCES        = dnscache-conf.c generic-conf.c generic-conf.h \
+ auto_home.h
+--- zinq-djbdns-0.07/sig_catch.c.dumpcache_v4	2009-05-03 19:53:04.000000000 +0200
++++ zinq-djbdns-0.07/sig_catch.c	2009-05-03 19:53:04.000000000 +0200
+@@ -0,0 +1,16 @@
++#include <signal.h>
++#include "sig.h"
++#include "config.h"
++
++void sig_catch(int sig,void (*f)())
++{
++#ifdef HAVE_SIGACTION
++  struct sigaction sa;
++  sa.sa_handler = f;
++  sa.sa_flags = 0;
++  sigemptyset(&sa.sa_mask);
++  sigaction(sig,&sa,(struct sigaction *) 0);
++#else
++  signal(sig,f); /* won't work under System V, even nowadays---dorks */
++#endif
++}
+--- zinq-djbdns-0.07/sig_block.c.dumpcache_v4	2009-05-03 19:53:04.000000000 +0200
++++ zinq-djbdns-0.07/sig_block.c	2009-05-03 19:53:04.000000000 +0200
+@@ -0,0 +1,38 @@
++#include <signal.h>
++#include "sig.h"
++#include "config.h"
++
++void sig_block(int sig)
++{
++#ifdef HAVE_SIGPROCMASK
++  sigset_t ss;
++  sigemptyset(&ss);
++  sigaddset(&ss,sig);
++  sigprocmask(SIG_BLOCK,&ss,(sigset_t *) 0);
++#else
++  sigblock(1 << (sig - 1));
++#endif
++}
++
++void sig_unblock(int sig)
++{
++#ifdef HAVE_SIGPROCMASK
++  sigset_t ss;
++  sigemptyset(&ss);
++  sigaddset(&ss,sig);
++  sigprocmask(SIG_UNBLOCK,&ss,(sigset_t *) 0);
++#else
++  sigsetmask(sigsetmask(~0) & ~(1 << (sig - 1)));
++#endif
++}
++
++void sig_blocknone(void)
++{
++#ifdef HAVE_SIGPROCMASK
++  sigset_t ss;
++  sigemptyset(&ss);
++  sigprocmask(SIG_SETMASK,&ss,(sigset_t *) 0);
++#else
++  sigsetmask(0);
++#endif
++}
+--- zinq-djbdns-0.07/log.h.dumpcache_v4	2009-05-03 19:53:04.000000000 +0200
++++ zinq-djbdns-0.07/log.h	2009-05-03 19:53:04.000000000 +0200
+@@ -4,6 +4,10 @@
+ #include "uint64.h"
+ 
+ extern void log_startup(void);
++#ifdef DUMPCACHE
++extern void log_slurp(int);
++extern void log_dump(int);
++#endif
+ extern void log_listen(const char *);
+ 
+ extern void log_query(uint64 *,const char *,unsigned int,const char *,const char *,const char *);
+--- zinq-djbdns-0.07/log.c.dumpcache_v4	2009-05-03 19:53:04.000000000 +0200
++++ zinq-djbdns-0.07/log.c	2009-05-03 19:53:04.000000000 +0200
+@@ -101,6 +101,20 @@ void log_listen(const char addr[4])
+   line();
+ }
+ 
++#ifdef DUMPCACHE
++void log_slurp(int nb)
++{
++  string("slurp "); number(nb);
++  line();
++}
++
++void log_dump(int err)
++{
++  string("dump "); number(err);
++  line();
++}
++#endif
++
+ void log_query(uint64 *qnum,const char client[4],unsigned int port,const char id[2],const char *q,const char qtype[2])
+ {
+   string("query "); number(*qnum); space();
+--- zinq-djbdns-0.07/dnscache-conf.c.dumpcache_v4	2009-05-03 00:53:45.000000000 +0200
++++ zinq-djbdns-0.07/dnscache-conf.c	2009-05-03 19:53:04.000000000 +0200
+@@ -28,6 +28,10 @@ char *dir;
+ char *user;
+ char *loguser;
+ struct passwd *pw;
++#ifdef DUMPCACHE
++int useruid;
++int usergid;
++#endif
+ const char *myip;
+ 
+ uint32 seed[32];
+@@ -77,6 +81,14 @@ int main(int argc,char **argv)
+   myip = argv[4];
+   if (!myip) myip = "127.0.0.1";
+ 
++#ifdef DUMPCACHE
++  pw = getpwnam(user);
++  seed_addtime();
++  if (!pw)
++    strerr_die3x(111,FATAL,"unknown account ",user);
++  useruid = pw->pw_uid;
++  usergid = pw->pw_gid;
++#endif
+   pw = getpwnam(loguser);
+   seed_addtime();
+   if (!pw)
+@@ -118,6 +130,14 @@ int main(int argc,char **argv)
+   seed_addtime(); perm(0644);
+   seed_addtime(); start("env/MERGEQUERIES"); outs("1\n"); finish();
+   seed_addtime(); perm(0644);
++#ifdef DUMPCACHE
++  seed_addtime(); start("env/SLURPCACHE"); outs("dump/slurpcache\n"); finish();
++  seed_addtime(); perm(0644);
++  seed_addtime(); start("env/DUMPCACHE"); outs("dump/dumpcache\n"); finish();
++  seed_addtime(); perm(0644);
++  seed_addtime(); start("env/DUMPCACHETMP"); outs("dump/dumpcache.tmp\n"); finish();
++  seed_addtime(); perm(0644);
++#endif
+   seed_addtime(); start("run");
+   outs("#!/bin/sh\nexec 2>&1\nexec <seed\nexec envdir ./env sh -c '\n  exec envuidgid "); outs(user);
+   outs(" softlimit -o250 -d \"$DATALIMIT\" ");
+@@ -129,6 +149,11 @@ int main(int argc,char **argv)
+   seed_addtime(); perm(0755);
+   seed_addtime(); makedir("root");
+   seed_addtime(); perm(02755);
++#ifdef DUMPCACHE
++  seed_addtime(); makedir("root/dump");
++  seed_addtime(); owner(useruid,usergid);
++  seed_addtime(); perm(02755);
++#endif
+   seed_addtime(); makedir("root/ip");
+   seed_addtime(); perm(02755);
+   seed_addtime(); start("root/ip/127.0.0.1"); finish();

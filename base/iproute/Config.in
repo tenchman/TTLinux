@@ -1,0 +1,10 @@
+# vim:set syntax=kconfig:
+config CONFIG_IPROUTE
+  bool "iproute - Advanced IP routing and network device configuration tools"
+  default y
+  help
+    The iproute package contains networking utilities (ip and rtmon, for
+    example) which are designed to use the advanced networking
+    capabilities of the Linux 2.4.x and 2.6.x kernel.
+
+    http://linux-net.osdl.org/index.php/Iproute2

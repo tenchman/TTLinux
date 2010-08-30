@@ -1,0 +1,28 @@
+diff -up fgetty-0.6/Makefile.make fgetty-0.6/Makefile
+--- fgetty-0.6/Makefile.make	2002-01-24 02:35:22.000000000 +0100
++++ fgetty-0.6/Makefile	2008-03-18 14:46:19.000000000 +0100
+@@ -10,13 +10,10 @@ CROSS=
+ LDFLAGS=-s
+ 
+ %.o: %.c
+-#	gcc -march=i386 -mcpu=i386 -pipe -Os -fomit-frame-pointer -I../dietlibc/include -c $^ -DTEST
+-	$(DIET) $(CROSS)gcc -pipe -Os -fomit-frame-pointer -I../dietlibc/include -c $^ -DTEST
+-#	gcc -march=i386 -mcpu=i386 -pipe -g -I../dietlibc/include -DTEST -c $^
+-	strip -x -R .comment -R .note $@
++	$(CC) $(CFLAGS) -c $^
+ 
+ %: %.o
+-	$(DIET) $(CROSS)gcc -nostdlib -o $@ $^ $(LDFLAGS)
++	$(CC) -o $@ $^ $(LDFLAGS)
+ 
+ fgetty: fgetty.o fmt_ulong.o
+ 
+@@ -28,7 +25,7 @@ debug: fgetty.c fmt_ulong.o
+ 	gcc -g -o debug fgetty.c fmt_ulong.o -DDEBUG
+ 
+ install:
+-	install -d $(DESTDIR)/bin $(DESTDIR)/sbin
++	install -d $(DESTDIR)/bin $(DESTDIR)/sbin $(DESTDIR)/usr/man/man8/
+ 	install login $(DESTDIR)/bin/login1
+ 	install login2 $(DESTDIR)/bin
+ 	install fgetty $(DESTDIR)/sbin

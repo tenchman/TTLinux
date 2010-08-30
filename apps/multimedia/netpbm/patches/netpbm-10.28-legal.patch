@@ -1,0 +1,22 @@
+--- netpbm-10.28/converter/other/Makefile.legal	2005-04-12 05:55:29.000000000 +0200
++++ netpbm-10.28/converter/other/Makefile	2005-06-10 10:54:01.685885728 +0200
+@@ -7,7 +7,7 @@ VPATH=.:$(SRCDIR)/$(SUBDIR)
+ 
+ include $(BUILDDIR)/Makefile.config
+ 
+-SUBDIRS = jbig pnmtopalm jpeg2000 cameratopam
++SUBDIRS = pnmtopalm jpeg2000 cameratopam
+ ifneq ($(BUILD_FIASCO), N)
+   SUBDIRS += fiasco
+ endif
+--- netpbm-10.28/converter/ppm/Makefile.legal	2004-10-16 20:55:28.000000000 +0200
++++ netpbm-10.28/converter/ppm/Makefile	2005-06-10 10:56:04.616197480 +0200
+@@ -7,7 +7,7 @@ VPATH=.:$(SRCDIR)/$(SUBDIR)
+ 
+ include $(BUILDDIR)/Makefile.config
+ 
+-SUBDIRS = hpcdtoppm ppmtompeg
++SUBDIRS = ppmtompeg
+ 
+ PORTBINARIES =	411toppm eyuvtoppm gouldtoppm ilbmtoppm imgtoppm \
+ 		leaftoppm mtvtoppm neotoppm \

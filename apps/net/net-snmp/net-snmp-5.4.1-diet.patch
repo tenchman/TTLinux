@@ -1,0 +1,371 @@
+--- net-snmp-5.4.1/apps/snmpnetstat/if.c.diet	2006-01-27 12:07:28.000000000 +0100
++++ net-snmp-5.4.1/apps/snmpnetstat/if.c	2007-09-17 21:47:38.000000000 +0200
+@@ -849,18 +849,30 @@
+ static void
+ timerPause(void)
+ {
+-#ifdef HAVE_SIGHOLD
++#if defined(HAVE_SIGPROCMASK)
++    sigset_t newset, oldset;
++    sigemptyset(&newset);
++    sigaddset(&newset, SIGALRM);
++    sigprocmask(SIG_BLOCK, &newset, &oldset);
++    if (!signalled) {
++	sigemptyset(&newset);
++	sigsuspend(&newset);
++    }
++    sigprocmask(SIG_SETMASK, &oldset, NULL);
++#else
++# ifdef HAVE_SIGHOLD
+     sighold(SIGALRM);
+     if (!signalled) {
+         sigpause(SIGALRM);
+     }
+-#else
++# else
+     int             oldmask;
+     oldmask = sigblock(sigmask(SIGALRM));
+     if (!signalled) {
+         sigpause(0);
+     }
+     sigsetmask(oldmask);
++# endif
+ #endif
+ }
+ 
+--- net-snmp-5.4.1/include/net-snmp/net-snmp-config.h.in.diet	2007-07-19 23:00:35.000000000 +0200
++++ net-snmp-5.4.1/include/net-snmp/net-snmp-config.h.in	2007-09-17 21:47:38.000000000 +0200
+@@ -717,6 +717,12 @@
+ /* Define to 1 if you have the <security/cryptoki.h> header file. */
+ #undef HAVE_SECURITY_CRYPTOKI_H
+ 
++/* Define to 1 if you have the `inet_ntop' function. */
++#undef HAVE_INET_NTOP
++
++/* Define to 1 if you have the `inet_pton' function. */
++#undef HAVE_INET_PTON
++
+ /* Define to 1 if you have the `select' function. */
+ #undef HAVE_SELECT
+ 
+@@ -747,6 +753,9 @@
+ /* Define to 1 if you have the <sgtty.h> header file. */
+ #undef HAVE_SGTTY_H
+ 
++/* Define to 1 if you have the `sigprocmask' function. */
++#undef HAVE_SIGPROCMASK
++
+ /* Define to 1 if you have the `sigaction' function. */
+ #undef HAVE_SIGACTION
+ 
+@@ -1058,6 +1067,9 @@
+ /* Define to 1 if you have the `usleep' function. */
+ #undef HAVE_USLEEP
+ 
++/* Define to 1 if you have the <utmp.h> header file. */
++#undef HAVE_UTMP_H
++
+ /* Define to 1 if you have the <utmpx.h> header file. */
+ #undef HAVE_UTMPX_H
+ 
+--- /dev/null	2007-09-16 17:50:26.099993059 +0200
++++ net-snmp-5.4.1/snmplib/inet_lnaof.c	2007-09-17 21:47:38.000000000 +0200
+@@ -0,0 +1,21 @@
++#include <net-snmp/net-snmp-config.h>
++
++#ifndef HAVE_INET_LNAOF
++
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include <arpa/inet.h>
++	      
++
++unsigned long inet_lnaof(struct in_addr in)
++{
++    register unsigned long i = ntohl(in.s_addr);
++    unsigned long          ii = (i >> 24) & 0xff;
++    if (0 == (ii & 0x80))
++        return (0x00ffffff & i);
++    if (0x80 == (ii & 0xc0))
++        return (0x0000ffff & i);
++    return (0x000000ff & i);
++}
++
++#endif
+--- /dev/null	2007-09-16 17:50:26.099993059 +0200
++++ net-snmp-5.4.1/snmplib/inet_netof.c	2007-09-17 21:47:38.000000000 +0200
+@@ -0,0 +1,19 @@
++#include <net-snmp/net-snmp-config.h>
++
++#ifndef HAVE_INET_NETOF
++
++#include <netinet/in.h>
++  
++unsigned long inet_netof(in)
++struct in_addr in;
++{
++  unsigned long i = ntohl(in.s_addr);
++
++  if (IN_CLASSA(i))
++    return (((i)&IN_CLASSA_NET) >> IN_CLASSA_NSHIFT);
++  else if (IN_CLASSB(i))
++    return (((i)&IN_CLASSB_NET) >> IN_CLASSB_NSHIFT);
++  else
++    return (((i)&IN_CLASSC_NET) >> IN_CLASSC_NSHIFT);
++}       
++#endif
+--- net-snmp-5.4.1/snmplib/inet_ntop.c.diet	2006-09-15 02:48:50.000000000 +0200
++++ net-snmp-5.4.1/snmplib/inet_ntop.c	2007-09-17 21:47:38.000000000 +0200
+@@ -18,6 +18,8 @@
+  */
+ 
+ #include <net-snmp/net-snmp-config.h>
++#include <sys/socket.h>
++#include <errno.h>
+ 
+ #ifndef HAVE_INET_NTOP
+ 
+--- net-snmp-5.4.1/snmplib/Makefile.in.diet	2007-06-18 23:34:43.000000000 +0200
++++ net-snmp-5.4.1/snmplib/Makefile.in	2007-09-17 21:47:38.000000000 +0200
+@@ -146,7 +146,8 @@
+ 	snmp_secmod.c @security_src_list@ snmp_version.c        \
+ 	check_varbind.c container.c container_binary_array.c	\
+ 	container_null.c container_list_ssll.c container_iterator.c \
+-	cmu_compat.c ucd_compat.c @other_src_list@
++	cmu_compat.c ucd_compat.c @other_src_list@ \
++	inet_ntop.c inet_pton.c inet_netof.c inet_lnaof.c
+ 
+ OBJS=	snmp_client.o mib.o parse.o snmp_api.o snmp.o 		\
+ 	snmp_auth.o asn1.o md5.o snmp_parse_args.o		\
+@@ -161,7 +162,8 @@
+ 	snmp_secmod.o @security_obj_list@ snmp_version.o        \
+ 	check_varbind.o container.o container_binary_array.o	\
+ 	container_null.o container_list_ssll.o container_iterator.o \
+-	cmu_compat.o ucd_compat.o @other_objs_list@
++	cmu_compat.o ucd_compat.o @other_objs_list@ \
++	inet_ntop.o inet_pton.o inet_netof.o inet_lnaof.o
+ 
+ LOBJS=	snmp_client.lo mib.lo parse.lo snmp_api.lo snmp.lo 	\
+ 	snmp_auth.lo asn1.lo md5.lo snmp_parse_args.lo		\
+@@ -176,7 +178,8 @@
+ 	snmp_secmod.lo @security_lobj_list@ snmp_version.lo       \
+ 	check_varbind.lo container.lo container_binary_array.lo	\
+ 	container_null.lo container_list_ssll.lo container_iterator.lo \
+-	cmu_compat.lo ucd_compat.lo @other_lobjs_list@
++	cmu_compat.lo ucd_compat.lo @other_lobjs_list@ \
++	inet_ntop.lo inet_pton.lo inet_netof.lo inet_lnaof.lo
+ 
+ # just in case someone wants to remove libtool, change this to OBJS.
+ TOBJS=$(LOBJS)
+--- net-snmp-5.4.1/snmplib/inet_pton.c.diet	2006-09-15 02:48:50.000000000 +0200
++++ net-snmp-5.4.1/snmplib/inet_pton.c	2007-09-17 21:49:30.000000000 +0200
+@@ -18,6 +18,8 @@
+  */
+ 
+ #include <net-snmp/net-snmp-config.h>
++#include <sys/socket.h>
++#include <errno.h>
+ 
+ #ifndef HAVE_INET_PTON
+ 
+@@ -59,9 +61,9 @@
+  * sizeof(int) < 4.  sizeof(int) > 4 is fine; all the world's not a VAX.
+  */
+ 
+-static int	inet_pton4(const char *src, u_char *dst, int pton);
++static int	inet_pton4(const char *src, unsigned char *dst, int pton);
+ #ifdef NETSNMP_ENABLE_IPV6
+-static int	inet_pton6(const char *src, u_char *dst);
++static int	inet_pton6(const char *src, unsigned char *dst);
+ #endif
+ 
+ /* int
+@@ -110,15 +112,15 @@
+ static int
+ inet_pton4(src, dst, pton)
+ 	const char *src;
+-	u_char *dst;
++	unsigned char *dst;
+ 	int pton;
+ {
+-	u_int val;
+-	u_int digit;
++	unsigned int val;
++	unsigned int digit;
+ 	int base, n;
+ 	unsigned char c;
+-	u_int parts[4];
+-	register u_int *pp = parts;
++	unsigned int parts[4];
++	register unsigned int *pp = parts;
+ 
+ 	c = *src;
+ 	for (;;) {
+@@ -234,14 +236,14 @@
+ static int
+ inet_pton6(src, dst)
+ 	const char *src;
+-	u_char *dst;
++	unsigned char *dst;
+ {
+ 	static const char xdigits_l[] = "0123456789abcdef",
+ 			  xdigits_u[] = "0123456789ABCDEF";
+-	u_char tmp[IN6ADDRSZ], *tp, *endp, *colonp;
++	unsigned char tmp[IN6ADDRSZ], *tp, *endp, *colonp;
+ 	const char *xdigits, *curtok;
+ 	int ch, saw_xdigit;
+-	u_int val;
++	unsigned int val;
+ 
+ 	memset((tp = tmp), '\0', IN6ADDRSZ);
+ 	endp = tp + IN6ADDRSZ;
+@@ -277,8 +279,8 @@
+ 				return (0);
+ 			if (tp + INT16SZ > endp)
+ 				return (0);
+-			*tp++ = (u_char) (val >> 8) & 0xff;
+-			*tp++ = (u_char) val & 0xff;
++			*tp++ = (unsigned char) (val >> 8) & 0xff;
++			*tp++ = (unsigned char) val & 0xff;
+ 			saw_xdigit = 0;
+ 			val = 0;
+ 			continue;
+@@ -294,8 +296,8 @@
+ 	if (saw_xdigit) {
+ 		if (tp + INT16SZ > endp)
+ 			return (0);
+-		*tp++ = (u_char) (val >> 8) & 0xff;
+-		*tp++ = (u_char) val & 0xff;
++		*tp++ = (unsigned char) (val >> 8) & 0xff;
++		*tp++ = (unsigned char) val & 0xff;
+ 	}
+ 	if (colonp != NULL) {
+ 		/*
+--- net-snmp-5.4.1/agent/mibgroup/ucd-snmp/disk.c.diet	2007-04-02 16:55:17.000000000 +0200
++++ net-snmp-5.4.1/agent/mibgroup/ucd-snmp/disk.c	2007-09-17 21:47:38.000000000 +0200
+@@ -230,7 +230,7 @@
+ static void 
+ disk_parse_config(const char *token, char *cptr)
+ {
+-#if HAVE_FSTAB_H || HAVE_GETMNTENT || HAVE_STATFS
++#if defined(HAVE_FSTAB_H) || defined(HAVE_GETMNTENT) || defined(HAVE_STATFS)
+   char            tmpbuf[1024];
+   char            path[STRMAX];
+   int             minpercent;
+@@ -297,7 +297,7 @@
+ static void 
+ disk_parse_config_all(const char *token, char *cptr)
+ {
+-#if HAVE_FSTAB_H || HAVE_GETMNTENT || HAVE_STATFS
++#if defined(HAVE_FSTAB_H) || defined(HAVE_GETMNTENT) || defined(HAVE_STATFS)
+   char            tmpbuf[1024];
+   int             minpercent = DISKMINPERCENT;
+     
+@@ -433,8 +433,8 @@
+ static void 
+ find_and_add_allDisks(int minpercent)
+ {
+-#if HAVE_GETMNTENT
+-#if HAVE_SYS_MNTTAB_H
++#if defined(HAVE_GETMNTENT)
++#if defined(HAVE_SYS_MNTTAB_H)
+   struct mnttab   mnttab;
+ #else
+   struct mntent  *mntent;
+@@ -456,9 +456,9 @@
+    * string declared above and at the end of the routine return it
+    * to the caller 
+    */
+-#if HAVE_FSTAB_H || HAVE_GETMNTENT || HAVE_STATFS   
+-#if HAVE_GETMNTENT
+-#if HAVE_SETMNTENT
++#if defined(HAVE_FSTAB_H) || defined(HAVE_GETMNTENT) || defined(HAVE_STATFS)
++#if defined(HAVE_GETMNTENT)
++#if defined(HAVE_SETMNTENT)
+   mntfp = setmntent(ETC_MNTTAB, "r");
+   while (NULL != (mntent = getmntent(mntfp))) {
+     add_device(mntent->mnt_dir, mntent->mnt_fsname, -1, minpercent, 0);
+@@ -527,17 +527,17 @@
+ static char *
+ find_device(char *path)
+ {
+-#if HAVE_GETMNTENT
+-#if HAVE_SYS_MNTTAB_H
++#if defined(HAVE_GETMNTENT)
++#if defined(HAVE_SYS_MNTTAB_H)
+   struct mnttab   mnttab;
+ #else
+   struct mntent  *mntent;
+ #endif
+   FILE           *mntfp;
+-#elif HAVE_FSTAB_H
++#elif defined(HAVE_FSTAB_H)
+   struct fstab   *fstab;
+   struct stat     stat1;
+-#elif HAVE_STATFS
++#elif defined(HAVE_STATFS)
+   struct statfs   statf;
+ #endif
+   char            tmpbuf[1024];
+@@ -553,9 +553,9 @@
+    * string declared above and at the end of the routine return it
+    * to the caller 
+    */
+-#if HAVE_FSTAB_H || HAVE_GETMNTENT || HAVE_STATFS   
+-#if HAVE_GETMNTENT
+-#if HAVE_SETMNTENT
++#if defined(HAVE_FSTAB_H) || defined(HAVE_GETMNTENT) || defined(HAVE_STATFS)
++#if defined(HAVE_GETMNTENT)
++#if defined(HAVE_SETMNTENT)
+   mntfp = setmntent(ETC_MNTTAB, "r");
+   while (NULL != (mntent = getmntent(mntfp)))
+     if (strcmp(path, mntent->mnt_dir) == 0) {
+--- net-snmp-5.4.1/agent/mibgroup/host/hr_system.c.diet	2006-09-15 02:48:50.000000000 +0200
++++ net-snmp-5.4.1/agent/mibgroup/host/hr_system.c	2007-09-17 21:47:38.000000000 +0200
+@@ -81,7 +81,7 @@
+ #define UTMP_FILE _PATH_UTMP
+ #endif
+ 
+-#if defined(UTMP_FILE) && !HAVE_UTMPX_H
++#if defined(UTMP_FILE) && !defined(HAVE_UTMPX_H) && !defined(HAVE_UTMP_H)
+ void            setutent(void);
+ void            endutent(void);
+ struct utmp    *getutent(void);
+@@ -645,7 +645,7 @@
+     return total;
+ }
+ 
+-#if defined(UTMP_FILE) && !HAVE_UTMPX_H
++#if defined(UTMP_FILE) && !defined(HAVE_UTMPX_H) && !defined(HAVE_UTMP_H)
+ 
+ static FILE    *utmp_file;
+ static struct utmp utmp_rec;
+--- net-snmp-5.4.1/configure.in.diet	2007-07-27 19:02:00.000000000 +0200
++++ net-snmp-5.4.1/configure.in	2007-09-17 21:50:30.000000000 +0200
+@@ -3228,7 +3228,7 @@
+ #include <sys/param.h>
+ #endif
+ ])
+-AC_CHECK_HEADERS(sys/timeout.h sys/un.h fstab.h sys/fs.h mtab.h ufs/fs.h sys/fixpoint.h machine/param.h sys/vm.h vm/vm.h sys/vmmeter.h sys/vmparam.h sys/vmmac.h sys/vmsystm.h sys/time.h sys/times.h sys/statvfs.h sys/vfs.h sys/mnttab.h sys/select.h mntent.h sys/mntent.h kstat.h utsname.h sys/utsname.h sys/cdefs.h getopt.h locale.h pthread.h sys/loadavg.h regex.h linux/tasks.h pwd.h grp.h utmpx.h)
++AC_CHECK_HEADERS(sys/timeout.h sys/un.h fstab.h sys/fs.h mtab.h ufs/fs.h sys/fixpoint.h machine/param.h sys/vm.h vm/vm.h sys/vmmeter.h sys/vmparam.h sys/vmmac.h sys/vmsystm.h sys/time.h sys/times.h sys/statvfs.h sys/vfs.h sys/mnttab.h sys/select.h mntent.h sys/mntent.h kstat.h utsname.h sys/utsname.h sys/cdefs.h getopt.h locale.h pthread.h sys/loadavg.h regex.h linux/tasks.h pwd.h grp.h utmpx.h utmp.h)
+ # Network headers
+ AC_CHECK_HEADERS(arpa/inet.h netinet/in_systm.h netinet/in.h netinet/ip_var.h netinet/tcp.h netinet/tcpip.h netinet/udp.h net/if.h netinet/in_var.h netinet/ip.h netinet/ip_icmp.h net/if_arp.h net/if_mib.h net/if_var.h netinet/if_ether.h netinet/tcp_timer.h netinet/tcp_var.h netinet/udp_var.h netinet/icmp_var.h netdb.h net/route.h,,,
+ [[
+@@ -3634,7 +3634,7 @@
+ AC_FUNC_GETMNTENT
+ AC_CHECK_FUNCS(setmntent hasmntopt gethostname uname gettimeofday select socket strtol strtoul strlcpy)
+ AC_CHECK_FUNCS(strchr strtok_r strdup memcpy memmove index bcopy strcasestr regcomp)
+-AC_CHECK_FUNCS(signal setsid sigset sigblock sighold strerror setenv vsnprintf snprintf)
++AC_CHECK_FUNCS(signal setsid sigset sigblock sighold sigprocmask strerror setenv vsnprintf snprintf)
+ AC_CHECK_FUNCS(sigaction)
+ AC_CHECK_FUNCS(random lrand48 rand)
+ AC_CHECK_FUNCS(execv system fork getpid strncasecmp sigalrm)
+@@ -3670,6 +3670,8 @@
+ AC_CHECK_FUNCS(if_nametoindex)
+ # missing from MinGW
+ AC_CHECK_FUNCS(chown localtime_r)
++# dietlibc
++AC_CHECK_FUNCS(inet_ntop.c inet_pton.c inet_netof.c inet_lnaof.c)
+ 
+ AC_MSG_CHECKING([[for SIOCGIFADDR in sys/ioctl.h]])
+ AC_CACHE_VAL(cv_sys_ioctl_h_has_SIOCGIFADDR,

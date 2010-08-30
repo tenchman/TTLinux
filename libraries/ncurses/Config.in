@@ -1,0 +1,12 @@
+# vim:set syntax=kconfig:
+config CONFIG_NCURSES
+  bool "ncurses - A terminal handling library"
+  default n
+  help
+    The curses library routines are a terminal-independent method of
+    updating character screens with reasonable optimization. The ncurses
+    (new curses) library is a freely distributable replacement for the
+    discontinued 4.4 BSD classic curses library.
+
+    http://www.gnu.org/software/ncurses/
+    http://dickey.his.com/ncurses/

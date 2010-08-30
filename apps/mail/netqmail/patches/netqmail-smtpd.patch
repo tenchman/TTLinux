@@ -1,0 +1,140 @@
+--- netqmail-1.06/qmail-smtpd.c.tarpit	2007-11-30 21:22:54.000000000 +0100
++++ netqmail-1.06/qmail-smtpd.c	2008-06-27 09:11:27.000000000 +0200
+@@ -49,6 +49,8 @@ void die_control() { out("421 unable to 
+ void die_ipme() { out("421 unable to figure out my IP addresses (#4.3.0)\r\n"); flush(); _exit(1); }
+ void straynewline() { out("451 See http://pobox.com/~djb/docs/smtplf.html.\r\n"); flush(); _exit(1); }
+ 
++void err_badbounce() { out("550 sorry, bounce messages should have a single envelope recipient (#5.7.1)\r\n"); }
++void err_size() { out("552 sorry, that message size exceeds my databytes limit (#5.3.4)\r\n"); }
+ void err_bmf() { out("553 sorry, your envelope sender is in my badmailfrom list (#5.7.1)\r\n"); }
+ void err_nogateway() { out("553 sorry, that domain isn't in my list of allowed rcpthosts (#5.7.1)\r\n"); }
+ void err_unimpl(arg) char *arg; { out("502 unimplemented (#5.5.1)\r\n"); }
+@@ -96,6 +98,8 @@ stralloc liphost = {0};
+ int bmfok = 0;
+ stralloc bmf = {0};
+ struct constmap mapbmf;
++int tarpitcount = 0;
++int tarpitdelay = 5;
+ 
+ void setup()
+ {
+@@ -110,6 +114,15 @@ void setup()
+   if (control_readint(&timeout,"control/timeoutsmtpd") == -1) die_control();
+   if (timeout <= 0) timeout = 1;
+ 
++  if (control_readint(&tarpitcount,"control/tarpitcount") == -1) die_control();
++  if (tarpitcount < 0) tarpitcount = 0;
++  x = env_get("TARPITCOUNT");
++  if (x) { scan_ulong(x,&u); tarpitcount = u; };
++  if (control_readint(&tarpitdelay,"control/tarpitdelay") == -1) die_control();
++  if (tarpitdelay < 0) tarpitdelay = 0;
++  x = env_get("TARPITDELAY");
++  if (x) { scan_ulong(x,&u); tarpitdelay = u; };
++
+   if (rcpthosts_init() == -1) die_control();
+ 
+   bmfok = control_readfile(&bmf,"control/badmailfrom",0);
+@@ -197,6 +210,45 @@ char *arg;
+   return 1;
+ }
+ 
++int sizelimit(arg) /* modified SIZELIMIT function by Erwin Hoffmann (tx Uwe Ohse) */
++char *arg;   
++{
++  int i;
++  long r;
++  char terminator;
++  unsigned long sizebytes = 0;
++
++  terminator = '>';
++  i = str_chr(arg,'<');
++  if (arg[i])
++    arg += i + 1;
++  else {
++    terminator = ' ';
++    arg += str_chr(arg,':');
++    if (*arg == ':') ++arg;
++    while (*arg == ' ') ++arg;
++  }
++
++  arg += str_chr(arg,terminator);
++  if (*arg && terminator == '>' ) ++arg; /* end of adddress */
++
++  while (*++arg) {
++    i = str_chr(arg,'=');
++    arg[i] = 0;
++    if (case_equals(arg,"SIZE")) {
++      arg += i;
++      while (*++arg && *arg > 47 && *arg < 58) {
++        sizebytes *= 10;
++        sizebytes += *arg - 48; }
++      r = databytes - sizebytes;
++      if (r < 0) return 0;
++    }
++    else
++      ++arg;
++  }
++  return 1;
++}
++
+ int bmfcheck()
+ {
+   int j;
+@@ -221,15 +273,25 @@ int seenmail = 0;
+ int flagbarf; /* defined if seenmail */
+ stralloc mailfrom = {0};
+ stralloc rcptto = {0};
++int recipcount;
++int rcptcount;
+ 
+ void smtp_helo(arg) char *arg;
+ {
+   smtp_greet("250 "); out("\r\n");
+   seenmail = 0; dohelo(arg);
+ }
++
++char size_buf[FMT_ULONG];
++void smtp_size()
++{
++  size_buf[fmt_ulong(size_buf,(unsigned long) databytes)] = 0;
++  out("250 SIZE "); out(size_buf); out("\r\n");
++}
+ void smtp_ehlo(arg) char *arg;
+ {
+   smtp_greet("250-"); out("\r\n250-PIPELINING\r\n250 8BITMIME\r\n");
++  smtp_size();
+   seenmail = 0; dohelo(arg);
+ }
+ void smtp_rset(arg) char *arg;
+@@ -240,11 +302,14 @@ void smtp_rset(arg) char *arg;
+ void smtp_mail(arg) char *arg;
+ {
+   if (!addrparse(arg)) { err_syntax(); return; }
++  if (databytes && !sizelimit(arg)) { err_size(); return; }
+   flagbarf = bmfcheck();
+   seenmail = 1;
+   if (!stralloc_copys(&rcptto,"")) die_nomem();
+   if (!stralloc_copys(&mailfrom,addr.s)) die_nomem();
+   if (!stralloc_0(&mailfrom)) die_nomem();
++  rcptcount = 0;
++  recipcount = 0;
+   out("250 ok\r\n");
+ }
+ void smtp_rcpt(arg) char *arg; {
+@@ -261,6 +326,8 @@ void smtp_rcpt(arg) char *arg; {
+   if (!stralloc_cats(&rcptto,"T")) die_nomem();
+   if (!stralloc_cats(&rcptto,addr.s)) die_nomem();
+   if (!stralloc_0(&rcptto)) die_nomem();
++  if (tarpitcount && ++rcptcount >= tarpitcount) while (sleep(tarpitdelay)); 
++  recipcount++;
+   out("250 ok\r\n");
+ }
+ 
+@@ -372,6 +439,7 @@ void smtp_data(arg) char *arg; {
+  
+   if (!seenmail) { err_wantmail(); return; }
+   if (!rcptto.len) { err_wantrcpt(); return; }
++  if (mailfrom.len == 1 && recipcount > 1) { err_badbounce(); return; }
+   seenmail = 0;
+   if (databytes) bytestooverflow = databytes + 1;
+   if (qmail_open(&qqt) == -1) { err_qqt(); return; }

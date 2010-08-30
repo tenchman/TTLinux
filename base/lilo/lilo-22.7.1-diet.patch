@@ -1,0 +1,47 @@
+--- lilo-22.7.1/Makefile.diet	2005-09-17 23:36:25.000000000 +0200
++++ lilo-22.7.1/Makefile	2006-01-18 22:21:10.000000000 +0100
+@@ -89,7 +89,7 @@
+   cat $$ROOT/etc/lilo.defines; else echo $(CONFIG); fi ) | \
+   sed 's/-D/-DLCF_/g'`
+ LILO=-DLILO=0x4c7c8088
+-KVER=`if [ -f /usr/include/linux/version.h ]; then echo -DHAS_VERSION_H; fi`
++#KVER=`if [ -f /usr/include/linux/version.h ]; then echo -DHAS_VERSION_H; fi`
+ TMP=_TmP_
+ 
+ 
+@@ -125,9 +125,9 @@
+ 
+ 
+ all: lilo bootsect.b diag1.img # OBSOLETE:  $(BOOTS) edit dparam.com activate
+-	if [ -x /usr/bin/bcc -o -x /usr/local/bin/bcc ]; then \
+-		make diagnostic; \
+-		make dosexe; fi
++#	if [ -x /usr/bin/bcc -o -x /usr/local/bin/bcc ]; then \
++#		make diagnostic; \
++#		make dosexe; fi
+ 
+ #
+ # everything above plus the statically linked version
+@@ -367,16 +367,16 @@
+ #  normal install, but doesn't make the diagnostic binaries
+ #
+ install:  all
+-	if [ ! -d $$ROOT$(SBIN_DIR) ]; then mkdir $$ROOT$(SBIN_DIR); fi
+-	if [ ! -d $$ROOT$(CFG_DIR) ]; then mkdir $$ROOT$(CFG_DIR); fi
+-	if [ ! -d $$ROOT$(BOOT_DIR) ]; then mkdir $$ROOT$(BOOT_DIR); fi
++	if [ ! -d $$ROOT$(SBIN_DIR) ]; then mkdir -p $$ROOT$(SBIN_DIR); fi
++	if [ ! -d $$ROOT$(CFG_DIR) ]; then mkdir -p $$ROOT$(CFG_DIR); fi
++	if [ ! -d $$ROOT$(BOOT_DIR) ]; then mkdir -p $$ROOT$(BOOT_DIR); fi
+ 	if [ ! -d $$ROOT$(USRSBIN_DIR) ]; then \
+ 	  mkdir -p $$ROOT$(USRSBIN_DIR); fi
+-	if [ ! -d $$ROOT$(MAN_DIR) ]; then mkdir $$ROOT$(MAN_DIR); fi  
++	if [ ! -d $$ROOT$(MAN_DIR) ]; then mkdir -p $$ROOT$(MAN_DIR); fi  
+ 	if [ ! -d $$ROOT$(MAN_DIR)/man5 ]; then \
+-	  mkdir $$ROOT$(MAN_DIR)/man5; fi  
++	  mkdir -p $$ROOT$(MAN_DIR)/man5; fi  
+ 	if [ ! -d $$ROOT$(MAN_DIR)/man8 ]; then \
+-	  mkdir $$ROOT$(MAN_DIR)/man8; fi  
++	  mkdir -p $$ROOT$(MAN_DIR)/man8; fi  
+ 	if [ -f diag1.img ]; then \
+ 	  cp -f diag1.img $$ROOT$(BOOT_DIR); fi
+ 	if [ -f diag2.img ]; then \

@@ -1,0 +1,12 @@
+diff -up busybox-1.15.2/include/applets.h.links busybox-1.15.2/include/applets.h
+--- busybox-1.15.2/include/applets.h.links	2009-09-26 15:14:57.000000000 +0200
++++ busybox-1.15.2/include/applets.h	2009-11-30 16:48:32.000000000 +0100
+@@ -97,7 +97,7 @@ IF_CHGRP(APPLET_NOEXEC(chgrp, chgrp, _BB
+ IF_CHMOD(APPLET_NOEXEC(chmod, chmod, _BB_DIR_BIN, _BB_SUID_DROP, chmod))
+ IF_CHOWN(APPLET_NOEXEC(chown, chown, _BB_DIR_BIN, _BB_SUID_DROP, chown))
+ IF_CHPASSWD(APPLET(chpasswd, _BB_DIR_USR_SBIN, _BB_SUID_DROP))
+-IF_CHPST(APPLET(chpst, _BB_DIR_USR_BIN, _BB_SUID_DROP))
++IF_CHPST(APPLET(chpst, _BB_DIR_BIN, _BB_SUID_DROP))
+ IF_CHROOT(APPLET(chroot, _BB_DIR_USR_SBIN, _BB_SUID_DROP))
+ IF_CHRT(APPLET(chrt, _BB_DIR_USR_BIN, _BB_SUID_DROP))
+ IF_CHVT(APPLET(chvt, _BB_DIR_USR_BIN, _BB_SUID_DROP))

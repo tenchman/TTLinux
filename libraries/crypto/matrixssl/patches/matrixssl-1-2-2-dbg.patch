@@ -1,0 +1,14 @@
+--- matrixssl-1-2-2/src/matrixSsl.c.dbg	2004-10-15 14:04:52.731878096 +0200
++++ matrixssl-1-2-2/src/matrixSsl.c	2004-10-15 14:04:33.262837840 +0200
+@@ -948,9 +948,9 @@
+ void matrixStrDebugMsg(char *message, char *value)
+ {
+ 	if (value) {
+-		printf(message, value);
++		fprintf(stderr, message, value);
+ 	} else {
+-		printf(message);
++		fprintf(stderr, message);
+ 	}
+ }
+ void matrixIntDebugMsg(char *message, int value)

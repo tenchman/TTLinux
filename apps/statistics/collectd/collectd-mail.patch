@@ -1,0 +1,408 @@
+--- collectd-4.2.3/src/rrdtool.c.mail	2007-12-28 18:26:59.000000000 +0100
++++ collectd-4.2.3/src/rrdtool.c	2008-04-09 09:14:08.000000000 +0200
+@@ -62,8 +62,7 @@
+ 	3600,
+ 	86400,
+ 	604800,
+-	2678400,
+-	31622400
++	2678400
+ };
+ static int rra_timespans_num = STATIC_ARRAY_SIZE (rra_timespans);
+ 
+--- collectd-4.2.3/src/liboconfig/oconfig.h.mail	2007-10-24 19:21:24.000000000 +0200
++++ collectd-4.2.3/src/liboconfig/oconfig.h	2008-04-09 09:14:08.000000000 +0200
+@@ -59,6 +59,7 @@
+ oconfig_item_t *oconfig_parse_fh (FILE *fh);
+ oconfig_item_t *oconfig_parse_file (const char *file);
+ 
++unsigned int **oconfig_parse_mail();
+ void oconfig_free (oconfig_item_t *ci);
+ 
+ /*
+--- collectd-4.2.3/src/liboconfig/scanner.l.mail	2007-10-24 19:21:24.000000000 +0200
++++ collectd-4.2.3/src/liboconfig/scanner.l	2008-04-09 09:14:08.000000000 +0200
+@@ -18,10 +18,25 @@
+ 
+ %{
+ #include <stdlib.h>
++#include <time.h>
++#include <unistd.h>
++#include <sys/stat.h>
+ #include "oconfig.h"
+ #include "aux_types.h"
+ #include "parser.h"
++
++#define YYLMAX 4096
++
++
++/* global  */
++static const char *LOG_FILE = "/var/log/mailstats/current" ;
++unsigned int arr[]={0,0,0,0,0};
++struct tm t1;
++time_t tp;
++
+ %}
++%state AA BB DATE
++
+ %option yylineno
+ %option noyywrap
+ WHITE_SPACE [\ \t\b]
+@@ -38,11 +53,38 @@
+ PORT (6(5(5(3[0-5]|[0-2][0-9])|[0-4][0-9][0-9])|[0-4][0-9][0-9][0-9])|[1-5][0-9][0-9][0-9][0-9]|[1-9][0-9]?[0-9]?[0-9]?)
+ IP_BYTE (2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])
+ IPV4_ADDR {IP_BYTE}\.{IP_BYTE}\.{IP_BYTE}\.{IP_BYTE}(:{PORT})?
+-
++/*** Datum *********/
++DAT [A-Z][a-z]{2}\ [\ ]?[0-9][0-9]?\ [0-9]{2}:[0-9]{2}:[0-9]{2}    
++FAC \<21\>
++/* mailscanner ********************/
++GREY :\ not\ found\ ->\ reject				
++MAIL_OK :\ update\ entry				
++ZUGESTELLT :\ delivery\ {DEC_NUMBER}:\ success:		
++SPAM smtpd:\ SPAM\[Score\=				
++VIRUS smtpd:\ VIRUS\[					
++/********************************/
+ %%
++^{FAC}		{BEGIN DATE;}
++<DATE>{DAT}	{ strptime(yytext, "%b %d %H:%M:%S", &t1);
++		   tp=mktime(&t1);
++		   if( tp > (time(NULL)-20) ) BEGIN AA;
++			else {
++				if( truncate(LOG_FILE,0) != 0 ) perror("fehler truncate");
++				BEGIN BB;
++			  	}
++		   }
++
++<AA>.+{GREY}.*\n        { arr[0]++ ;BEGIN AA; }
++<AA>.+{MAIL_OK}.*\n	{ arr[1]++; BEGIN AA; }
++<AA>.+{ZUGESTELLT}.*\n	{ arr[2]++; BEGIN AA; }	
++<AA>.+{SPAM}.*\n	{ arr[3]++; BEGIN AA; }
++<AA>.+{VIRUS}.*\n	{ arr[4]++; BEGIN AA; }
++<AA>.+\n		{BEGIN AA;}
++
++<BB>.+			{BEGIN AA;}
++
+ {WHITE_SPACE}		|
+ {COMMENT}		{/* ignore */}
+-
+ \n			{return (EOL);}
+ "/"			{return (SLASH);}
+ "<"			{return (OPENBRAC);}
+@@ -57,3 +99,16 @@
+ {QUOTED_STRING}		{yylval.string = yytext; return (QUOTED_STRING);}
+ {UNQUOTED_STRING}	{yylval.string = yytext; return (UNQUOTED_STRING);}
+ %%
++
++
++unsigned int *lexxy (){
++
++if ( (yyin = fopen(LOG_FILE,"r") ) == NULL ) {perror("konnte datei nicht oeffnen\n"); 
++	}else{
++		yylex();
++		fclose(yyin);
++	}
++if( truncate(LOG_FILE,0) != 0 ) perror("fehler truncate");
++return (&arr);
++};
++
+--- collectd-4.2.3/src/liboconfig/oconfig.c.mail	2007-10-24 19:21:24.000000000 +0200
++++ collectd-4.2.3/src/liboconfig/oconfig.c	2008-04-09 09:14:08.000000000 +0200
+@@ -82,6 +82,10 @@
+   for (i = 0; i < ci->children_num; i++)
+     oconfig_free (ci->children + i);
+ }
++unsigned int **oconfig_parse_mail(){
++/*  aufruf parser  */
++return ( lexxy() );
++}
+ 
+ /*
+  * vim:shiftwidth=2:tabstop=8:softtabstop=2
+--- collectd-4.2.3/src/myplugin.c.mail	2008-04-09 09:14:08.000000000 +0200
++++ collectd-4.2.3/src/myplugin.c	2008-04-09 09:14:08.000000000 +0200
+@@ -0,0 +1,183 @@
++/*
++ * /usr/share/doc/collectd/examples/myplugin.c
++ *
++ * A plugin template for collectd.
++ *
++ * Written by Sebastian Harl <sh@tokkee.org>
++ *
++ * This is free software; you can redistribute it and/or modify it under
++ * the terms of the GNU General Public License as published by the Free
++ * Software Foundation; only version 2 of the License is applicable.
++ */
++
++ /*
++ * Notes:
++ * - plugins are executed in parallel, thus, thread-safe
++ * functions need to be used
++ * - each of the functions below (except module_register)
++ * is optional
++ */
++
++ #include <stdio.h>
++ #include <stdlib.h>
++ 
++ #include <string.h>
++
++ #include <sys/stat.h>
++ #undef pread
++
++ #ifndef __USE_ISOC99 /* required for NAN */
++ # define DISABLE_ISOC99 1
++ # define __USE_ISOC99 1
++ #endif /* !defined(__USE_ISOC99) */
++ #include <math.h>
++ #if DISABLE_ISOC99
++ # undef DISABLE_ISOC99
++ # undef __USE_ISOC99
++ #endif /* DISABLE_ISOC99 */
++
++ #include "collectd.h"
++ #include "common.h"
++ #include "plugin.h"
++ /*
++ * data source definition:
++ * - name of the data source
++ * - type of the data source (DS_TYPE_GAUGE, DS_TYPE_COUNTER)
++ * - minimum allowed value
++ * - maximum allowed value
++ */
++ static data_source_t dsrc[5] =
++ {
++ { "grey", DS_TYPE_COUNTER, 0, NAN },
++ { "accept", DS_TYPE_COUNTER, 0, NAN },
++ { "zugestellt", DS_TYPE_COUNTER, 0, NAN },
++ { "spam", DS_TYPE_COUNTER, 0, NAN },
++ { "virus", DS_TYPE_COUNTER, 0, NAN}
++ };
++
++ /*
++ * data set definition:
++ * - name of the data set
++ * - number of data sources
++ * - list of data sources
++ */
++ static data_set_t ds =
++ {
++ "myplugin", STATIC_ARRAY_SIZE (dsrc), dsrc
++ };
++
++ /*
++ * This function is called once upon startup to initialize the plugin.
++ */
++ static int my_init (void)
++ {
++  /* if there is no logfile, plugin will be disabled. */
++  struct stat logfile; 
++	if ( stat("/var/log/mailstats/current",&logfile) == 0){
++		if (logfile.st_size >= 0) 
++			return 0;
++	 } return -1;
++ } /* static int my_init (void) */
++
++ /*
++ * This function is called in regular intervalls to collect the data.
++ */
++ static int my_read (void)
++ {
++unsigned int *p_i;  
++value_t values[5]; /* the size of this list should equal the number of data sources */
++value_list_t vl = VALUE_LIST_INIT;
++
++p_i = (unsigned int*)oconfig_parse_mail();
++ /* do the magic to read the data */
++
++values[0].counter = p_i[0];  /* greylisted */
++values[1].counter = p_i[1];  /* Accept & updateDB */
++values[2].counter = p_i[2];  /* delivered mail */
++values[3].counter = p_i[3];  /* spam tagged mail */
++values[4].counter = p_i[4];  /* virus tagged mail */
++
++ vl.values = values;
++ vl.values_len = 5;
++ vl.time = time (NULL);
++ strcpy (vl.host, hostname_g);
++ strcpy (vl.plugin, "myplugin");
++ /* optionally set vl.plugin_instance and vl.type_instance to reasonable
++ * values (default: "") */
++
++ /* dispatch the values to collectd which passes them on to all registered
++ * write functions - the first argument is used to lookup the data set
++ * definition */
++ plugin_dispatch_values ("myplugin", &vl);
++
++ /* A return value != 0 indicates an error and the plugin will be skipped
++ * for an increasing amount of time. */
++ return 0;
++ } /* static int my_read (void) */
++
++ /*
++ * This function is called after values have been dispatched to collectd.
++ */
++ static int my_write (const data_set_t *ds, const value_list_t *vl)
++ {
++ char name[1024] = "";
++ int i=0;
++ if (ds->ds_num != vl->values_len) {
++ plugin_log (LOG_WARNING, "DS number does not match values length");
++ return -1;
++ }
++
++ /* get the default base filename for the output file - depending on the
++ * provided values this will be something like
++ * <host>/<plugin>[-<plugin_type>]/<instance>[-<instance_type>] */
++ if (0 != format_name (name, 1024, vl->host, vl->plugin,
++ vl->plugin_instance, ds->type, vl->type_instance))
++ return -1;
++
++ for (i = 0; i < ds->ds_num; ++i) {
++ /* do the magic to output the data */
++ printf ("%s (%s) at %i: ", name,
++ (ds->ds->type == DS_TYPE_GAUGE) ? "GAUGE" : "COUNTER",
++ (int)vl->time);
++
++ if (ds->ds->type == DS_TYPE_GAUGE)
++ printf ("%f\n", vl->values[i].gauge);
++ else
++ printf ("%lld\n", vl->values[i].counter);
++ }
++ return 0;
++ } /* static int my_write (data_set_t *, value_list_t *) */
++
++ /*
++ * This function is called when plugin_log () has been used.
++ */
++ static void my_log (int severity, const char *msg)
++ {
++ printf ("LOG: %i - %s\n", severity, msg);
++ return;
++ } /* static void my_log (int, const char *) */
++
++ /*
++ * This function is called before shutting down collectd.
++ */
++ static int my_shutdown (void)
++ {
++ /* close sockets, free data structures, ... */
++ return 0;
++ } /* static int my_shutdown (void) */
++
++ /*
++ * This function is called after loading the plugin to register it with
++ * collectd.
++ */
++ void module_register (void)
++ {
++ plugin_register_log ("myplugin", my_log);
++ plugin_register_data_set (&ds);
++ plugin_register_read ("myplugin", my_read);
++ plugin_register_init ("myplugin", my_init);
++ plugin_register_write ("myplugin", my_write);
++ plugin_register_shutdown ("myplugin", my_shutdown);
++ return;
++ } /* void module_register (void) */
++ 
+--- collectd-4.2.3/src/interface.c.mail	2007-10-24 19:21:24.000000000 +0200
++++ collectd-4.2.3/src/interface.c	2008-04-09 09:14:08.000000000 +0200
+@@ -256,7 +256,7 @@
+ #elif KERNEL_LINUX
+ 	FILE *fh;
+ 	char buffer[1024];
+-	unsigned long long incoming, outgoing;
++	unsigned long long incoming, outgoing, in_packets, out_packets;
+ 	char *device;
+ 	
+ 	char *dummy;
+@@ -290,13 +290,16 @@
+ 		if (numfields < 11)
+ 			continue;
+ 
++		in_packets = atoll (fields[1]);
++		out_packets = atoll (fields[9]);
++		
+ 		incoming = atoll (fields[0]);
+ 		outgoing = atoll (fields[8]);
++		if ( out_packets < 500)  continue; 
++		/*if ( in_packets < 500)  continue; */
+ 		if_submit (device, "if_octets", incoming, outgoing);
+ 
+-		incoming = atoll (fields[1]);
+-		outgoing = atoll (fields[9]);
+-		if_submit (device, "if_packets", incoming, outgoing);
++		if_submit (device, "if_packets", in_packets, out_packets);
+ 
+ 		incoming = atoll (fields[2]);
+ 		outgoing = atoll (fields[10]);
+--- collectd-4.2.3/src/Makefile.am.mail	2007-12-28 18:26:59.000000000 +0100
++++ collectd-4.2.3/src/Makefile.am	2008-04-09 09:14:08.000000000 +0200
+@@ -604,6 +604,14 @@
+ collectd_DEPENDENCIES += xmms.la
+ endif
+ 
++if BUILD_PLUGIN_MYPLUGIN
++pkglib_LTLIBRARIES += myplugin.la
++myplugin_la_SOURCES = myplugin.c
++myplugin_la_LDFLAGS = -module -avoid-version
++collectd_LDADD += "-dlopen" myplugin.la
++collectd_DEPENDENCIES += myplugin.la
++endif
++
+ 
+ dist_man_MANS = collectd.1 collectd-nagios.1 collectd.conf.5 \
+ 		collectd-email.5 collectd-exec.5 collectd-perl.5 \
+--- collectd-4.2.3/configure.in.mail	2007-12-28 18:34:12.000000000 +0100
++++ collectd-4.2.3/configure.in	2008-04-09 09:14:08.000000000 +0200
+@@ -1722,26 +1722,27 @@
+ plugin_users="no"
+ plugin_vserver="no"
+ plugin_wireless="no"
+-
++plugin_myplugin="no"
+ # Linux
+ if test "x$ac_system" = "xLinux"
+ then
+-	plugin_battery="yes"
++	plugin_battery="no"
+ 	plugin_cpu="yes"
+-	plugin_cpufreq="yes"
++	plugin_cpufreq="no"
+ 	plugin_disk="yes"
+ 	plugin_entropy="yes"
+ 	plugin_interface="yes"
+-	plugin_irq="yes"
++	plugin_irq="no"
+ 	plugin_load="yes"
+ 	plugin_memory="yes"
+-	plugin_nfs="yes"
++	plugin_nfs="no"
+ 	plugin_processes="yes"
+-	plugin_serial="yes"
++	plugin_serial="no"
+ 	plugin_swap="yes"
+ 	plugin_tcpconns="yes"
+-	plugin_vserver="yes"
+-	plugin_wireless="yes"
++	plugin_vserver="no"
++	plugin_wireless="no"
++	plugin_myplugin="yes"
+ 
+ 	if test "x$have_net_ip_vs_h" = "xyes" -o "x$have_ip_vs_h" = "xyes"
+ 	then
+@@ -1888,6 +1889,7 @@
+ AC_PLUGIN([vserver],     [$plugin_vserver],    [Linux VServer statistics])
+ AC_PLUGIN([wireless],    [$plugin_wireless],   [Wireless statistics])
+ AC_PLUGIN([xmms],        [$with_libxmms],      [XMMS statistics])
++AC_PLUGIN([myplugin],    [$with_liboconfig],   [Mail statistics])
+ 
+ dnl ip_vs.h
+ if test "x$ac_system" = "xLinux" -a "x$have_net_ip_vs_h$have_ip_vs_h" = "xnono"
+@@ -2014,5 +2016,6 @@
+     vserver . . . . . . $enable_vserver
+     wireless  . . . . . $enable_wireless
+     xmms  . . . . . . . $enable_xmms
++    myplugin  . . . . . $enable_myplugin
+ 
+ EOF

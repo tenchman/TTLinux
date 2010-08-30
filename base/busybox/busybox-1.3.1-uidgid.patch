@@ -1,0 +1,31 @@
+diff -up ./busybox-1.15.2/archival/libunarchive/get_header_tar.c.uidgid ./busybox-1.15.2/archival/libunarchive/get_header_tar.c
+--- busybox-1.15.2/archival/libunarchive/get_header_tar.c.uidgid	2009-10-08 02:59:09.000000000 +0200
++++ busybox-1.15.2/archival/libunarchive/get_header_tar.c	2009-11-30 16:41:59.000000000 +0100
+@@ -101,6 +101,8 @@ void BUG_tar_header_size(void);
+ char FAST_FUNC get_header_tar(archive_handle_t *archive_handle)
+ {
+ 	file_header_t *file_header = archive_handle->file_header;
++ 	struct passwd *pwent;
++ 	struct group  *grent;
+ 	struct {
+ 		/* ustar header, Posix 1003.1 */
+ 		char name[100];     /*   0-99 */
+@@ -310,8 +312,16 @@ char FAST_FUNC get_header_tar(archive_ha
+ 	file_header->size = (tar.size[0] & 0xc0) == 0x80 /* positive base256? */
+ 			? getBase256_len12(tar.size)
+ 			: GET_OCTAL(tar.size);
+-	file_header->gid = GET_OCTAL(tar.gid);
+-	file_header->uid = GET_OCTAL(tar.uid);
++	
++ 	if (tar.uname[0] != '\0' && (pwent=getpwnam(tar.uname)))
++ 		file_header->uid = pwent->pw_uid;
++ 	else
++ 		file_header->uid = GET_OCTAL(tar.uid);
++ 	if (tar.gname[0] != '\0' && (grent=getgrnam(tar.gname)))
++ 		file_header->gid = grent->gr_gid;
++ 	else
++ 		file_header->gid = GET_OCTAL(tar.gid);
++	
+ 	/* Set bits 0-11 of the files mode */
+ 	file_header->mode = 07777 & GET_OCTAL(tar.mode);
+ 

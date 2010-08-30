@@ -1,0 +1,12 @@
+# vim:set syntax=kconfig:
+config CONFIG_HDPARM
+  bool "hdparm - Utility for manipulating Linux IDE drive/driver parameters"
+  default n
+  help
+    hdparm is a Linux shell utility for viewing and manipulating various IDE
+    drive and driver parameters. Most drives can benefit from improved
+    performance using a command similar to
+      
+      "hdparm -qm8 -qu1 -qc1 -qd1 /dev/hda".
+
+    http://sourceforge.net/projects/hdparm/

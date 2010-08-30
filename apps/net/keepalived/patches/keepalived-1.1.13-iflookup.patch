@@ -1,0 +1,13 @@
+--- keepalived-1.1.13/keepalived/vrrp/vrrp.c.iflookup	2006-10-11 11:45:04.000000000 +0200
++++ keepalived-1.1.13/keepalived/vrrp/vrrp.c	2007-06-07 19:47:40.000000000 +0200
+@@ -578,6 +578,10 @@
+ 	if (!VRRP_VIP_ISSET(vrrp))
+ 		return;
+ 
++	free_interface_queue();
++	kernel_netlink_init();
++	init_interface_queue();
++ 
+ 	/* send gratuitous arp for each virtual ip */
+ 	for (j = 0; j < 5; j++) {
+ 		if (!LIST_ISEMPTY(vrrp->vip))

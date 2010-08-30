@@ -1,0 +1,11 @@
+# vim:set syntax=kconfig:
+config CONFIG_MODINIT
+  bool "module-init-tools - Kernel module management utilities"
+  default n
+  help
+    The modutils package includes various programs needed for automatic
+    loading and unloading of modules under 2.6 and later kernels, as well
+    as other module management programs. Device drivers and filesystems
+    are two examples of loaded and unloaded modules.
+
+    http://www.kernel.org/pub/linux/utils/kernel/module-init-tools/

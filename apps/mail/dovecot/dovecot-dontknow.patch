@@ -1,0 +1,11 @@
+--- dovecot-1.2.13/src/lib-storage/mailbox-list-private.h.dontknow	2010-08-12 20:01:48.000000000 +0200
++++ dovecot-1.2.13/src/lib-storage/mailbox-list-private.h	2010-08-12 20:00:18.000000000 +0200
+@@ -132,7 +132,7 @@ void mailbox_list_iter_update(struct mai
+ 			      const char *name);
+ 
+ bool mailbox_list_name_is_too_large(const char *name, char sep);
+-enum mailbox_list_file_type mailbox_list_get_file_type(const struct dirent *d);
++// enum mailbox_list_file_type mailbox_list_get_file_type(const struct dirent *d);
+ bool mailbox_list_try_get_absolute_path(struct mailbox_list *list,
+ 					const char **name);
+ 

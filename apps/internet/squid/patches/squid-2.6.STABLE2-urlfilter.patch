@@ -1,0 +1,319 @@
+--- squid-2.6.STABLE2/filters/Makefile.in.urlfilter	2006-09-08 14:38:17.000000000 +0200
++++ squid-2.6.STABLE2/filters/Makefile.in	2006-09-11 11:15:03.000000000 +0200
+@@ -40,6 +40,7 @@
+ 
+ MODULES=redirect.so rejecttype.so allowtype.so cookies.so \
+ 	htmlfilter.so script.so activex.so gifanim.so bugfinder.so \
++	urlfilter.so \
+ 	$(auth_modules) $(extra_modules)
+ 
+ OBJS=$(MODULES:.so=.o)
+@@ -64,6 +65,7 @@
+ 		rm -f $(DESTDIR)$(libexecdir)/$$i- 2>/dev/null; \
+ 	done
+ 	$(INSTALL_FILE) redirect.sample $(DESTDIR)$(sysconfdir)
++	$(INSTALL_FILE) urlfilter.sample $(DESTDIR)$(sysconfdir)
+ 
+ # This is known to work only with gperf version 2.7.
+ # We make an extra rule here instead of a direct dependency
+--- /dev/null	2006-08-04 11:43:44.565456968 +0200
++++ squid-2.6.STABLE2/filters/urlfilter.c	2006-09-08 14:38:17.000000000 +0200
+@@ -0,0 +1,286 @@
++#include "squid.h"
++#include "module.h"
++#include "patfile.h"
++
++#define MODNAME "mod_urlfilter"
++#define URLFILTER_C
++#include <classes.dh>
++
++#define DEFAULT_SOCKET_PATH "/tmp/ofcdsock"
++/*
++ * load_module /usr/lib/squid/urlfilter.so 0000000000000000380000600001F803 http://red.irected.de/ /etc/squid/urlfilter.skip
++**/
++
++/* an urlfilter config file looks like this:
++
++key <whitespace> value
++----------------------------------------------------------------
++targeturl      http://redirect.de/
++blockunknown   0|1
++allowbypassing 0|1
++categories     0000000000000000380000600001F803
++----------------------------------------------------------------
++
++no spaces, no quotation marks, no nothing....
++*/
++
++static char rejectbuf[512];
++
++struct _urlfilter_config {
++  struct _urlfilter_config *next;
++  char   *filename;
++  char   *targeturl;
++  char   *categories;
++  int     targetlength;
++  int     blockunknown;
++  int	  allowbypassing;
++  time_t  mtime;
++};
++
++static struct _urlfilter_config *urlfilter_config = NULL;
++
++static int keyvalue(char *buf, char **key, char **value)
++{
++  char *tmp = buf;
++  static const char goodchars[] = "0123456789+-_.:/?%";
++
++  if (isspace(*tmp) || *tmp == '#')
++    return -1;
++
++  *key = tmp;
++
++  while (isalpha(*tmp)) tmp++;
++  if (!isspace(*tmp))
++    return -1;
++  *tmp++ = '\0';
++
++  /* advance to the next non space character */
++  while (isspace(*tmp)) tmp++;
++
++  *value = tmp;
++
++  while (isalpha(*tmp) || strchr(goodchars, *tmp)) tmp++;
++  *tmp = '\0';
++
++  if (**value == '\0')
++    return -1;
++
++  return 0;
++}
++
++void resetconfig(struct _urlfilter_config *cf)
++{
++  if (cf->categories) xfree(cf->categories);
++  if (cf->targeturl)  xfree(cf->targeturl);
++  cf->categories = cf->targeturl = NULL;
++  cf->allowbypassing = cf->blockunknown = cf->targetlength = 0;
++}
++
++static int checkconfig(struct _urlfilter_config *cf)
++{
++  struct stat st;
++  FILE *in;
++  char buf[1024];
++
++  if (stat(cf->filename, &st) == -1) {
++    debug(93, 1) (MODNAME ": Can't stat config file %s!\n", cf->filename);
++    return -1;
++  }
++
++  if (st.st_mtime == cf->mtime)
++    return 0;
++
++  if ((in = fopen(cf->filename, "r")) == NULL) {
++    debug(93, 1) (MODNAME ": Can't read config file %s!\n", cf->filename);
++    return -1;
++  }
++
++  while (fgets(buf, sizeof(buf), in)) {
++    char *key, *value;
++    if (keyvalue(buf, &key, &value) == -1)
++      continue;
++
++    debug(93, 1) (MODNAME ": key: %s, value: %s\n", key, value);
++
++    if (strcmp(key, "targeturl") == 0) {
++      cf->targeturl = xstrdup(value);
++      cf->targetlength = strlen(value);
++    } else if (strcmp(key, "categories") == 0) {
++      if (strlen(value) == 32) {
++	cf->categories = xstrdup(value);
++      } else {
++	debug(93, 1) (MODNAME ": Fatal, invalid category mask '%s'!\n", value);
++	goto error;
++      }
++    } else if (strcmp(key, "blockunknown") == 0) {
++      cf->blockunknown = atoi(value);
++    } else if (strcmp(key, "allowbypassing") == 0) {
++      cf->allowbypassing = atoi(value);
++    } else {
++      debug(93, 1) (MODNAME ": Warning, unknown key %s!\n", key);
++    }
++  }
++  
++  if (!cf->targeturl) {
++    debug(93, 1) (MODNAME ": Fatal, missing parameter <targeturl>!\n");
++    goto error;
++  }
++
++  if (!cf->categories) {
++    debug(93, 1) (MODNAME ": Fatal, missing parameter <categories>!\n");
++    goto error;
++  }
++
++  return 0;
++error:
++  if (cf->categories) xfree(cf->categories);
++  if (cf->targeturl)  xfree(cf->targeturl);
++  return -1;
++}
++
++static int hex2int(char c)
++{
++  c &= 0xff;
++  if (c >= '0' && c <= '9') {
++    return c - '0';
++  } else {
++    c |= ' ';                   /* lowercase */
++    if (c >= 'a' && c <= 'f')
++      return c - 'a' + 10;
++  }
++  return -1;
++}
++
++static int doquery(const char *uri, char *buf, size_t buflen)
++{
++  struct sockaddr_un address;
++  int sockfd, len = -1;
++  
++  if (uri) {
++    char querybuf[strlen(uri) + 7];
++
++    if ((sockfd = socket(AF_LOCAL, SOCK_STREAM, 0)) == -1) {
++      debug(93, 1) (MODNAME ": Failed to create unix domain socket!\n");
++      return -1;
++    }
++    
++    memset(&address, 0, sizeof(address));
++    address.sun_family = AF_LOCAL;
++    strncpy(address.sun_path, DEFAULT_SOCKET_PATH, 108);
++    
++    if (connect(sockfd, (struct sockaddr *) &address, sizeof(address)) == -1) {
++      debug(93, 1) (MODNAME ": Failed to connect to unix domain socket!\n");
++      goto error;
++    }
++    
++    len = snprintf(querybuf, buflen, "MATCH %s", uri);
++    if (write(sockfd, querybuf, len) <= 0) {
++      debug(93, 1) (MODNAME ": Failed to send the MATCH request!\n");
++      goto error;
++    }
++
++    if ((len = read(sockfd, buf, buflen)) <= 0) {
++      debug(93, 1) (MODNAME ": Failed to read the response!\n");
++      goto error;
++    }
++
++    if (write(sockfd, "QUIT", 4) <= 0)
++      debug(93, 1) (MODNAME ": Failed to send QUIT!\n");
++
++    buf[len] = '\0';
++
++error:
++    close(sockfd);
++  } /** if (uri) */
++  return len;
++}
++
++/* moduleObject->filter for FIL_REDIRECT:
++   arg is the requested URI.
++   Returns the redirected URI if the requested URI falls in one of the
++   categories to filter.
++   Returns NULL if no redirection.
++*/
++static void *urlFilter(moduleObject *this, const void *arg)
++{
++    const char *uri = arg;
++    char *r;
++    int len, match = 0;
++    char buf[BUFSIZ];
++    struct _urlfilter_config *cf = (struct _urlfilter_config *)this->trigger;
++
++    patfileCheckReload(this->patFile);
++    r = patfileMatch(this->patFile, uri);
++    if (r) {
++        debug(93, 3) (MODNAME ": '%s'/'%s' is whitelisted\n", moduleUrlClean(uri), r);
++	return NULL;
++    }
++
++    if ((len = doquery(uri, buf, sizeof(buf))) == 32) {
++
++      if (strcmp("00000000FFFFFFFFFFFFFFFFFFFFFFFF", buf)==0) {
++/*
++	unknown ressource, match only if blockunknown is set
++*/
++	if (cf->blockunknown)
++	  match = 1;
++      } else {
++	int i;
++	for (i = 0; i <= 31; i++) {
++	  int a = hex2int(buf[i]);
++	  if (a < 0) {
++	    debug(93, 3) (MODNAME ": got invalid answer %s\n", buf);
++	    return NULL;
++	  }
++	  a &= hex2int(cf->categories[i]);
++	  match |= a;
++	  buf[i] = a < 10 ? a + '0' : a - 10 + 'a';
++	}
++      }
++    } else {
++      debug(93, 1) (MODNAME ": Warning: got invalid response!\n");
++    }
++
++    if (match) {
++      snprintf(rejectbuf, sizeof(rejectbuf), "%s?match=%s", cf->targeturl, buf);
++      debug(93, 3) (MODNAME ": Redirecting: %s\n", rejectbuf);
++      return rejectbuf;
++    }
++    return NULL;
++}
++
++void moduleInit(const wordlist *args)
++{
++    struct _urlfilter_config *cf;
++    moduleObject *m;
++    patFileObject *pf;
++    int i;
++
++    if (!args && !args->next) {
++        debug(93, 1) (MODNAME ": needs two or three arguments\n");
++        return;
++    }
++
++    if ((cf = xcalloc(1, sizeof(struct _urlfilter_config))) == NULL) {
++	debug(93, 1) (MODNAME ": memory allocation error\n");
++	return; 
++    }
++
++    cf->filename = args->key;
++    if (checkconfig(cf) == -1) {
++	xfree(cf);
++	return;
++    }
++
++    m = new(moduleObject);
++    m->trigger = (char *)cf;
++    m->chain.typ = FIL_REDIRECT;
++    m->info.version = MODULE_API_VERSION;
++    m->description = "URI Filter";
++    m->filter = urlFilter;
++
++    pf = patfileNew(args->key, 0);
++    m->patFile = REF(pf);
++
++    moduleRegister(m);
++}
+--- squid-2.6.STABLE2/filters/urlfilter.sample.urlfilter	2006-09-11 11:13:57.000000000 +0200
++++ squid-2.6.STABLE2/filters/urlfilter.sample	2006-09-11 11:13:38.000000000 +0200
+@@ -0,0 +1,9 @@
++# The replacement URL below returns error 403 on my server.
++targeturl      http://jusa.telco-tech.de/nph-403.cgi
++# whether to block uncategorized websites or not
++blockunknown   0
++allowbypassing 0
++# The categories to block
++# Each stands for one category, i.e. Bit 1 stands for Pornography and so on.
++# Contact your local Cobion dealer for more informations.
++categories     0000000000000000380000600001F803

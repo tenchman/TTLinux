@@ -1,0 +1,58 @@
+# vim:set syntax=kconfig:
+mainmenu "TTLinux Configuration"
+
+config CONFIG_DOT_CONFIG
+	bool
+	default y
+
+choice
+    prompt "Target Architecture"
+    default CONFIG_I386
+    help
+	Stuff
+    config CONFIG_ARM
+	bool "arm"
+    config CONFIG_ARMEB
+	bool "armeb"
+    config CONFIG_I386
+	bool "i386"
+    config CONFIG_X86_64
+	bool "x86_64"
+endchoice
+
+choice
+	prompt "Target Architecture Variant"
+	depends CONFIG_i386
+	default CONFIG_x86_i686
+config CONFIG_x86_i386
+	bool "i386"
+config CONFIG_x86_i486
+	bool "i486"
+config CONFIG_x86_i586
+	bool "i586"
+config CONFIG_x86_i686
+	bool "i686"
+endchoice
+
+
+menu "Build options"
+
+config CONFIG_LISS
+  bool "liss - Build with LiSS series support"
+  help
+    TTLINUX is almost a one man show, realized in the spare free time of only
+    one person. Although it is intended to build a generic dietlibc based
+    system, you can compile in some "LiSS series" special features.
+
+config CONFIG_IPV6
+  bool "IPv6 - Build with IP version 6 support"
+endmenu
+
+source "development/Config.in"
+source "base/Config.in"
+source "libraries/Config.in"
+source "apps/Config.in"
+
+
+#source "target/Config.in"
+

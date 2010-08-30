@@ -1,0 +1,243 @@
+--- tcc-0.9.20/stddef.h.diet2	2003-10-05 12:23:48.000000000 +0200
++++ tcc-0.9.20/stddef.h	2004-09-02 09:33:12.386835192 +0200
+@@ -7,12 +7,14 @@
+ typedef __PTRDIFF_TYPE__ ptrdiff_t;
+ #define offsetof(type, field) ((size_t) &((type *)0)->field)
+ 
++#ifndef __dietlibc__
+ /* need to do that because of glibc 2.1 bug (should have a way to test
+    presence of 'long long' without __GNUC__, or TCC should define
+    __GNUC__ ? */
+ #ifndef __int8_t_defined
+ #define __int8_t_defined
+ typedef	char int8_t;
++#endif
+ typedef	short int int16_t;
+ typedef	int int32_t;
+ typedef long long int int64_t;
+--- tcc-0.9.20/Makefile.diet2	2003-10-05 12:23:48.000000000 +0200
++++ tcc-0.9.20/Makefile	2004-09-02 09:33:12.388834888 +0200
+@@ -4,15 +4,15 @@
+ include config.mak
+ 
+ CFLAGS=-O2 -g -Wall
+-LIBS=-ldl
++LIBS=-ldl -lm
+ CFLAGS_P=$(CFLAGS) -pg -static -DCONFIG_TCC_STATIC
+ LIBS_P=
+ 
+ CFLAGS+=-mpreferred-stack-boundary=2
+ ifeq ($(GCC_MAJOR),2)
+-CFLAGS+=-m386 -malign-functions=0
++CFLAGS+=-malign-functions=0
+ else
+-CFLAGS+=-march=i386 -falign-functions=0
++CFLAGS+=-falign-functions=0
+ endif
+ 
+ DISAS=objdump -d
+@@ -21,7 +21,7 @@
+ # run local version of tcc with local libraries and includes
+ TCC=./tcc -B. -I.
+ 
+-all: tcc libtcc1.a bcheck.o tcc-doc.html tcc.1 libtcc.a libtcc_test
++all: tcc libtcc1.a bcheck.o tcc.1 libtcc.a libtcc_test
+ 
+ Makefile: config.mak
+ 
+@@ -116,24 +116,26 @@
+ 
+ # TinyCC runtime libraries
+ libtcc1.o: libtcc1.c
+-	$(CC) -O2 -Wall -c -o $@ $<
++	$(CC) $(CFLAGS) -Wall -c -o $@ $<
+ 
+ libtcc1.a: libtcc1.o
+ 	$(AR) rcs $@ $^
+ 
+ bcheck.o: bcheck.c
+-	$(CC) -O2 -Wall -c -o $@ $<
++	$(CC) $(CFLAGS) -Wall -c -o $@ $<
+ 
+ install: tcc_install libinstall
+ 
+ tcc_install: tcc tcc.1 libtcc1.a bcheck.o
+-	$(INSTALL) -m755 tcc $(bindir)
+-	$(INSTALL) tcc.1 $(mandir)/man1
+-	mkdir -p $(libdir)/tcc
+-	mkdir -p $(libdir)/tcc/include
+-	$(INSTALL) -m644 libtcc1.a bcheck.o $(libdir)/tcc
++	mkdir -p $(DESTDIR)$(mandir)/man1
++	mkdir -p $(DESTDIR)$(bindir)
++	mkdir -p $(DESTDIR)$(libdir)/tcc
++	mkdir -p $(DESTDIR)$(libdir)/tcc/include
++	$(INSTALL) -m755 tcc $(DESTDIR)$(bindir)
++	$(INSTALL) tcc.1 $(DESTDIR)$(mandir)/man1
++	$(INSTALL) -m644 libtcc1.a bcheck.o $(DESTDIR)$(libdir)/tcc
+ 	$(INSTALL) -m644 stdarg.h stddef.h stdbool.h float.h varargs.h \
+-                   tcclib.h $(libdir)/tcc/include
++                   tcclib.h $(DESTDIR)$(libdir)/tcc/include
+ 
+ clean:
+ 	rm -f *~ *.o tcc tcc1 tcct tcc_g tcctest.ref *.bin *.i ex2 \
+@@ -157,8 +159,8 @@
+ 
+ # libtcc generation and example
+ libinstall: libtcc.a 
+-	$(INSTALL) -m644 libtcc.a $(libdir)
+-	$(INSTALL) -m644 libtcc.h $(includedir)
++	$(INSTALL) -m644 libtcc.a $(DESTDIR)$(libdir)
++	$(INSTALL) -m644 libtcc.h $(DESTDIR)$(includedir)
+ 
+ libtcc.o: tcc.c i386-gen.c bcheck.c Makefile
+ 	$(CC) $(CFLAGS) -DLIBTCC -c -o $@ $<
+@@ -167,7 +169,7 @@
+ 	$(AR) rcs $@ $^
+ 
+ libtcc_test: libtcc_test.c libtcc.a 
+-	$(CC) $(CFLAGS) -I. -o $@ $< -L. -ltcc -ldl
++	$(CC) $(CFLAGS) -I. -o $@ $< -L. -ltcc $(LIBS)
+ 
+ libtest: libtcc_test
+ 	./libtcc_test
+--- tcc-0.9.20/tccelf.c.diet2	2003-10-05 12:23:48.000000000 +0200
++++ tcc-0.9.20/tccelf.c	2004-09-02 09:36:29.467874320 +0200
+@@ -854,9 +854,15 @@
+         tcc_add_library(s1, "c");
+     }
+     /* add crt end if not memory output */
++#if defined(__dietlibc__)
++    if (s1->output_type != TCC_OUTPUT_MEMORY && !s1->nostdlib) {
++        tcc_add_file(s1, CONFIG_TCC_CRT_PREFIX "/dyn_stop.o");
++    }
++#else
+     if (s1->output_type != TCC_OUTPUT_MEMORY && !s1->nostdlib) {
+         tcc_add_file(s1, CONFIG_TCC_CRT_PREFIX "/crtn.o");
+     }
++#endif
+     /* add various standard linker symbols */
+     add_elf_sym(symtab_section, 
+                 text_section->data_offset, 0,
+@@ -913,8 +919,12 @@
+ #ifdef __FreeBSD__
+ static char elf_interp[] = "/usr/libexec/ld-elf.so.1";
+ #else
++#ifdef __dietlibc__
++static char elf_interp[] = "/opt/diet/lib-i386/libdl.so";
++#else
+ static char elf_interp[] = "/lib/ld-linux.so.2";
+ #endif
++#endif
+ 
+ #define ELF_START_ADDR 0x08048000
+ #define ELF_PAGE_SIZE  0x1000
+--- tcc-0.9.20/tcc.c.diet2	2004-09-02 09:33:12.377836560 +0200
++++ tcc-0.9.20/tcc.c	2004-09-02 09:33:12.398833368 +0200
+@@ -76,7 +76,11 @@
+ 
+ /* path to find crt1.o, crti.o and crtn.o. Only needed when generating
+    executables or dlls */
++#if defined(__dietlibc__)
++#define CONFIG_TCC_CRT_PREFIX "/opt/diet/lib-i386"
++#else
+ #define CONFIG_TCC_CRT_PREFIX "/usr/lib"
++#endif
+ 
+ #define INCLUDE_STACK_SIZE  32
+ #define IFDEF_STACK_SIZE    64
+@@ -8994,6 +8998,8 @@
+     if (level == 0) {
+ #ifdef __FreeBSD__
+         *paddr = uc->uc_mcontext.mc_eip;
++#elif __dietlibc__
++		*paddr = uc->uc_mcontext.eip;
+ #else
+         *paddr = uc->uc_mcontext.gregs[REG_EIP];
+ #endif
+@@ -9001,6 +9007,8 @@
+     } else {
+ #ifdef __FreeBSD__
+         fp = uc->uc_mcontext.mc_ebp;
++#elif __dietlibc__
++		fp = uc->uc_mcontext.ebp;
+ #else
+         fp = uc->uc_mcontext.gregs[REG_EBP];
+ #endif
+@@ -9222,9 +9230,14 @@
+     tcc_define_symbol(s, "__WCHAR_TYPE__", "int");
+     
+     /* default library paths */
++#if defined(__dietlibc__)
++    tcc_add_library_path(s, "/opt/diet/lib-i386");
++    tcc_add_library_path(s, "/opt/diet/lib");
++#else
+     tcc_add_library_path(s, "/usr/local/lib");
+     tcc_add_library_path(s, "/usr/lib");
+     tcc_add_library_path(s, "/lib");
++#endif
+ 
+     /* no section zero */
+     dynarray_add((void ***)&s->sections, &s->nb_sections, NULL);
+@@ -9482,8 +9495,13 @@
+     if (!s->nostdinc) {
+         /* default include paths */
+         /* XXX: reverse order needed if -isystem support */
+-        tcc_add_sysinclude_path(s, "/usr/local/include");
++#if defined(__dietlibc__)
++	tcc_add_sysinclude_path(s, "/opt/diet/local/include");
++        tcc_add_sysinclude_path(s, "/opt/diet/include");
++#else
++	tcc_add_sysinclude_path(s, "/usr/local/include");
+         tcc_add_sysinclude_path(s, "/usr/include");
++#endif
+         snprintf(buf, sizeof(buf), "%s/include", tcc_lib_path);
+         tcc_add_sysinclude_path(s, buf);
+     }
+@@ -9516,9 +9534,15 @@
+     /* add libc crt1/crti objects */
+     if ((output_type == TCC_OUTPUT_EXE || output_type == TCC_OUTPUT_DLL) &&
+         !s->nostdlib) {
+-        if (output_type != TCC_OUTPUT_DLL)
++#if defined(__dietlibc__)
++	if (output_type != TCC_OUTPUT_DLL)
++            tcc_add_file(s, CONFIG_TCC_CRT_PREFIX "/start.o");
++        tcc_add_file(s, CONFIG_TCC_CRT_PREFIX "/dyn_start.o");
++#else
++	if (output_type != TCC_OUTPUT_DLL)
+             tcc_add_file(s, CONFIG_TCC_CRT_PREFIX "/crt1.o");
+         tcc_add_file(s, CONFIG_TCC_CRT_PREFIX "/crti.o");
++#endif
+     }
+     return 0;
+ }
+--- tcc-0.9.20/bcheck.c.diet2	2003-10-05 12:23:48.000000000 +0200
++++ tcc-0.9.20/bcheck.c	2004-09-02 09:33:12.400833064 +0200
+@@ -36,8 +36,8 @@
+ 
+ #define HAVE_MEMALIGN
+ 
+-#ifdef __FreeBSD__
+-#warning Bound checking not fully supported on FreeBSD
++#if defined(__FreeBSD__) || defined(__dietlibc__)
++#warning Bound checking not fully supported on FreeBSD and dietlibc
+ #undef CONFIG_TCC_MALLOC_HOOKS
+ #undef HAVE_MEMALIGN
+ #endif
+@@ -76,7 +76,7 @@
+ 
+ /* currently, tcc cannot compile that because we use unsupported GNU C
+    extensions */
+-#if !defined(__TINYC__)
++#if !defined(__TINYC__) && !defined(_NO_REGPARM)
+ void *__bound_ptr_add(void *p, int offset) __attribute__((regparm(2)));
+ void *__bound_ptr_indir1(void *p, int offset) __attribute__((regparm(2)));
+ void *__bound_ptr_indir2(void *p, int offset) __attribute__((regparm(2)));
+@@ -782,7 +782,7 @@
+ {
+     void *ptr;
+     size = size * nmemb;
+-    ptr = __bound_malloc(size);
++    ptr = __bound_malloc(size, NULL);
+     if (!ptr)
+         return NULL;
+     memset(ptr, 0, size);

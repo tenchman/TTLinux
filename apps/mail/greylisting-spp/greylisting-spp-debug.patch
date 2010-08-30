@@ -1,0 +1,54 @@
+--- greylisting-spp-0.2/src/greylisting-spp.c.debug	2004-09-21 17:45:56.000000000 +0200
++++ greylisting-spp-0.2/src/greylisting-spp.c	2007-04-19 12:23:39.000000000 +0200
+@@ -77,12 +77,25 @@
+     write(STDOUT_FILENO, CMD_REJECT, strlen(CMD_REJECT));
+ }
+ 
++#define DEBUG(msg) if (debug) Debug(remoteip, sender, recipient, msg)
++
++static void Debug(char *rip, char *sender, char *rcpt, char *msg) {
++    write(STDERR_FILENO, rip, strlen(rip));
++    write(STDERR_FILENO, " ", 1);
++    write(STDERR_FILENO, sender, strlen(sender));
++    write(STDERR_FILENO, " ", 1);
++    write(STDERR_FILENO, rcpt, strlen(rcpt));
++    write(STDERR_FILENO, ": ", 2);
++    write(STDERR_FILENO, msg, strlen(msg));
++}
++
+ /** main function of the greylisting plugin */
+ int main(int argc, char **argv) {
+ char *db, *remoteip, *sender, *ezmlm_sender = NULL, *recipient, *ezmlm_ret;
+-int found, i;
++int found, i, debug = 0;
+ 
+     if (getenv(ENV_WHITELISTED) || getenv(ENV_RELAYCLIENT)) { exit(0); }
++    debug = get_numeric_option("GL_DEBUG", 0);
+ 
+     progname = argv[0];
+ 
+@@ -120,20 +134,24 @@
+ 		       recipient);
+     if (found < 0) {
+ 	/* No match found -> reject and add entry */
++	DEBUG("not found -> reject\n");
+ 	reject();
+ 	add_entry(remoteip, ezmlm_sender == NULL ? sender : ezmlm_sender,
+ 		  recipient);
+     } else if (found == 0) {
+ 	/* Match found, but min_reject is not expired -> reject again */
++	DEBUG("min_reject is not expired -> reject again\n");
+ 	reject();
+     } else {
+ 	/* Match found and min_reject expired and max_wait or accept_good not
+ 	 * expired */
+ 	if (!*sender) {
+ 	    /* Empty sender (bounce message) -> delete entry */
++	    DEBUG("Empty sender (bounce message) -> delete entry\n");
+ 	    delete_entry();
+ 	} else {
+ 	    /* not a bounce -> update entry [and accept] */
++	    DEBUG("update entry\n");
+ 	    update_entry();
+ 	}
+     }

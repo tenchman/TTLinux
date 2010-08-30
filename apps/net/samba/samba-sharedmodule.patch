@@ -1,0 +1,44 @@
+--- source/Makefile.in.sharedmodule	2008-02-18 23:22:54.000000000 +0100
++++ source/Makefile.in	2008-02-18 23:52:57.000000000 +0100
+@@ -1214,7 +1214,7 @@
+ 	@$(SHLD) $(LDSHFLAGS) -o $@ $(RPC_UNIXINFO_OBJ) -lc \
+ 		@SONAMEFLAG@`basename $@`
+ 
+-bin/librpc_srvsvc.@SHLIBEXT@: proto_exists $(RPC_SVC_OBJ)
++bin/librpc_svc.@SHLIBEXT@: proto_exists $(RPC_SVC_OBJ)
+ 	@echo "Linking $@"
+ 	@$(SHLD) $(LDSHFLAGS) -o $@ $(RPC_SVC_OBJ) -lc \
+ 		@SONAMEFLAG@`basename $@`
+@@ -1359,6 +1359,21 @@
+ 	@$(SHLD) $(LDSHFLAGS) -o $@ nsswitch/idmap_ldap.o \
+ 		@SONAMEFLAG@`basename $@`
+ 
++bin/passdb.@SHLIBEXT@: proto_exists nsswitch/idmap_passdb.o
++	@echo "Building plugin $@"
++	@$(SHLD) $(LDSHFLAGS) -o $@ nsswitch/idmap_passdb.o \
++		@SONAMEFLAG@`basename $@`
++
++bin/nss.@SHLIBEXT@: proto_exists nsswitch/idmap_nss.o
++	@echo "Building plugin $@"
++	@$(SHLD) $(LDSHFLAGS) -o $@ nsswitch/idmap_nss.o \
++		@SONAMEFLAG@`basename $@`
++
++bin/tdb.@SHLIBEXT@: proto_exists nsswitch/idmap_tdb.o
++	@echo "Building plugin $@"
++	@$(SHLD) $(LDSHFLAGS) -o $@ nsswitch/idmap_tdb.o \
++		@SONAMEFLAG@`basename $@`
++
+ bin/weird.@SHLIBEXT@: proto_exists $(DEVEL_HELP_WEIRD_OBJ)
+ 	@echo "Building plugin $@"
+ 	@$(SHLD) $(LDSHFLAGS) -o $@ $(DEVEL_HELP_WEIRD_OBJ) \
+--- source/configure.in.sharedmodule	2008-02-18 23:58:08.000000000 +0100
++++ source/configure.in	2008-02-18 23:58:20.000000000 +0100
+@@ -6040,7 +6040,7 @@
+ SMB_MODULE(rpc_ntsvcs, \$(RPC_NTSVCS_OBJ), "bin/librpc_ntsvcs.$SHLIBEXT", RPC)
+ SMB_MODULE(rpc_net, \$(RPC_NETLOG_OBJ), "bin/librpc_NETLOGON.$SHLIBEXT", RPC)
+ SMB_MODULE(rpc_netdfs, \$(RPC_DFS_OBJ), "bin/librpc_netdfs.$SHLIBEXT", RPC)
+-SMB_MODULE(rpc_srv, \$(RPC_SVC_OBJ), "bin/librpc_svc.$SHLIBEXT", RPC)
++SMB_MODULE(rpc_srv, \$(RPC_SVC_OBJ), "bin/librpc_srvsvc.$SHLIBEXT", RPC)
+ SMB_MODULE(rpc_spoolss, \$(RPC_SPOOLSS_OBJ), "bin/librpc_spoolss.$SHLIBEXT", RPC)
+ SMB_MODULE(rpc_eventlog, \$(RPC_EVENTLOG_OBJ), "bin/librpc_eventlog.$SHLIBEXT", RPC)
+ SMB_MODULE(rpc_samr, \$(RPC_SAMR_OBJ), "bin/librpc_samr.$SHLIBEXT", RPC)

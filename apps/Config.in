@@ -1,0 +1,16 @@
+# vim:set syntax=kconfig:
+
+menu "Applications"
+source "apps/sys-fs/Config.in"
+source "apps/dns/Config.in"
+source "apps/firewall/Config.in"
+source "apps/mail/Config.in"
+source "apps/vpn/Config.in"
+source "apps/internet/Config.in"
+source "apps/net/Config.in"
+source "apps/net-analyzer/Config.in"
+source "apps/development/Config.in"
+source "apps/editors/Config.in"
+source "apps/sys/Config.in"
+source "apps/statistics/Config.in"
+endmenu

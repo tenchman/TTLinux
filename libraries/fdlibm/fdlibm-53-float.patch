@@ -1,0 +1,272 @@
+--- fdlibm-53/fdlibm.h.float	2004-09-27 20:43:03.121830544 +0200
++++ fdlibm-53/fdlibm.h	2004-09-27 20:52:32.881213952 +0200
+@@ -214,3 +214,31 @@
+ extern double __kernel_cos __P((double,double));
+ extern double __kernel_tan __P((double,double,int));
+ extern int    __kernel_rem_pio2 __P((double*,double*,int,int,int,const int*));
++
++#include <inttypes.h>
++
++typedef union
++{
++  float value;
++  uint32_t word;
++} ieee_float_shape_type;
++
++#define FLT_UWORD_IS_FINITE(x) ((x)<0x7f800000L)
++#define FLT_UWORD_IS_ZERO(x) ((x)==0)
++
++#define GET_FLOAT_WORD(i,d)                                     \
++do {                                                            \
++  ieee_float_shape_type gf_u;                                   \
++  gf_u.value = (d);                                             \
++  (i) = gf_u.word;                                              \
++} while (0)
++ 
++/* Set a float from a 32 bit int.  */
++ 
++#define SET_FLOAT_WORD(d,i)                                     \
++do {                                                            \
++  ieee_float_shape_type sf_u;                                   \
++  sf_u.word = (i);                                              \
++  (d) = sf_u.value;                                             \
++} while (0)
++
+--- fdlibm-53/s_floor.c.float	2002-08-03 03:50:27.000000000 +0200
++++ fdlibm-53/s_floor.c	2004-09-27 20:58:09.878982504 +0200
+@@ -1,10 +1,12 @@
++/* sf_floor.c -- float version of s_floor.c.
++ * Conversion to float by Ian Lance Taylor, Cygnus Support, ian@cygnus.com.
++ */
+ 
+-/* @(#)s_floor.c 1.3 95/01/18 */
+ /*
+  * ====================================================
+  * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+  *
+- * Developed at SunSoft, a Sun Microsystems, Inc. business.
++ * Developed at SunPro, a Sun Microsystems, Inc. business.
+  * Permission to use, copy, modify, and distribute this
+  * software is freely granted, provided that this notice 
+  * is preserved.
+@@ -12,68 +14,63 @@
+  */
+ 
+ /*
+- * floor(x)
++ * floorf(x)
+  * Return x rounded toward -inf to integral value
+  * Method:
+  *	Bit twiddling.
+  * Exception:
+- *	Inexact flag raised if x not equal to floor(x).
++ *	Inexact flag raised if x not equal to floorf(x).
+  */
+ 
+ #include "fdlibm.h"
+ 
+ #ifdef __STDC__
+-static const double huge = 1.0e300;
++static const float huge = 1.0e30;
+ #else
+-static double huge = 1.0e300;
++static float huge = 1.0e30;
+ #endif
+ 
+ #ifdef __STDC__
+-	double floor(double x)
++	float floorf(float x)
+ #else
+-	double floor(x)
+-	double x;
++	float floorf(x)
++	float x;
+ #endif
+ {
+-	int i0,i1,j0;
+-	unsigned i,j;
+-	i0 =  __HI(x);
+-	i1 =  __LO(x);
+-	j0 = ((i0>>20)&0x7ff)-0x3ff;
+-	if(j0<20) {
++	int32_t i0,j0;
++	uint32_t i,ix;
++	GET_FLOAT_WORD(i0,x);
++	ix = (i0&0x7fffffff);
++	j0 = (ix>>23)-0x7f;
++	if(j0<23) {
+ 	    if(j0<0) { 	/* raise inexact if x != 0 */
+-		if(huge+x>0.0) {/* return 0*sign(x) if |x|<1 */
+-		    if(i0>=0) {i0=i1=0;} 
+-		    else if(((i0&0x7fffffff)|i1)!=0)
+-			{ i0=0xbff00000;i1=0;}
++		if(huge+x>(float)0.0) {/* return 0*sign(x) if |x|<1 */
++		    if(i0>=0) {i0=0;} 
++		    else if(!FLT_UWORD_IS_ZERO(ix))
++			{ i0=0xbf800000;}
+ 		}
+ 	    } else {
+-		i = (0x000fffff)>>j0;
+-		if(((i0&i)|i1)==0) return x; /* x is integral */
+-		if(huge+x>0.0) {	/* raise inexact flag */
+-		    if(i0<0) i0 += (0x00100000)>>j0;
+-		    i0 &= (~i); i1=0;
++		i = (0x007fffff)>>j0;
++		if((i0&i)==0) return x; /* x is integral */
++		if(huge+x>(float)0.0) {	/* raise inexact flag */
++		    if(i0<0) i0 += (0x00800000)>>j0;
++		    i0 &= (~i);
+ 		}
+ 	    }
+-	} else if (j0>51) {
+-	    if(j0==0x400) return x+x;	/* inf or NaN */
+-	    else return x;		/* x is integral */
+ 	} else {
+-	    i = ((unsigned)(0xffffffff))>>(j0-20);
+-	    if((i1&i)==0) return x;	/* x is integral */
+-	    if(huge+x>0.0) { 		/* raise inexact flag */
+-		if(i0<0) {
+-		    if(j0==20) i0+=1; 
+-		    else {
+-			j = i1+(1<<(52-j0));
+-			if(j<i1) i0 +=1 ; 	/* got a carry */
+-			i1=j;
+-		    }
+-		}
+-		i1 &= (~i);
+-	    }
++	    if(!FLT_UWORD_IS_FINITE(ix)) return x+x;	/* inf or NaN */
++	    else return x;		/* x is integral */
+ 	}
+-	__HI(x) = i0;
+-	__LO(x) = i1;
++	SET_FLOAT_WORD(x,i0);
+ 	return x;
+ }
++
++#ifdef __STDC__
++	double floor(double x)
++#else
++	double floor(x)
++	double x;
++#endif
++{
++	return (double) floorf((float) x);
++}
+--- fdlibm-53/s_ceil.c.float	2004-09-27 20:55:16.130396304 +0200
++++ fdlibm-53/s_ceil.c	2004-09-27 20:55:03.901255416 +0200
+@@ -1,78 +1,66 @@
++/* sf_ceil.c -- float version of s_ceil.c.
++ * Conversion to float by Ian Lance Taylor, Cygnus Support, ian@cygnus.com.
++ */
+ 
+-/* @(#)s_ceil.c 1.3 95/01/18 */
+ /*
+  * ====================================================
+  * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+  *
+- * Developed at SunSoft, a Sun Microsystems, Inc. business.
++ * Developed at SunPro, a Sun Microsystems, Inc. business.
+  * Permission to use, copy, modify, and distribute this
+  * software is freely granted, provided that this notice 
+  * is preserved.
+  * ====================================================
+  */
+ 
+-/*
+- * ceil(x)
+- * Return x rounded toward -inf to integral value
+- * Method:
+- *	Bit twiddling.
+- * Exception:
+- *	Inexact flag raised if x not equal to ceil(x).
+- */
+-
+ #include "fdlibm.h"
+ 
+ #ifdef __STDC__
+-static const double huge = 1.0e300;
++static const float huge = 1.0e30;
+ #else
+-static double huge = 1.0e300;
++static float huge = 1.0e30;
+ #endif
+ 
+ #ifdef __STDC__
+-	double ceil(double x)
++	float ceilf(float x)
+ #else
+-	double ceil(x)
+-	double x;
++	float ceilf(x)
++	float x;
+ #endif
+ {
+-	int i0,i1,j0;
+-	unsigned i,j;
+-	i0 =  __HI(x);
+-	i1 =  __LO(x);
+-	j0 = ((i0>>20)&0x7ff)-0x3ff;
+-	if(j0<20) {
++	int32_t i0,j0;
++	uint32_t i,ix;
++	GET_FLOAT_WORD(i0,x);
++	ix = (i0&0x7fffffff);
++	j0 = (ix>>23)-0x7f;
++	if(j0<23) {
+ 	    if(j0<0) { 	/* raise inexact if x != 0 */
+-		if(huge+x>0.0) {/* return 0*sign(x) if |x|<1 */
+-		    if(i0<0) {i0=0x80000000;i1=0;} 
+-		    else if((i0|i1)!=0) { i0=0x3ff00000;i1=0;}
++		if(huge+x>(float)0.0) {/* return 0*sign(x) if |x|<1 */
++		    if(i0<0) {i0=0x80000000;} 
++		    else if(!FLT_UWORD_IS_ZERO(ix)) { i0=0x3f800000;}
+ 		}
+ 	    } else {
+-		i = (0x000fffff)>>j0;
+-		if(((i0&i)|i1)==0) return x; /* x is integral */
+-		if(huge+x>0.0) {	/* raise inexact flag */
+-		    if(i0>0) i0 += (0x00100000)>>j0;
+-		    i0 &= (~i); i1=0;
++		i = (0x007fffff)>>j0;
++		if((i0&i)==0) return x; /* x is integral */
++		if(huge+x>(float)0.0) {	/* raise inexact flag */
++		    if(i0>0) i0 += (0x00800000)>>j0;
++		    i0 &= (~i);
+ 		}
+ 	    }
+-	} else if (j0>51) {
+-	    if(j0==0x400) return x+x;	/* inf or NaN */
+-	    else return x;		/* x is integral */
+ 	} else {
+-	    i = ((unsigned)(0xffffffff))>>(j0-20);
+-	    if((i1&i)==0) return x;	/* x is integral */
+-	    if(huge+x>0.0) { 		/* raise inexact flag */
+-		if(i0>0) {
+-		    if(j0==20) i0+=1; 
+-		    else {
+-			j = i1 + (1<<(52-j0));
+-			if(j<i1) i0+=1;	/* got a carry */
+-			i1 = j;
+-		    }
+-		}
+-		i1 &= (~i);
+-	    }
++	    if(!FLT_UWORD_IS_FINITE(ix)) return x+x; /* inf or NaN */
++	    else return x;		/* x is integral */
+ 	}
+-	__HI(x) = i0;
+-	__LO(x) = i1;
++	SET_FLOAT_WORD(x,i0);
+ 	return x;
+ }
++
++#ifdef __STDC__
++	double ceil(double x)
++#else
++	double ceil(x)
++	double x;
++#endif
++{
++	return (double) ceilf((float) x);
++}

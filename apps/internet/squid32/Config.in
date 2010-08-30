@@ -1,0 +1,9 @@
+config CONFIG_SQUID3
+	bool "Squid - Squid Web Proxy Cache"
+	default n
+ 	help
+	  Squid is a high performance Web proxy cache that can be arranged
+	  hierarchically for an improvement in response times and a reduction in
+	  bandwith usage. Squid runs on all popular Unix and Windows platforms.
+
+	  http://www.squid-cache.org/

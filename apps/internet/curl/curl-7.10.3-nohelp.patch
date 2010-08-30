@@ -1,0 +1,67 @@
+--- curl-7.10.3/src/main.c.nohelp	2003-09-16 16:12:46.000000000 +0200
++++ curl-7.10.3/src/main.c	2003-09-16 16:21:27.000000000 +0200
+@@ -270,7 +270,9 @@
+ };
+ #endif
+ 
++#ifndef WITHOUT_HELP
+ extern void hugehelp(void);
++#endif
+ 
+ /*
+  * This is the main global constructor for the app. Call this before
+@@ -332,12 +334,15 @@
+ {
+   printf(CURL_ID "%s\n"
+        "Usage: curl [options...] <url>\n"
++#ifndef WITHOUT_HELP
+        "Options: (H) means HTTP/HTTPS only, (F) means FTP only\n"
+        " -a/--append        Append to target file when uploading (F)\n"
+        " -A/--user-agent <string> User-Agent to send to server (H)\n"
+        " -b/--cookie <name=string/file> Cookie string or file to read cookies from (H)\n"
+-       " -B/--use-ascii     Use ASCII/text transfer\n",
+-         curl_version());
++       " -B/--use-ascii     Use ASCII/text transfer\n"
++#endif
++       ,curl_version());
++#ifndef WITHOUT_HELP
+   puts(" -c/--cookie-jar <file> Write all cookies to this file after operation (H)\n"
+        " -C/--continue-at <offset> Specify absolute resume offset\n"
+        " -d/--data <data>   HTTP POST data (H)\n"
+@@ -419,6 +424,7 @@
+        " -2/--sslv2         Force usage of SSLv2 (H)\n"
+        " -3/--sslv3         Force usage of SSLv3 (H)");
+   puts(" -#/--progress-bar  Display transfer progress as a progress bar");
++#endif
+ }
+ 
+ struct LongShort {
+@@ -1509,9 +1515,11 @@
+       /* specified max time */
+       config->timeout = atoi(nextarg);
+       break;
++#ifndef WITHOUT_HELP
+     case 'M': /* M for manual, huge help */
+       hugehelp();
+       return PARAM_HELP_REQUESTED;
++#endif
+     case 'n':
+       switch(subletter) {
+       case 'o': /* CA info PEM file */
+--- curl-7.10.3/src/mkhelp.pl.nohelp	2003-09-16 16:14:58.000000000 +0200
++++ curl-7.10.3/src/mkhelp.pl	2003-09-16 16:16:17.000000000 +0200
+@@ -65,6 +65,7 @@
+ print "/* NEVER EVER edit this manually, fix the mkhelp script instead! */\n"
+ ;
+ print "#include <stdio.h>\n";
++print "#ifndef WITHOUT_HELP\n";
+ print "void hugehelp(void)\n";
+ print "{\n";
+ print "puts (\n";
+@@ -91,4 +92,5 @@
+ }
+ 
+-print " ) ;\n}\n"
++print " ) ;\n}\n";
++print "#endif\n";
+     

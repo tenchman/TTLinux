@@ -1,0 +1,102 @@
+------------------------------------------------------------------------
+r21 | egmont | 2007-07-12 20:20:12 +0200 (cs, 12 júl 2007) | 1 line
+Changed paths:
+   A /tags/0.9 (from /trunk:20)
+
+0.9
+------------------------------------------------------------------------
+r20 | egmont | 2007-07-12 20:19:05 +0200 (cs, 12 júl 2007) | 2 lines
+Changed paths:
+   M /trunk/pretendroot
+
+- wrapper script improvements by Duff <charles.duffy at isgenesis.com>
+
+------------------------------------------------------------------------
+r19 | egmont | 2007-07-12 20:13:34 +0200 (cs, 12 júl 2007) | 2 lines
+Changed paths:
+   M /trunk/libpretendroot.c
+
+- override getgroups/setgroups
+
+------------------------------------------------------------------------
+r18 | egmont | 2007-07-12 20:05:22 +0200 (cs, 12 júl 2007) | 2 lines
+Changed paths:
+   M /trunk/libpretendroot.c
+
+- indent fix
+
+------------------------------------------------------------------------
+r17 | egmont | 2007-07-12 20:00:15 +0200 (cs, 12 júl 2007) | 2 lines
+Changed paths:
+   M /trunk/libpretendroot.c
+
+- eliminate compiler warning on x86_64
+
+------------------------------------------------------------------------
+r16 | egmont | 2007-07-12 19:59:53 +0200 (cs, 12 júl 2007) | 2 lines
+Changed paths:
+   D /trunk/TODO
+   M /trunk/libpretendroot.c
+
+- support *at system calls
+
+------------------------------------------------------------------------
+r14 | egmont | 2007-06-11 16:48:52 +0200 (h, 11 jún 2007) | 2 lines
+Changed paths:
+   M /trunk/libpretendroot.c
+
+- minor fix
+
+------------------------------------------------------------------------
+r12 | egmont | 2007-06-08 19:20:47 +0200 (p, 08 jún 2007) | 2 lines
+Changed paths:
+   M /trunk/COPYING.LIB
+   A /trunk/TODO
+   M /trunk/libpretendroot.c
+
+- fix when rename() overwrites a file
+
+------------------------------------------------------------------------
+r11 | egmont | 2007-06-08 17:56:25 +0200 (p, 08 jún 2007) | 2 lines
+Changed paths:
+   M /trunk/libpretendroot.c
+   M /trunk/pretendroot
+
+- override env vars in wrapper script instead of the lib
+
+------------------------------------------------------------------------
+r9 | egmont | 2005-08-31 17:06:15 +0200 (sze, 31 aug 2005) | 2 lines
+Changed paths:
+   M /trunk/README_HU
+
+- UTF-8
+
+------------------------------------------------------------------------
+r7 | pozsy | 2003-07-19 20:07:12 +0200 (szo, 19 júl 2003) | 1 line
+Changed paths:
+   D /trunk/VERSION
+
+remove VERSION
+------------------------------------------------------------------------
+r6 | pozsy | 2003-07-19 13:27:22 +0200 (szo, 19 júl 2003) | 1 line
+Changed paths:
+   D /COPYING.LIB
+   D /Makefile
+   D /README_EN
+   D /README_HU
+   D /VERSION
+   A /branches
+   D /libpretendroot.c
+   D /pretendroot
+   A /tags
+   A /trunk
+   A /trunk/COPYING.LIB (from /COPYING.LIB:5)
+   A /trunk/Makefile (from /Makefile:5)
+   A /trunk/README_EN (from /README_EN:5)
+   A /trunk/README_HU (from /README_HU:5)
+   A /trunk/VERSION (from /VERSION:5)
+   A /trunk/libpretendroot.c (from /libpretendroot.c:5)
+   A /trunk/pretendroot (from /pretendroot:5)
+
+new repository layout
+------------------------------------------------------------------------

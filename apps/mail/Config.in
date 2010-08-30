@@ -1,0 +1,9 @@
+# vim:set syntax=kconfig:
+menu "Mailserver & Filters"
+  source "apps/mail/bogofilter/Config.in"
+#  source "apps/mail/qsf/Config.in"
+  source "apps/mail/qmail/Config.in"
+  source "apps/mail/ripmime/Config.in"
+  source "apps/mail/saucer/Config.in"
+  source "apps/mail/p3scan/Config.in"
+endmenu

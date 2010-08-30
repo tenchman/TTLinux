@@ -1,0 +1,12 @@
+--- dietlibc-0.30/include/net/if_arp.h.arp	2007-02-05 22:46:50.000000000 +0100
++++ dietlibc-0.30/include/net/if_arp.h	2007-02-05 22:47:49.000000000 +0100
+@@ -20,6 +20,9 @@
+ #define ARPHRD_DLCI	15		/* Frame Relay DLCI		*/
+ #define ARPHRD_ATM	19		/* ATM 				*/
+ #define ARPHRD_METRICOM	23		/* Metricom STRIP (new IANA id)	*/
++#define ARPHRD_IEEE1394 24              /* IEEE 1394 IPv4 - RFC 2734.  */
++#define ARPHRD_EUI64            27              /* EUI-64.  */
++#define ARPHRD_INFINIBAND       32              /* InfiniBand.  */
+ 
+ /* Dummy types for non ARP hardware */
+ #define ARPHRD_SLIP	256

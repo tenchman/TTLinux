@@ -1,0 +1,105 @@
+--- linux-2.6.22.18/arch/arm/mach-ixp4xx/ixdp425-setup.c.fixup	2008-02-11 08:31:19.000000000 +0100
++++ linux-2.6.22.18/arch/arm/mach-ixp4xx/ixdp425-setup.c	2008-07-10 12:46:15.000000000 +0200
+@@ -15,6 +15,7 @@
+ #include <linux/tty.h>
+ #include <linux/serial_8250.h>
+ #include <linux/slab.h>
++#include <linux/i2c-gpio.h>
+ 
+ #include <asm/types.h>
+ #include <asm/setup.h>
+@@ -44,16 +45,16 @@ static struct platform_device ixdp425_fl
+ 	.resource	= &ixdp425_flash_resource,
+ };
+ 
+-static struct ixp4xx_i2c_pins ixdp425_i2c_gpio_pins = {
++static struct i2c_gpio_platform_data ixdp425_i2c_gpio_data = {
+ 	.sda_pin	= IXDP425_SDA_PIN,
+ 	.scl_pin	= IXDP425_SCL_PIN,
+ };
+ 
+-static struct platform_device ixdp425_i2c_controller = {
+-	.name		= "IXP4XX-I2C",
++static struct platform_device ixdp425_i2c_gpio = {
++	.name		= "i2c-gpio",
+ 	.id		= 0,
+ 	.dev		= {
+-		.platform_data = &ixdp425_i2c_gpio_pins,
++		.platform_data = &ixdp425_i2c_gpio_data,
+ 	},
+ 	.num_resources	= 0
+ };
+@@ -102,11 +103,40 @@ static struct platform_device ixdp425_ua
+ };
+ 
+ static struct platform_device *ixdp425_devices[] __initdata = {
+-	&ixdp425_i2c_controller,
++	&ixdp425_i2c_gpio,
+ 	&ixdp425_flash,
+ 	&ixdp425_uart
+ };
+ 
++static char ixdp425_rtc_probe[] __initdata = "rtc-x1205.probe=0,0x6f ";
++
++static void __init ixdp425_fixup(struct machine_desc *desc,
++	struct tag *tags, char **cmdline, struct meminfo *mi)
++{
++	struct tag *t = tags;
++	char *p = *cmdline;
++
++	/* Find the end of the tags table, taking note of any cmdline tag. */
++	for (; t->hdr.size; t = tag_next(t)) {
++		if (t->hdr.tag == ATAG_CMDLINE) {
++			p = t->u.cmdline.cmdline;
++		}
++	}
++
++	/* Overwrite the end of the table with a new cmdline tag. */
++	t->hdr.tag = ATAG_CMDLINE;
++	t->hdr.size = (sizeof (struct tag_header) +
++		strlen(ixdp425_rtc_probe) + strlen(p) + 1 + 4) >> 2;
++	strlcpy(t->u.cmdline.cmdline, ixdp425_rtc_probe, COMMAND_LINE_SIZE);
++	strlcpy(t->u.cmdline.cmdline + strlen(ixdp425_rtc_probe), p,
++		COMMAND_LINE_SIZE - strlen(ixdp425_rtc_probe));
++
++	/* Terminate the table. */
++	t = tag_next(t);
++	t->hdr.tag = ATAG_NONE;
++	t->hdr.size = 0;
++}
++
+ static void __init ixdp425_init(void)
+ {
+ 	ixp4xx_sys_init();
+@@ -132,6 +162,7 @@ MACHINE_START(IXDP425, "Intel IXDP425 De
+ 	.init_irq	= ixp4xx_init_irq,
+ 	.timer		= &ixp4xx_timer,
+ 	.boot_params	= 0x0100,
++	.fixup          = ixdp425_fixup,
+ 	.init_machine	= ixdp425_init,
+ MACHINE_END
+ #endif
+@@ -145,6 +176,7 @@ MACHINE_START(IXDP465, "Intel IXDP465 De
+ 	.init_irq	= ixp4xx_init_irq,
+ 	.timer		= &ixp4xx_timer,
+ 	.boot_params	= 0x0100,
++	.fixup          = ixdp425_fixup,
+ 	.init_machine	= ixdp425_init,
+ MACHINE_END
+ #endif
+@@ -158,6 +190,7 @@ MACHINE_START(IXCDP1100, "Intel IXCDP110
+ 	.init_irq	= ixp4xx_init_irq,
+ 	.timer		= &ixp4xx_timer,
+ 	.boot_params	= 0x0100,
++	.fixup          = ixdp425_fixup,
+ 	.init_machine	= ixdp425_init,
+ MACHINE_END
+ #endif
+@@ -171,6 +204,7 @@ MACHINE_START(KIXRP435, "Intel KIXRP435 
+ 	.init_irq	= ixp4xx_init_irq,
+ 	.timer		= &ixp4xx_timer,
+ 	.boot_params	= 0x0100,
++	.fixup          = ixdp425_fixup,
+ 	.init_machine	= ixdp425_init,
+ MACHINE_END
+ #endif

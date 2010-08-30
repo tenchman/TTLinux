@@ -1,0 +1,10 @@
+--- netpbm-10.28/converter/pbm/pbmtolj.c.ndebug	2005-06-21 16:17:41.000000000 +0200
++++ netpbm-10.28/converter/pbm/pbmtolj.c	2005-06-21 16:18:10.813407544 +0200
+@@ -31,6 +31,7 @@
+ #include "shhopt.h"
+ #include "mallocvar.h"
+ #include <string.h>
++#undef NDEBUG
+ #include <assert.h>
+ 
+ static char *rowBuffer, *prevRowBuffer, *packBuffer, *deltaBuffer;

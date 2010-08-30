@@ -1,0 +1,8 @@
+# vim:set syntax=kconfig:
+config CONFIG_SNORT
+  bool "snort - Libpcap-based packet sniffer/logger/lightweight IDS"
+  select CONFIG_LIBPCAP
+  default n
+  help
+
+    http://www.snort.org/

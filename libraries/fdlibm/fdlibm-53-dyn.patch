@@ -1,0 +1,66 @@
+--- fdlibm53/Makefile.in.dyn	2004-04-21 00:37:24.000000000 +0200
++++ fdlibm53/Makefile.in	2004-08-30 22:19:11.395211032 +0200
+@@ -45,7 +45,9 @@
+ # is double scalb(double, double)
+ #
+ 
+-prefix	= @prefix@
++prefix		= @prefix@
++libdir  	= @libdir@
++includedir	= @includedir@
+ 
+ AR	= @AR@
+ 
+@@ -64,7 +66,13 @@
+ 
+ LDFLAGS	= @LDFLAGS@
+ 
+-LIB	= libfdm.a
++LIBNAME	= libfdm
++
++LIB	= $(LIBNAME).a
++SHLIB	= $(LIBNAME).so
++LIBMAJOR= 5
++LIBMINOR= 3
++LIBMICRO= 0
+ 
+ LIBS	= @LIBS@
+ 
+@@ -119,6 +127,7 @@
+ 	s_tan.o s_tanh.o
+ 
+ all: $(LIB)
++dyn: $(SHLIB)
+ 
+ check:
+ 	@echo This package does not have a validation suite.
+@@ -131,15 +140,19 @@
+ 	-$(RM) -r autom4te.cache/
+ 	-$(RM) config.cache config.log config.status Makefile
+ 
+-install:	$(LIB) uninstall
+-	$(CP) $(LIB) $(prefix)/lib/$(LIB)
+-	$(CHMOD) 664 $(prefix)/lib/$(LIB)
+-	$(RANLIB) $(prefix)/lib/$(LIB) || true
++install: $(LIB) uninstall
++	$(CP) -a $(LIBNAME).[as]* $(DESTDIR)/$(libdir)
++	$(CHMOD) 664 $(DESTDIR)/$(libdir)/$(LIBNAME).[as]*
+ 
+ $(LIB) : $(obj)
+ 	$(AR) cru $(LIB) $(obj)
+ 	$(RANLIB) $(LIB) || true
+ 
++$(SHLIB): $(obj)
++	$(CC) -shared -o $@.$(LIBMAJOR).$(LIBMINOR).$(LIBMICRO) -Wl,-soname=$(SHLIB).$(LIBMAJOR) $(obj)
++	ln -sf $@.$(LIBMAJOR).$(LIBMINOR).$(LIBMICRO) $@.$(LIBMAJOR)
++	ln -sf $@.$(LIBMAJOR).$(LIBMINOR).$(LIBMICRO) $@
++
+ maintainer-clean:	distclean
+ 	@echo "This command is intended for maintainers to use;"
+ 	@echo "it deletes files that may require special tools to rebuild."
+@@ -151,4 +164,4 @@
+ source: $(src) README
+ 
+ uninstall:
+-	-$(RM) $(prefix)/lib/$(LIB)
++	-$(RM) $(libdir)/$(LIB)

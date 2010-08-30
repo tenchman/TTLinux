@@ -1,0 +1,36 @@
+diff -Naur tcc-0.9.20/tccasm.c tcc-0.9.20.foo/tccasm.c
+--- tcc-0.9.20/tccasm.c	2003-10-05 12:23:48.000000000 +0200
++++ tcc-0.9.20.foo/tccasm.c	2004-08-05 12:52:21.647547712 +0200
+@@ -361,7 +361,7 @@
+             next();
+         }
+         break;
+-    case TOK_ASM_globl:
++    case TOK_ASM_global:
+ 	{ 
+             Sym *sym;
+ 
+diff -Naur tcc-0.9.20/tcc-doc.html tcc-0.9.20.foo/tcc-doc.html
+--- tcc-0.9.20/tcc-doc.html	2003-10-05 12:23:48.000000000 +0200
++++ tcc-0.9.20.foo/tcc-doc.html	2004-08-05 12:52:31.058117088 +0200
+@@ -1553,7 +1553,7 @@
+ <LI><A HREF="tcc-doc.html#IDX20">.bss</A>
+ <LI><A HREF="tcc-doc.html#IDX10">.byte</A>
+ <LI><A HREF="tcc-doc.html#IDX19">.data</A>
+-<LI><A HREF="tcc-doc.html#IDX16">.globl</A>
++<LI><A HREF="tcc-doc.html#IDX16">.global</A>
+ <LI><A HREF="tcc-doc.html#IDX13">.int</A>
+ <LI><A HREF="tcc-doc.html#IDX14">.long</A>
+ <LI><A HREF="tcc-doc.html#IDX17">.section</A>
+diff -Naur tcc-0.9.20/tcctok.h tcc-0.9.20.foo/tcctok.h
+--- tcc-0.9.20/tcctok.h	2003-10-05 12:23:48.000000000 +0200
++++ tcc-0.9.20.foo/tcctok.h	2004-08-05 12:52:50.849108400 +0200
+@@ -151,7 +151,7 @@
+  DEF_ASM(skip)
+  DEF_ASM(space)
+  DEF_ASM(string)
+- DEF_ASM(globl)
++ DEF_ASM(global)
+  DEF_ASM(text)
+  DEF_ASM(data)
+  DEF_ASM(bss)

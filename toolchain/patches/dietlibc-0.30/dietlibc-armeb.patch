@@ -1,0 +1,25 @@
+diff -up dietlibc-0.30/Makefile.armeb dietlibc-0.30/Makefile
+--- dietlibc-0.30/Makefile.armeb	2008-03-20 15:03:07.000000000 +0100
++++ dietlibc-0.30/Makefile	2008-03-20 15:10:42.000000000 +0100
+@@ -61,7 +61,7 @@ ifeq ($(MYARCH),ia64)
+ ARCH=ia64
+ else
+ ifeq ($(MYARCH),armeb)
+-ARCH=arm
++ARCH=armeb
+ else
+ $(error unknown architecture, please fix Makefile)
+ endif
+@@ -99,8 +99,11 @@ all: $(WHAT)
+ 
+ profiling: $(OBJDIR)/libgmon.a $(OBJDIR)/pstart.o
+ 
+-CFLAGS=-pipe -nostdinc
++CFLAGS+=-pipe -nostdinc
+ CROSS=
++ifeq ($(ARCH),armeb)
++CFLAGS+=-Wl,-EB
++endif
+ 
+ CC=gcc
+ INC=-I. -isystem include

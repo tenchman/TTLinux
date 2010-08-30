@@ -1,0 +1,139 @@
+This patch allows mgetty to interpret escape sequences in issue files
+in the same fashion as agetty, which apparently is the model that
+mingetty follows as well.  The specifics, excerpted from the agetty
+man page:
+
+ISSUE ESCAPES
+       The issue-file (/etc/issue or the file set with the -f option) may contain certain escape codes  to  display
+       the  system name, date and time etc. All escape codes consist of a backslash (\) immediately followed by one
+       of the letters explained below.
+
+       b      Insert the baudrate of the current line.	[mgetty sends a backspace]
+
+       d      Insert the current date.	[mgetty ignores this -- it expects upper case]
+
+       s      Insert the system name, the name of the operating system.
+
+       l      Insert the name of the current tty line.	[mgetty ignores this]
+
+       m      Insert the architecture identifier of the machine, eg. i486
+
+       n      Insert the nodename of the machine, also known as the hostname.
+
+       o      Insert the domainname of the machine.
+
+       r      Insert the release number of the OS, eg. 1.1.9.	[mgetty sends a carriage return]
+
+       t      Insert the current time.	[mgetty sends a horizontal tab for this]
+
+       u      Insert the number of current users logged in.
+
+       U      Insert the string "1 user" or "<n> users" where <n> is the number of current users logged in.
+
+       v      Insert the version of the OS, eg. the build-date etc.	[mgetty sends a vertical tab (?)]
+
+
+--- mgetty-1.1.26/logname.c	Tue Sep  1 05:56:19 1998
++++ mgetty-1.1.26/logname.c	Tue Jul 24 18:11:31 2001
+@@ -87,12 +87,14 @@
+ 	    switch ( *ep )
+ 	    {
+ 	      case 'n': p[i++] = '\n'; break;
+-	      case 'r': p[i++] = '\r'; break;
+ 	      case 'g': p[i++] = '\007'; break;
++	      case 'f': p[i++] = '\f'; break;
++#ifndef ESCAPE_LIKE_AGETTY
++	      case 'r': p[i++] = '\r'; break;
+ 	      case 'b': p[i++] = '\010'; break;
+ 	      case 'v': p[i++] = '\013'; break;
+-	      case 'f': p[i++] = '\f'; break;
+ 	      case 't': p[i++] = '\t'; break;
++#endif
+ 	      case 's':					/* Operating System */
+ 		    if ( i + strlen(un.sysname) +1 > MAX_PROMPT_LENGTH ) break;
+ 		    i += strappnd( &p[i], un.sysname );
+@@ -101,10 +103,16 @@
+ 		    if ( i + strlen(un.machine) +1 > MAX_PROMPT_LENGTH ) break;
+ 		    i += strappnd( &p[i], un.machine );
+ 		    break;
++#ifdef ESCAPE_LIKE_AGETTY
++	      case 'r':					/* OS release */
++#endif
+ 	      case 'R':					/* OS release */
+ 		    if ( i + strlen(un.release) +1 > MAX_PROMPT_LENGTH ) break;
+ 		    i += strappnd( &p[i], un.release );
+ 		    break;
++#ifdef ESCAPE_LIKE_AGETTY
++	      case 'v':					/* OS version */
++#endif
+ 	      case 'V':					/* OS version */
+ 		    if ( i + strlen(un.version) +1 > MAX_PROMPT_LENGTH ) break;
+ 		    i += strappnd( &p[i], un.version );
+@@ -116,6 +124,12 @@
+ 		    i += strappnd( &p[i], CallerId );
+ 		    break;
+ 		}
++#ifdef ESCAPE_LIKE_AGETTY
++	      case 'l':					/* this doesn't cause */
++							/* conflicts between */
++							/* mgetty and agetty */
++							/* maybe unconditionalize? */
++#endif
+ 	      case 'P':					/* port name */
+ 	      case 'L':					/* tty line */
+ 		{
+@@ -137,13 +151,16 @@
+ 		    i += strappnd( &p[i], Connect);
+ 		    break;
+ 		}
+-	      case 'N':					/* numer of */
++	      case 'N':					/* number of */
+ 	      case 'U':					/* users */
+ 		{
+ 		    sprintf( &p[i], "%d", get_current_users() );
+ 		    i = strlen(p);
+ 		    break;
+ 		}
++#ifdef ESCAPE_LIKE_AGETTY
++	      case 'b':					/* baud rate */
++#endif
+ 	      case 'S':					/* port speed */
+ 		{					/* ugly, I know. */
+ 		    TIO temp_t;
+@@ -152,6 +169,10 @@
+ 		    i = strlen(p);
+ 		}
+ 		break;
++#ifdef ESCAPE_LIKE_AGETTY
++	      case 'd':
++	      case 't':
++#endif
+ 	      case 'D':			/* fallthrough */
+ 	      case 'T':
+ 		if ( i + 30 > MAX_PROMPT_LENGTH )
+@@ -165,7 +186,7 @@
+ 
+ 		    if ( tm == NULL ) break;
+ 
+-		    if ( *ep == 'D' )
++		    if ( ( *ep == 'D' ) || ( *ep == 'd' ) )
+ 		        sprintf( &p[i], "%d/%d/%d", tm->tm_mon+1,
+ 				 tm->tm_mday, tm->tm_year + 1900 );
+ 		    else
+--- mgetty-1.1.26/policy.h-dist	Tue Jul 24 18:09:27 2001
++++ mgetty-1.1.26/policy.h-dist	Tue Jul 24 18:09:27 2001
+@@ -221,6 +221,14 @@
+  */
+ #define NOLOGIN_FILE "/etc/nologin.%s"
+ 
++/* How to handle escape sequences in /etc/issue and friends.
++ *
++ * If ESCAPE_LIKE_AGETTY is defined, escape sequences (stored as backslashes
++ * followed by some character) will be interpreted in a manner consistent
++ * with agetty.  Not defining ESCAPE_LIKE_AGETTY will cause the default
++ * behavior to be utilized.
++ */
++#define ESCAPE_LIKE_AGETTY
+ 
+ /* misc */
+ 

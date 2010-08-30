@@ -1,0 +1,119 @@
+--- djbdns-1.05/log.c.quietlog	2006-11-03 15:17:39.000000000 +0100
++++ djbdns-1.05/log.c	2006-11-03 15:18:48.000000000 +0100
+@@ -117,6 +117,7 @@
+ 
+ void log_query(uint64 *qnum,const char client[4],unsigned int port,const char id[2],const char *q,const char qtype[2])
+ {
++  return;
+   string("query "); number(*qnum); space();
+   ip(client); string(":"); hex(port >> 8); hex(port & 255);
+   string(":"); logid(id); space();
+@@ -126,6 +127,7 @@
+ 
+ void log_querydone(uint64 *qnum,unsigned int len)
+ {
++  return;
+   string("sent "); number(*qnum); space();
+   number(len);
+   line();
+@@ -160,6 +162,7 @@
+ {
+   int i;
+ 
++  return;
+   string("tx "); number(gluelessness); space();
+   logtype(qtype); space(); name(q); space();
+   name(control);
+@@ -173,6 +176,7 @@
+ 
+ void log_cachedanswer(const char *q,const char type[2])
+ {
++  return;
+   string("cached "); logtype(type); space();
+   name(q);
+   line();
+@@ -180,24 +184,28 @@
+ 
+ void log_cachedcname(const char *dn,const char *dn2)
+ {
++  return;
+   string("cached cname "); name(dn); space(); name(dn2);
+   line();
+ }
+ 
+ void log_cachedns(const char *control,const char *ns)
+ {
++  return;
+   string("cached ns "); name(control); space(); name(ns);
+   line();
+ }
+ 
+ void log_cachednxdomain(const char *dn)
+ {
++  return;
+   string("cached nxdomain "); name(dn);
+   line();
+ }
+ 
+ void log_nxdomain(const char server[4],const char *q,unsigned int ttl)
+ {
++  return;
+   string("nxdomain "); ip(server); space(); number(ttl); space();
+   name(q);
+   line();
+@@ -212,6 +220,7 @@
+ 
+ void log_lame(const char server[4],const char *control,const char *referral)
+ {
++  return;
+   string("lame "); ip(server); space();
+   name(control); space(); name(referral);
+   line();
+@@ -230,6 +239,7 @@
+ {
+   int i;
+ 
++  return;
+   string("rr "); ip(server); space(); number(ttl); space();
+   logtype(type); space(); name(q); space();
+ 
+@@ -245,6 +255,7 @@
+ 
+ void log_rrns(const char server[4],const char *q,const char *data,unsigned int ttl)
+ {
++  return;
+   string("rr "); ip(server); space(); number(ttl);
+   string(" ns "); name(q); space();
+   name(data);
+@@ -253,6 +264,7 @@
+ 
+ void log_rrcname(const char server[4],const char *q,const char *data,unsigned int ttl)
+ {
++  return;
+   string("rr "); ip(server); space(); number(ttl);
+   string(" cname "); name(q); space();
+   name(data);
+@@ -261,6 +273,7 @@
+ 
+ void log_rrptr(const char server[4],const char *q,const char *data,unsigned int ttl)
+ {
++  return;
+   string("rr "); ip(server); space(); number(ttl);
+   string(" ptr "); name(q); space();
+   name(data);
+@@ -271,6 +284,7 @@
+ {
+   uint16 u;
+ 
++  return;
+   string("rr "); ip(server); space(); number(ttl);
+   string(" mx "); name(q); space();
+   uint16_unpack_big(pref,&u);
+@@ -283,6 +297,7 @@
+   uint32 u;
+   int i;
+ 
++  return;
+   string("rr "); ip(server); space(); number(ttl);
+   string(" soa "); name(q); space();
+   name(n1); space(); name(n2);

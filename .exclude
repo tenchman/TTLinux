@@ -1,0 +1,8 @@
+opt/diet/bin/*
+opt/diet/sbin/*
+opt/diet/libexec/*
+bin/*
+usr/bin/*
+sbin/*
+usr/sbin/*
+usr/libexec/*

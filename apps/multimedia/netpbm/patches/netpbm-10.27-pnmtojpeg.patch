@@ -1,0 +1,11 @@
+--- netpbm-10.27/converter/other/pnmtojpeg.c.pnmtojpeg	2005-05-09 10:35:38.000000000 +0200
++++ netpbm-10.27/converter/other/pnmtojpeg.c	2005-05-09 12:06:01.387886328 +0200
+@@ -320,7 +320,7 @@ parse_command_line(const int argc, char 
+         pm_error("Smoothing factor %d is greater than 100 (%%).",
+                  cmdline_p->smoothing_factor);
+ 
+-    if (strcmp(cmdline_p->input_filespec, "=") == 0 &&
++    if (strcmp(cmdline_p->input_filespec, "-") == 0 &&
+         cmdline_p->exif_filespec && 
+         strcmp(cmdline_p->exif_filespec, "-") == 0)
+ 

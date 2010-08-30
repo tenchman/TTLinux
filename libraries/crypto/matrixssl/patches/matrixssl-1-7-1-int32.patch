@@ -1,0 +1,17 @@
+--- matrixssl-1-7-1c-open/matrixCommon.h.int32	2005-10-24 09:10:31.000000000 +0200
++++ matrixssl-1-7-1c-open/matrixCommon.h	2005-10-24 09:10:18.000000000 +0200
+@@ -42,8 +42,14 @@
+ /*
+ 	Platform integer sizes
+ */
++#ifndef int32_defined
++#define int32_defined
+ typedef int int32;
++#endif
++#ifndef uint32_defined
++#define uint32_defined
+ typedef unsigned int uint32;
++#endif
+ 
+ /******************************************************************************/
+ /*

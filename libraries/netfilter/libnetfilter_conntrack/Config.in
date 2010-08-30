@@ -1,0 +1,10 @@
+# vim:set syntax=kconfig:
+config CONFIG_LIBNETFILTER_CONNTRACK
+  bool "libnetfilter_conntrack - access the in-kernel connection tracking state table."
+  default n
+  select CONFIG_PKGCONFIG
+  help
+    libnetfilter_conntrack is a userspace library providing a programming
+    interface (API) to the in-kernel connection tracking state table.
+    
+    http://www.netfilter.org/projects/libnetfilter_conntrack/

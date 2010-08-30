@@ -1,0 +1,818 @@
+--- linux-2.6.22.18/drivers/char/Makefile.generic	2008-02-11 08:31:19.000000000 +0100
++++ linux-2.6.22.18/drivers/char/Makefile	2008-09-03 16:01:38.000000000 +0200
+@@ -92,6 +92,7 @@ obj-$(CONFIG_NSC_GPIO)		+= nsc_gpio.o
+ obj-$(CONFIG_CS5535_GPIO)	+= cs5535_gpio.o
+ obj-$(CONFIG_GPIO_VR41XX)	+= vr41xx_giu.o
+ obj-$(CONFIG_GPIO_TB0219)	+= tb0219.o
++obj-$(CONFIG_VT1211_GPIO)	+= vt1211_gpio.o
+ obj-$(CONFIG_TELCLOCK)		+= tlclk.o
+ 
+ obj-$(CONFIG_WATCHDOG)		+= watchdog/
+--- linux-2.6.22.18/drivers/char/Kconfig.generic	2008-02-11 08:31:19.000000000 +0100
++++ linux-2.6.22.18/drivers/char/Kconfig	2008-09-03 16:00:32.000000000 +0200
+@@ -992,6 +992,14 @@ config GPIO_VR41XX
+ 	tristate "NEC VR4100 series General-purpose I/O Unit support"
+ 	depends on CPU_VR41XX
+ 
++config VT1211_GPIO
++	tristate "VIA VT1211 GPIO support"
++	depends on X86_32
++	help
++	  VIA VT1211 GPIO support
++
++	  If compiled as a module, it will be called vt1211_gpio.
++
+ config RAW_DRIVER
+ 	tristate "RAW driver (/dev/raw/rawN) (OBSOLETE)"
+ 	depends on BLOCK
+--- linux-2.6.22.18/include/linux/vt1211_gpio.h.generic	2008-09-03 16:00:32.000000000 +0200
++++ linux-2.6.22.18/include/linux/vt1211_gpio.h	2008-09-03 16:00:32.000000000 +0200
+@@ -0,0 +1,16 @@
++/*
++ * VIA VT1211 GPIO driver.
++ *
++ * Copyright (c) 2007 Manfred Wassmann <info@berlinos.de>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the smems of the GNU General Public License as published by
++ * the Free Software Foundation; version 2 of the License.
++ */
++
++extern int vt1211_gpio_line_avail(unsigned char line, int direction);
++
++extern int vt1211_gpio_set(unsigned char line, unsigned int state);
++
++extern int vt1211_gpio_get(unsigned char line, unsigned int *state);
++
+--- linux-2.6.22.18/drivers/char/vt1211_gpio.c.generic	2008-09-04 13:35:45.000000000 +0200
++++ linux-2.6.22.18/drivers/char/vt1211_gpio.c	2007-06-07 12:22:27.000000000 +0200
+@@ -0,0 +1,769 @@
++/*
++ * VIA VT1211 GPIO driver.
++ *
++ * Copyright (c) 2007 Manfred Wassmann <info@berlinos.de>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the smems of the GNU General Public License as published by
++ * the Free Software Foundation; version 2 of the License.
++ */
++
++/* 
++ * Minor device numbers are allocated sequentially starting from zero,
++ * GPIO pins are numbered 10 - 17 for port 1 20 - 27, port 2 etc, thus
++ * the minor device number corresponds to the pin number interpreted as
++ * octal with 010 (octal) subtracted.
++ *   port #1:  0 -  7
++ *   port #2:  8 - 15
++ *   ...
++ *   port #6: 40 - 43 (port 6 has only 3 lines)
++ *   port #5: 48 - 56
++ */
++
++#include <linux/fs.h>
++#include <linux/module.h>
++#include <linux/errno.h>
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <linux/platform_device.h>
++#include <linux/cdev.h>
++#include <linux/ioport.h>
++#include <linux/pci.h>
++
++#include <linux/delay.h> /* msleep() */
++#include <asm/uaccess.h>
++#include <asm/io.h>
++
++#define DRVNAME "vt1211-gpio"
++
++/* Maximum GPIO line count, set to 56 though only 51 are usable but
++ * makes some computation simpler.
++ */
++#define GPIO_MAX 56
++
++/* GPIO port count */
++#define VT1211_GPIO_COUNT 7
++
++/* I/O block size, only ports 1 and 3-6 are mapped, 1 byte for each port */
++#define VT1211_GPIO_SIZE 5
++
++/* I/O block size, GPIO port 2 and 7 (wakeup events) mapped, 1 byte each port */
++#define VT1211_WKUP_SIZE 2
++
++
++
++MODULE_AUTHOR("Manfred Wassmann <info@berlinos.de>");
++MODULE_DESCRIPTION("VIA VT1211 GPIO Driver");
++MODULE_LICENSE("GPL");
++
++static int paranoid;
++module_param(paranoid, bool, 0);
++MODULE_PARM_DESC(paranoid,
++		 " Make sure input pins are configured as input when reading");
++
++static unsigned int debug;
++module_param(debug, uint, 0664);
++MODULE_PARM_DESC(debug, " Debugging level");
++
++static int major;
++module_param(major, int, 0444);
++MODULE_PARM_DESC(major, " Major device number");
++
++static unsigned char cir_addr;
++module_param(cir_addr, byte, 0);
++MODULE_PARM_DESC(cir_addr, " VT1211 control index register address (0x2E or 0x4E)");
++
++static uint gpio_base;
++module_param(gpio_base, uint, 0440);
++MODULE_PARM_DESC(gpio_base, " GPIO base address");
++
++static uint wkup_base;
++module_param(wkup_base, uint, 0440);
++MODULE_PARM_DESC(wkup_base, " Wakeup event base address");
++
++static unsigned char portmask = 0x30;
++module_param(portmask, byte, 0);
++MODULE_PARM_DESC(portmask, " GPIO port mask (default 0x30: port 5 & 6 enabled)");
++
++static unsigned char outmask[VT1211_GPIO_COUNT];
++module_param_array(outmask, byte, NULL, 0);
++MODULE_PARM_DESC(outmask, " GPIO output lines bitmasks, one for each port");
++
++static unsigned char polarity[VT1211_GPIO_COUNT];
++module_param_array(polarity, byte, NULL, 0);
++MODULE_PARM_DESC(polarity, " GPIO polarity bitmasks (0=normal, 1=inverted)");
++
++static int debounce = 1;
++module_param(debounce, bool, 0640);
++MODULE_PARM_DESC(debounce, " Debounce input lines");
++
++
++/* Get the port index from the minor device number */
++#define VT1211_PORT(minor) ((minor) >> 3)
++
++/* Get the port number from the minor device number */
++#define VT1211_PORTNO(minor) (VT1211_PORT(minor) + 1)
++
++/* Get configuration data register address from configuration index
++ * register address
++ */
++#define CDR_ADDR(cir_addr) ((cir_addr) + 1)
++
++
++struct devcount {
++	int in;
++	int out;
++};
++
++enum gpio_dir {
++	GPIO_INPUT = -1,
++	GPIO_NC,
++	GPIO_OUTPUT
++};
++
++struct gpio_iomap {
++	enum gpio_dir direction;
++	char name[8];
++};
++
++static struct gpio_iomap iomap[GPIO_MAX];
++
++
++static struct platform_device *pdevin;
++static struct platform_device *pdevout;
++static struct cdev vt1211_gpio_cdev;
++static u32 firstminor, numdevs;
++static unsigned short gpio_mapped, wkup_mapped;
++
++
++static void vt1211_enterConfig(unsigned char cir_addr)
++{
++	outb_p(0x87, cir_addr);
++	outb_p(0x87, cir_addr);
++}
++
++
++static void vt1211_exitConfig(unsigned char cir_addr)
++{
++	outb(0xAA, cir_addr);
++}
++
++
++static void vt1211_select_ldn_gpio(unsigned char cir_addr)
++{
++	outb_p(0x7, cir_addr);
++	outb_p(0x8, CDR_ADDR(cir_addr));
++}
++
++
++static void vt1211_select_ldn_wkup(unsigned char cir_addr)
++{
++	outb_p(0x7, cir_addr);
++	outb_p(0xA, CDR_ADDR(cir_addr));
++}
++
++
++static unsigned int vt1211_gpiobase(unsigned char cir_addr)
++{
++	unsigned int baseaddr;
++
++	outb(0x60, cir_addr);
++	baseaddr = inb(CDR_ADDR(cir_addr)) << 8;
++	outb(0x61, cir_addr);
++	baseaddr += inb(CDR_ADDR(cir_addr));
++	printk(KERN_DEBUG "VIA VT1211 GPIO at base address 0x%04X\n", baseaddr);
++
++	return(baseaddr);
++}
++
++
++static void vt1211_enable_gpio(unsigned char cir_addr)
++{
++	/* enable GPIO-->offset 30h bit0 */
++#ifdef CHECKEDME
++	outb(0x30, cir_addr);
++	outb(inb(CDR_ADDR(cir_addr)) | 0x1, CDR_ADDR(cir_addr));
++#else
++	unsigned char byte;
++
++	outb(0x30, cir_addr);
++	byte = inb(CDR_ADDR(cir_addr)) | 0x1;
++	outb(0x30, cir_addr);
++	outb(byte, CDR_ADDR(cir_addr));
++#endif
++}
++
++
++/** Set up gpio pins direction and polarity.
++ *
++ * LDN 8 (GPIO) must be selected
++ */
++static void setup_gpio(unsigned char cir_addr)
++{
++	int pn;
++	unsigned char byte;
++
++	for (pn = VT1211_GPIO_COUNT; pn-- > 0;) {
++		if (pn != 1 && pn != 6 && (portmask & (1 << pn))) {
++			/* select GPIO port pn */
++			outb(0xF0, cir_addr);
++			byte = inb(CDR_ADDR(cir_addr)) & 0xF8;
++			byte |= pn ? pn - 1 : 0;
++			//printk(KERN_DEBUG
++			//     "VT1211 selecting GPIO port #%u (out=0x%X)\n",
++			//   pn + 1, byte);
++			outb(0xF0, cir_addr);
++			outb(byte, CDR_ADDR(cir_addr));
++
++			/* set polarity */
++			//printk(KERN_DEBUG
++			//       "VT1211 setting up GPIO port #%u: polarity 0x%02X\n",
++			//       pn + 1, polarity[pn]);
++			outb(0xF2, cir_addr);
++			outb(polarity[pn], CDR_ADDR(cir_addr));
++
++			/* set direction */
++			//printk(KERN_DEBUG "VT1211 setting up GPIO port #%u:"
++			//       " output mask 0x%02X\n",
++			//       pn + 1, outmask[pn]);
++			outb(0xF1, cir_addr);
++			outb(outmask[pn], CDR_ADDR(cir_addr));
++		}
++	}
++}
++
++
++/** Set up wakeup events gpio pins direction and polarity.
++ */
++static void setup_wkup(u32 wkup_base)
++{
++	if (portmask & 0x02) {
++		/* set direction */
++		outb(outmask[1], wkup_base + 0x20);
++
++		/* set polarity */
++		outb(polarity[1], wkup_base + 0x21);
++	}
++
++	if (portmask & 0x40) {
++		/* set direction */
++		outb(outmask[6], wkup_base + 0x22);
++
++		/* set polarity */
++		outb(polarity[6], wkup_base + 0x23);
++	}
++}
++
++
++static void vt1211_disable_rom(unsigned char cir_addr)
++{
++	unsigned char byte;
++
++	/* set offset 25 bit5 = 1 to select GP25 - 62 */
++	outb(0x25, cir_addr);
++	byte = inb(CDR_ADDR(cir_addr)) | 0x20;
++	outb(0x25, cir_addr);
++	outb(byte, cir_addr);
++
++	/* select LDN 0x0D (flash rom) */
++	outb(0x07, cir_addr);
++	outb(0x0D, CDR_ADDR(cir_addr));
++	outb(0x30, cir_addr);
++	/* clear bit 1 at offset 30 to deactivate ROM interface */
++	byte = inb(CDR_ADDR(cir_addr)) & 0xFE;
++	outb(0x30, cir_addr);
++	outb(byte, CDR_ADDR(cir_addr));
++	//printk(KERN_DEBUG "VT1211 GPIO flash ROM interface disabled\n");
++}
++
++static int vt1211_test(unsigned char cir_addr)
++{
++	unsigned char dev_id;
++
++	vt1211_enterConfig(cir_addr);
++	outb(0x20, cir_addr);
++	dev_id = inb(CDR_ADDR(cir_addr));
++
++	return(dev_id == 0x3C);
++}
++
++
++static int vt1211_find(unsigned char * cir_addr)
++{
++	int rc = 0;
++
++	if (vt1211_test(0x2E)) {
++		*cir_addr = 0x2E;
++	}
++	else if (vt1211_test(0x4E)) {
++		*cir_addr = 0x4E;
++	}
++	else {
++		rc = -ENODEV;
++	}
++
++	if (rc == 0) {
++		printk(KERN_DEBUG "Found VIA VT1211 chip, CIR address 0x%02X\n",
++		*cir_addr);
++	}
++
++	return(rc);
++}
++
++
++static u32 vt1211_portaddr(u32 minor)
++{
++	u32 rc = VT1211_PORT(minor);
++
++	switch (rc) {
++		case 0:
++			rc = gpio_base;
++			break;
++		case 1:
++			rc = wkup_base;
++			break;
++		case 2: /* FALLTHROUGH */
++		case 3: /* FALLTHROUGH */
++		case 4: /* FALLTHROUGH */
++		case 5:
++			rc += gpio_base - 1;
++			break;
++		case 6:
++			rc = wkup_base + 1;
++			break;
++		default:
++			rc = 0;
++			break;
++	}
++
++	return(rc);
++}
++
++
++/** Set the specified gpio line to the specified state.
++ *
++ */
++int vt1211_gpio_set(unsigned char line, unsigned char state)
++{
++	int rc = 0;
++	u32 base = vt1211_portaddr(line);
++	unsigned char mask;
++	
++
++	
++	if (0 == base) {
++		rc = -EINVAL;
++		printk(KERN_ERR "invalid GPIO line: %u\n", line);
++	} else {
++		if (debug) {
++			printk(KERN_DEBUG "VT1211 GPIO pin #%o set o%s\n",
++		       line + 8, state ? "n" : "ff");
++		}
++
++		mask = 1 << (line & 0x7);
++		if (state) {
++			outb(inb(base) | mask, base);
++		} else {
++			outb(inb(base) & ~mask, base);
++		}
++	}
++
++	
++	return(rc);
++}
++
++
++/** Set the specified gpio line state.
++ *
++ */
++int vt1211_gpio_get(unsigned char line, unsigned char *state)
++{
++	int rc = -EINVAL;
++	u32 base = vt1211_portaddr(line);
++	unsigned char inbyte;
++	static unsigned char lastbyte = 0;
++	
++
++	
++	if (base) {
++		unsigned char mask = 1 << (line & 0x7);
++		inbyte = inb(base);
++		if ( inbyte == 0xff ){ 
++		/* something went wrong. take last correct read value */
++			inbyte = lastbyte;
++			printk(KERN_DEBUG DRVNAME": irregular value 0x%02X minor=%d, lastbyte=0x%02X.\n",inbyte,line,lastbyte);
++		}
++		*state = inbyte & mask ? 1 : 0;
++		rc = 0;
++		lastbyte = inbyte;
++	}
++	
++
++	return(rc);
++}
++
++
++static ssize_t vt1211_gpio_write(struct file *file, const char __user *data,
++				 size_t len, loff_t *ppos)
++{
++	ssize_t rc = len;
++	u32 minor = iminor(file->f_path.dentry->d_inode);
++	unsigned char cdata;
++
++	if (get_user(cdata, data)) {
++		rc = -EFAULT;
++	} else {
++		vt1211_gpio_set(minor, cdata != '0');
++	}
++	*ppos = 0;
++
++	return len;
++}
++
++
++static ssize_t vt1211_gpio_read(struct file *file, char __user *buf,
++				size_t len, loff_t *ppos)
++{
++	ssize_t rc = 0;
++	u32 minor = iminor(file->f_path.dentry->d_inode);
++	unsigned char out;
++	ssize_t	count = 0;
++
++	if (*ppos == 0) {
++		if ((rc = vt1211_gpio_get(minor, &out))) {
++			printk(KERN_ERR "vt1211 GPIO get from minor dev %u: %d",
++			       minor, rc);
++		} else {
++			out = out ? '1' : '0';
++			if (debug) {
++				printk(KERN_DEBUG
++				       "VT1211 GPIO pin #%o state = %c\n",
++				       minor + 8, out);
++			}
++
++			if (put_user(out, buf)) {
++				rc = -EFAULT;
++			} else if (++count < len) {
++				/* add a line-feed if there is room */
++				put_user('\n', buf + count++);
++			}
++		}
++	}
++	*ppos += count;
++
++	return count;
++}
++
++
++static int vt1211_gpio_open(struct inode *inode, struct file *file)
++{
++	int rc = -EINVAL;
++	u32 minor = iminor(inode);
++
++	if (2 == VT1211_PORTNO(minor) || 7 == VT1211_PORTNO(minor)) {
++		/* FIXME: ports 2 and 7 are used for wakeup events, data are
++		 * accessible via LDN 0xA offset 0x8 and 0x9 respectively
++		 */
++		rc = -ENOSYS;
++	} else if (6 == VT1211_PORTNO(minor) && 2 < (minor & 0x7)) {
++		/* port 6 only has 3 lines */
++		printk(KERN_DEBUG "access to port 6 pin > 2 rejected (minor = %u)\n",
++		       minor);
++		rc = -ENODEV;
++	} else if (portmask & (1 << VT1211_PORT(minor))) {
++		/* The portmask carries a bit for each enabled port */
++		rc = nonseekable_open(inode, file);
++	} else {
++		printk(KERN_DEBUG
++		"VT1211 gpio line not enabled: minor %u (portmask bit 0x%02X)\n",
++		       minor, (1 << VT1211_PORT(minor)));
++	}
++
++	return(rc);
++}
++
++
++static const struct file_operations vt1211_gpio_fops = {
++	.owner	= THIS_MODULE,
++	.write	= vt1211_gpio_write,
++	.read	= vt1211_gpio_read,
++	.open	= vt1211_gpio_open
++};
++
++
++static inline void vt1211_devmap(unsigned char pn, struct devcount * devcount)
++{
++	unsigned char mask = 0x80, base = pn * 8;
++	struct gpio_iomap * map = iomap + base;
++        char *lissnames[6] = { "unlock", "lock", "masterr","masterg","state","ready"};
++	int i=0; // if you dont want liss-leds initialize i to 6
++	
++	//printk(KERN_DEBUG "Generating GPIO port %u device map\n", pn + 1);
++
++	if (pn == 5) {
++		/* port 6 has 3 lines only */
++		map += 2;
++		mask = 0x04;
++	} else {
++		map += 7;
++	}
++
++
++	while (mask) {
++		if (outmask[pn] & mask) {
++			++devcount->out;
++			map->direction = GPIO_OUTPUT;
++			/* this way we get the leds named as the leds are on liss systems */
++			if ( i < 6 ) {
++				snprintf(map->name, sizeof(map->name),"%s",lissnames[i]);
++				i++;
++			}else{
++			/* this way we get the leds numbered like the GPIO pins on
++			 * the vt1211.
++			 */
++			snprintf(map->name, sizeof(map->name), "gpio%o",
++				 8 + (map - iomap));
++			}
++		} else {
++			++devcount->in;
++			map->direction = GPIO_INPUT;
++			snprintf(map->name, sizeof(map->name), "gpio%o",
++				 8 + (map - iomap));
++		}
++		//printk(KERN_DEBUG "  line %s: %sput\n", map->name,
++		//       map->direction == GPIO_INPUT ? "in" : "out");
++		mask >>= 1;
++		--map;
++	}
++}
++
++
++static int vt1211_setup_platform_devs(struct devcount * devcount)
++{
++	int rc = 0;
++	struct resource ires[devcount->in];
++	struct resource ores[devcount->out];
++	int i, o, m;
++
++	for (i = 0, o = 0, m = 0; m < GPIO_MAX; m++) {
++		switch (iomap[m].direction) {
++			case GPIO_NC:
++				/* NOP */
++				break;
++			case GPIO_INPUT:
++				ires[i].name = iomap[m].name;
++				ires[i].start = ires[i].end = m;
++				ires[i].flags = 1;
++				ires[i].parent = ires[i].sibling = ires[i].child
++					= NULL;
++				++i;
++				break;
++			case GPIO_OUTPUT:
++				ores[o].name = iomap[m].name;
++				ores[o].start = ores[i].end = m;
++				ores[o].flags = 1;
++				ores[o].parent = ores[o].sibling = ores[o].child
++					= NULL;
++				++o;
++				break;
++		}
++	}
++
++	if (IS_ERR(pdevout = platform_device_register_simple(DRVNAME "-out", 0,
++							     ores,
++							     devcount->out))) {
++		printk(KERN_ERR "allocating platform device: " DRVNAME "-out");
++		rc = -ENOMEM;
++	} else if (IS_ERR(pdevin
++			  = platform_device_register_simple(DRVNAME "-in", 0,
++							    ires,
++							    devcount->in))) {
++		printk(KERN_ERR "allocating platform device: " DRVNAME "-in");
++		rc = -ENOMEM;
++	} else {
++		printk(KERN_DEBUG "platform devices registered: " DRVNAME
++		       "-{in,out}\n");
++	}
++
++	return(rc);
++}
++
++
++static int __init vt1211_gpio_init(void)
++{
++	int rc = -ENOSYS;
++	unsigned char pn = 0;
++	struct devcount devcount = { .in = 0, .out = 0 };
++	dev_t dev_id;
++
++	//spin_lock_init(&vt1211_gpio_lock);
++	/* mask out port 8, which does not exist. */
++	portmask &= 0x7F;
++
++	if (portmask & 0x42) {
++		printk(KERN_ERR "VT1211 GPIO wakeup events not fully implemented\n");
++		return(-ENOSYS);
++	}
++
++	/* Sanity checks */
++	if (0 == portmask) {
++		printk(KERN_ERR "VT1211 GPIO: "
++		       "error loading module: no gpio ports enabled -- aborting!\n");
++		return(-EINVAL);
++	} else if ((portmask & 0x42) == 0x42) {
++		printk(KERN_ERR "GPIO ports 2 and 7 can not be used simultaneously");
++		return(-EINVAL);
++	}
++
++	/* Sanitize port 6 I/O mask */
++	if (outmask[5] & 0xF4) {
++		outmask[5] &= 0x7;
++	}
++
++	/* Detect the vt1211 chip and get the control index register address */
++	rc = vt1211_find(&cir_addr);
++
++	/* Disable Flash Rom interface if any of GPIO ports 2-6
++	 * are to be used.
++	 */
++	if (portmask & 0x3E)
++	{
++		vt1211_disable_rom(cir_addr);
++	}
++
++	/* Enable GPIO */
++	vt1211_select_ldn_gpio(cir_addr);
++	vt1211_enable_gpio(cir_addr);
++
++
++	/* request I/O memory regions depending on the ports enabled */
++	if (portmask & 0x3D) {
++		if (0 == gpio_base) {
++			/* Get the GPIO base address */
++			gpio_base = vt1211_gpiobase(cir_addr);
++		}
++
++		if (0 == request_region(gpio_base, VT1211_GPIO_SIZE,
++					DRVNAME)) {
++			printk(KERN_ERR DRVNAME
++			       ": can't allocate I/O for GPIO\n");
++			rc = -ENODEV;
++		} else {
++			gpio_mapped = 1;
++			setup_gpio(cir_addr);
++		}
++	}
++
++	if (portmask & 0x42) {
++		vt1211_select_ldn_wkup(cir_addr);
++		if (0 == wkup_base) {
++			/* Get the WKUP base address */
++			wkup_base = vt1211_gpiobase(cir_addr);
++		}
++
++		if (request_region(wkup_base, VT1211_WKUP_SIZE,
++				   DRVNAME) == 0) {
++			printk(KERN_ERR DRVNAME ": can't allocate I/O for "
++			       "GPIO (wakeup events)\n");
++
++			return(-ENODEV);
++		} else {
++			wkup_mapped = 1;
++			setup_wkup(wkup_base);
++		}
++	}
++
++
++	/* Get the first minor device number */
++	pn = 0;
++	while (pn < 7 && 0 == (portmask & (1 << pn))) {
++		++pn;
++	}
++
++	/* Allocate character devices */
++	/* calculate consecutive device numbers range */
++	firstminor = pn * 8;
++	vt1211_devmap(pn, &devcount);
++	while (pn++ < 7) {
++		/* we always add 8, though port 6 has only 3 lines */
++		if (portmask & (1 << pn)) {
++			vt1211_devmap(pn, &devcount);
++		}
++	}
++	numdevs = devcount.in + devcount.out;
++
++	if (rc == 0) {
++		if (major) {
++			dev_id = MKDEV(major, firstminor);
++			rc = register_chrdev_region(dev_id, numdevs, DRVNAME);
++		} else {
++			rc = alloc_chrdev_region(&dev_id, firstminor,
++						 numdevs, DRVNAME);
++			major = MAJOR(dev_id);
++		}
++	}
++
++	/* Register platform device */
++	if (rc || (rc = vt1211_setup_platform_devs(&devcount))) {
++		/* Error -- cleanup */
++		if (gpio_mapped) {
++			release_region(gpio_base, VT1211_GPIO_SIZE);
++		}
++		if (wkup_mapped) {
++			release_region(wkup_base, VT1211_WKUP_SIZE);
++		}
++		if (!IS_ERR(pdevin)) {
++			platform_device_put(pdevin);
++			platform_device_del(pdevin);
++		}
++		if (!IS_ERR(pdevout)) {
++			platform_device_put(pdevout);
++			platform_device_del(pdevout);
++		}
++
++		if (rc != -ENODEV) {
++			rc = -1;
++		}
++	} else {
++		printk(KERN_DEBUG DRVNAME ": base=0x%X portmask=0x%X major=%d\n",
++		       gpio_base, portmask, major);
++
++		cdev_init(&vt1211_gpio_cdev, &vt1211_gpio_fops);
++		cdev_add(&vt1211_gpio_cdev, dev_id, numdevs);
++	}
++
++	vt1211_exitConfig(cir_addr);
++	return(rc);
++}
++
++
++static void __exit vt1211_gpio_cleanup(void)
++{
++	dev_t dev_id = MKDEV(major, firstminor);
++
++	cdev_del(&vt1211_gpio_cdev);
++	unregister_chrdev_region(dev_id, numdevs);
++	if (gpio_mapped) {
++		release_region(gpio_base, VT1211_GPIO_SIZE);
++	}
++	if (wkup_mapped) {
++		release_region(wkup_base, VT1211_WKUP_SIZE);
++	}
++	platform_device_unregister(pdevin);
++	platform_device_unregister(pdevout);
++}
++
++
++module_init(vt1211_gpio_init);
++module_exit(vt1211_gpio_cleanup);
++
++EXPORT_SYMBOL(vt1211_gpio_get);
++EXPORT_SYMBOL(vt1211_gpio_set);
++
++/*
++ * Local Variables:
++ * mode: c
++ * c-basic-offset: 8
++ * tab-width: 8
++ * End:
++ */

@@ -1,0 +1,14 @@
+--- netpbm-9.24/Makefile.config.in.strip	Wed Jun 19 16:02:02 2002
++++ netpbm-9.24/Makefile.config.in	Wed Jun 19 16:09:25 2002
+@@ -56,9 +56,9 @@
+ 
+ # STRIPFLAG is the option you pass to the above install program to make it
+ # strip unnecessary information out of binaries.
+-STRIPFLAG = -s
++# STRIPFLAG = -s
+ # If you don't want to strip the binaries, just leave it null:
+-#STRIPFLAG = 
++STRIPFLAG = 
+ 
+ SYMLINK = ln -s
+ # At least some Windows environments don't have any concept of symbolic

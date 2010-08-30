@@ -1,0 +1,39 @@
+diff -up csync2-1.34/Makefile.am.hack csync2-1.34/Makefile.am
+--- csync2-1.34/Makefile.am.hack	2007-07-24 23:04:18.000000000 +0200
++++ csync2-1.34/Makefile.am	2007-10-25 22:36:24.000000000 +0200
+@@ -31,7 +31,7 @@ CLEANFILES = cfgfile_parser.c cfgfile_pa
+              private_librsync private_libsqlite config.log		\
+              config.status config.h .deps/*.Po stamp-h1 Makefile
+ 
+-AM_CFLAGS=
++AM_CFLAGS=-DDIFF_COMMAND=@DIFF_COMMAND@
+ AM_LDFLAGS=
+ 
+ if PRIVATE_LIBRSYNC
+diff -up csync2-1.34/configure.ac.hack csync2-1.34/configure.ac
+--- csync2-1.34/configure.ac.hack	2007-07-24 23:04:19.000000000 +0200
++++ csync2-1.34/configure.ac	2007-10-25 22:36:24.000000000 +0200
+@@ -71,6 +71,11 @@ then
+ 
+ fi
+ 
++AC_ARG_VAR([DIFF_COMMAND],[diff command to use with csync2 -TT])
++if test -z "${DIFF_COMMAND}" ; then
++	 DIFF_COMMAND="\"\\\"diff -Nu - '%s' | tail -n +3\\\"\""
++fi
++
+ AC_CONFIG_FILES([Makefile])
+ AC_OUTPUT
+ 
+diff -up csync2-1.34/update.c.hack csync2-1.34/update.c
+--- csync2-1.34/update.c.hack	2007-07-24 23:04:18.000000000 +0200
++++ csync2-1.34/update.c	2007-10-25 22:37:59.000000000 +0200
+@@ -698,7 +698,7 @@ found_host_check:
+ 	/* XXX no error check on setenv
+ 	 * (could be insufficient space in environment) */
+ 
+-	snprintf(buffer, 512, "diff -Nus --label \"$peer_label\" - --label \"$my_label\" \"$diff_file\"");
++ 	snprintf(buffer, 512, DIFF_COMMAND, filename);
+ 	old_sigpipe_handler = signal(SIGPIPE, SIG_IGN);
+ 	p = popen(buffer, "w");
+ 

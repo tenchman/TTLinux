@@ -1,0 +1,14 @@
+# vim:set syntax=kconfig:
+config CONFIG_AUTOMAKE
+  bool "automake - A GNU tool for automatically creating Makefiles"
+  default y
+  help
+    Automake is a tool for automatically generating `Makefile.in'
+    files compliant with the GNU Coding Standards.
+
+    You should install Automake if you are developing software and would
+    like to use its ability to automatically generate GNU standard
+    Makefiles. If you install Automake, you will also need to install
+    GNU's Autoconf package.
+
+    http://sources.redhat.com/automake

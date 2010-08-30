@@ -1,0 +1,5339 @@
+--- squid-2.6.STABLE2/include/autoconf.h.in.filter	2006-07-12 17:00:31.000000000 +0200
++++ squid-2.6.STABLE2/include/autoconf.h.in	2006-09-29 14:41:34.000000000 +0200
+@@ -564,6 +564,12 @@
+ /* Define to 1 if you have the <time.h> header file. */
+ #undef HAVE_TIME_H
+ 
++/*
++ * Define to enable support for loadable filter modules. Needs HAVE_LIBDL or
++ * HAVE_LIBDLD.
++ */
++#undef SQUID_FILTERS
++
+ /* Define if struct tm has tm_gmtoff member */
+ #undef HAVE_TM_GMTOFF
+ 
+@@ -919,3 +925,9 @@
+ 
+ /* Have unsigned char datatype */
+ #undef uint8_t
++
++/* Define if we have the Solaris/Linux dlopen() library */
++#undef HAVE_LIBDL
++
++/* Define if we have the HPUX shl_load() library */
++#undef HAVE_LIBDLD
+--- squid-2.6.STABLE2/src/acl.c.filter	2006-07-29 15:44:44.000000000 +0200
++++ squid-2.6.STABLE2/src/acl.c	2006-09-29 14:41:34.000000000 +0200
+@@ -35,6 +35,7 @@
+ 
+ #include "squid.h"
+ #include "splay.h"
++#include "module.h"
+ 
+ static void aclParseDomainList(void *curlist);
+ static void aclParseUserList(void **current);
+--- squid-2.6.STABLE2/src/protos.h.filter	2006-07-31 01:27:03.000000000 +0200
++++ squid-2.6.STABLE2/src/protos.h	2006-09-29 14:41:34.000000000 +0200
+@@ -1151,6 +1151,7 @@
+ extern HttpReply *errorBuildReply(ErrorState * err);
+ extern void errorSend(int fd, ErrorState *);
+ extern void errorAppendEntry(StoreEntry *, ErrorState *);
++extern void errorAppendEntryRealm(StoreEntry *, ErrorState *, const char *);
+ extern void errorStateFree(ErrorState * err);
+ extern int errorReservePageId(const char *page_name);
+ extern ErrorState *errorCon(err_type type, http_status);
+--- squid-2.6.STABLE2/src/client_side.c.filter	2006-07-23 23:44:22.000000000 +0200
++++ squid-2.6.STABLE2/src/client_side.c	2006-09-29 15:06:42.000000000 +0200
+@@ -34,6 +34,7 @@
+  */
+ 
+ #include "squid.h"
++#include "module.h"
+ 
+ #if IPF_TRANSPARENT
+ #if HAVE_SYS_IOCTL_H
+@@ -566,6 +567,14 @@
+     request_t *new_request = NULL;
+     request_t *old_request = http->request;
+     const char *urlgroup = http->conn->port->urlgroup;
++#if SQUID_FILTERS
++    if (old_request->flags.filter) {
++	reqParam req;
++	req.uri = result ? result : http->uri;
++	req.req = http;
++	result = moduleRedirect(&req);
++    }
++#endif
+     debug(33, 5) ("clientRedirectDone: '%s' result=%s\n", http->uri,
+ 	result ? result : "NULL");
+     assert(http->redirect_state == REDIRECT_PENDING);
+@@ -1334,6 +1343,10 @@
+ 	aclChecklistFree(http->acl_checklist);
+     if (request)
+ 	checkFailureRatio(request->err_type, http->al.hier.code);
++#if SQUID_FILTERS
++    if (http->filter)
++        moduleCFilterDestroy(http->filter);
++#endif
+     safe_free(http->uri);
+     safe_free(http->log_uri);
+     safe_free(http->al.headers.request);
+@@ -1885,6 +1898,17 @@
+ 	httpHeaderDelById(hdr, HDR_CONNECTION);
+ 	stringClean(&strConnection);
+     }
++#if SQUID_FILTERS
++    /* Set up content filter if needed */
++    if (request->flags.filter)
++        http->filter = moduleCFilterNew(
++            httpHeaderGetStr(hdr, HDR_CONTENT_TYPE), http->uri, rep);
++    /* Kill Ranges if filtered */
++    if (http->filter && request->range) {
++	httpHdrRangeDestroy(request->range);
++	request->range = NULL;
++    }
++#endif
+     /* Handle Ranges */
+     if (request->range)
+ 	clientBuildRangeHeader(http, rep);
+@@ -1960,6 +1984,10 @@
+     /* Append X-Cache */
+     httpHeaderPutStrf(hdr, HDR_X_CACHE, "%s from %s",
+ 	http->flags.hit ? "HIT" : "MISS", getMyHostname());
++#if SQUID_FILTERS
++    if (request->flags.filter)
++        moduleRepHeader(http->uri, hdr);
++#endif
+ #if USE_CACHE_DIGESTS
+     /* Append X-Cache-Lookup: -- temporary hack, to be removed @?@ @?@ */
+     httpHeaderPutStrf(hdr, HDR_X_CACHE_LOOKUP, "%s from %s:%d",
+@@ -2945,6 +2973,47 @@
+ 	    http->flags.done_copying = 1;
+     } else if (body_buf && body_size) {
+ 	http->out.offset += body_size;
++#if SQUID_FILTERS
++        if (http->filter) {
++            MemBuf mb2;
++            memBufDefInit(&mb2);
++            int result;
++	    /* pass thru header */
++            if (mb.size)
++                memBufAppend(&mb2, mb.buf, mb.size);
++
++            result = moduleCFilter(http->filter, &mb2, body_buf, body_size);
++            if (result == -1) {
++                /* filter module told us to abort the request */
++                debug(33, 3) ("clientSendMoreData: filter abort\n");
++                memBufClean(&mb);
++                memBufClean(&mb2);
++                clientWriteComplete(http->conn->fd, NULL, 0, COMM_OK, http);
++                memFree(buf, MEM_CLIENT_SOCK_BUF);
++                return;
++            }
++
++            if (result >= 0) {
++               memBufClean(&mb);
++		/* write */
++		if (mb2.size > 0) {
++		    comm_write_mbuf(http->conn->fd, mb2, clientWriteComplete, http);
++		    memFree(buf, MEM_CLIENT_SOCK_BUF);
++		} else {
++		    /* wrote none, but want to read more */
++		    storeClientCopy(http->sc, http->entry,
++				    http->out.offset,
++				    http->out.offset,
++				    CLIENT_SOCK_SZ,
++				    buf,
++				    clientSendMoreData,
++				    http);
++		}
++		return;
++	    }
++	    memBufClean(&mb2);
++        }
++#endif
+ 	memBufAppend(&mb, body_buf, body_size);
+     }
+     /* write */
+@@ -3000,8 +3068,55 @@
+     if (!http->request->range) {
+ 	/* Avoid copying to MemBuf for non-range requests */
+ 	http->out.offset += size;
++#if SQUID_FILTERS
++        if (http->filter) {
++            char *auth_user, *content_type, *client_addr;
++	    MemBuf mb2;
++
++            memBufDefInit(&mb2);
++            /* filter content */
++            
++	    /* client address */
++	    client_addr = inet_ntoa(http->request->client_addr);
++
++	    /* authenticated user */
++	    if (http->request->auth_user_request)
++		auth_user = authenticateUserRequestUsername(http->request->auth_user_request);
++	    else
++		auth_user = NULL;
++
++	    /* content type */
++	    if (http->entry && http->entry->mem_obj && http->entry->mem_obj->reply)
++		content_type = strBuf(http->entry->mem_obj->reply->content_type);
++	    else
++		content_type = NULL;
++	    
++	    switch (moduleCFilter(http->filter, &mb2, buf, size)) {
++	    case -1:
++		/* filter module told us to abort the request */
++                debug(33, 3) ("clientSendMoreData: filter abort\n");
++                memBufClean(&mb2);
++                clientWriteComplete(fd, NULL, 0, COMM_OK, http);
++                return;
++	    case -2:
++		/* filter module told us to proceed */
++		comm_write(fd, buf, size, clientWriteBodyComplete, http, NULL);
++            	return;
++	    default:
++		/* write */
++		if (mb2.size > 0) {
++		  comm_write_mbuf(fd, mb2, clientWriteComplete, http);
++		  memFree(buf, MEM_CLIENT_SOCK_BUF);
++		}
++	    }
++        } else {
++#endif
++
+ 	comm_write(fd, buf, size, clientWriteBodyComplete, http, NULL);
+ 	/* NULL because clientWriteBodyComplete frees it */
++#if SQUID_FILTERS
++        }
++#endif
+ 	return;
+     }
+     if (http->request->method == METHOD_HEAD) {
+@@ -3984,6 +4099,10 @@
+ #if LINUX_TPROXY
+ 	    request->flags.tproxy = conn->port->tproxy;
+ #endif
++#if SQUID_FILTERS
++            if (conn->me.sin_port == htons(Config.Port.nofilter))
++                request->flags.filter = 0;
++#endif
+ 	    request->flags.accelerated = http->flags.accel;
+ 	    request->flags.transparent = http->flags.transparent;
+ 	    /*
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/src/patfile.h	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,31 @@
++/* The pattern file library.
++ */
++
++#ifndef PATFILE_H
++#define PATFILE_H
++
++#include "module.h"
++
++/* Create a patFileObject.
++   name - the file name.
++   replace - 0 if a "match" aka "allow list" file, 1 if a "replacement" file.
++*/
++patFileObject *patfileNew(const char *name, int replace);
++
++/* Check if file has changed, reload if necessary.
++   Usually called before each patfileMatch().
++*/
++void patfileCheckReload(patFileObject *this);
++
++/* Unload the patterns, leave empty. Usually no need to call this. */
++void patfileUnload(patFileObject *this);
++
++/* Check for match.
++   uri - the URI to check.
++   Returns - NULL, if no match was found.
++             uri, if match was found in a "match" file.
++             replacement, if match was found in a "replacement" file.
++*/
++char *patfileMatch(patFileObject *this, const char *uri);
++
++#endif
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/src/module.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,550 @@
++/*
++ * DEBUG: section 92     Module loader and hooks
++ * AUTHOR: Olaf Titz
++ *
++ * SQUID Internet Object Cache  http://squid.nlanr.net/Squid/
++ * ----------------------------------------------------------
++ *
++ *  Squid is the result of efforts by numerous individuals from the
++ *  Internet community.  Development is led by Duane Wessels of the
++ *  National Laboratory for Applied Network Research and funded by the
++ *  National Science Foundation.  Squid is Copyrighted (C) 1998 by
++ *  Duane Wessels and the University of California San Diego.  Please
++ *  see the COPYRIGHT file for full details.  Squid incorporates
++ *  software developed and/or copyrighted by other sources.  Please see
++ *  the CREDITS file for full details.
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2 of the License, or
++ *  (at your option) any later version.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, write to the Free Software
++ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111, USA.
++ *
++ */
++
++#include "squid.h"
++#include "module.h"
++#include "typedefs.h"
++
++/* ---------- Module loader, definitions ---------- */
++
++/* This defines a common API between the Sun libdl and HP libdld.
++   We use shl_t for library handles and
++   void xdlsym(void **result, shl_t handle, const char *name);
++   instead of dlsym().
++   The rest follows the Sun API.
++*/
++
++#ifdef HAVE_LIBDL
++#include <dlfcn.h>
++
++/* Solaris/Linux/etc. */
++typedef void *shl_t;
++#define xdlsym(r, h, s) (r)=dlsym((h), (s))
++
++#else
++#ifdef HAVE_LIBDLD
++#include <dl.h>
++
++/* HPUX */
++#define RTLD_NOW        BIND_IMMEDIATE
++#define RTLD_LAZY       BIND_DEFERRED
++#define RTLD_GLOBAL     0
++#define dlerror()       strerror(errno)
++#define dlopen(m, f)    shl_load((m), (f), 0)
++#define xdlsym(r, h, s) \
++        if (shl_findsym(&(h), (s), TYPE_UNDEFINED, &(r))<0) (r)=NULL
++#define dlclose(h)      shl_unload((h))
++
++#endif
++#endif
++
++#define MODULE_C
++#include <classes.dh>
++
++/* ---------- Object framework ---------- */
++void *void_O_CTOR_(Object *this, _DTOR dtor)
++{
++    this->destroy = dtor;
++    return this;
++}
++
++void Object_O_DTOR(Object *this)
++{
++#if 0
++    if (this->refCount <= 0)
++        cbdataFree(this);
++#else
++    assert(this->refCount <= 0);
++    cbdataFree(this);
++#endif
++}
++
++Ddef(moduleObject)
++{
++    /*
++      next is handled in moduleUnloadAll()
++      owner is handled in moduleDestroyProxy()
++      description and trigger are not alloced
++    */
++    UNREF(this->patFile);
++}
++
++/* ---------- Book-keeping of loaded modules ---------- */
++
++/* The shared library object */
++
++classdef(private shlibObject, Object, ({
++    struct _shlibObject *next, *prev;   /* Chain (weak ref!) */
++    char *name;                         /* Module name */
++    shl_t hndl;                         /* dlopen handle */
++}))
++
++typedef struct _moduleOwner {
++    shlibObject *owner;                 /* Containing shlib */
++    void (*realDestroy)(void *);        /* moduleObject destructor */
++} moduleOwner;
++
++/* The filter chains */
++moduleObject *chain[FIL_END] = {NULL};
++
++/* Registry */
++shlibObject *modules = NULL;
++shlibObject *currentlyLoading = NULL;
++
++Ddef(shlibObject)
++{
++#if 0
++    if (this->refCount > 0) {
++        debug(92, 5) ("shlibUnload: revived %s\n", this->name);
++        return;
++    }
++#endif
++    debug(92, 4) ("shlibUnload: unloading %s\n", this->name);
++    if (modules == this) {
++        assert(this->prev == NULL);
++        modules = this->next;
++    }
++    if (this->next)
++        this->next->prev = this->prev;
++    if (this->prev)
++        this->prev->next = this->next;
++    xfree(leakFree(this->name));
++    dlclose(this->hndl);
++}
++
++static void shlibUnloadCB(void *p)
++{
++    shlibObject *o = p;
++    debug(92, 8) ("shlibUnloadCB: %s refCount=%d\n", o->name, o->refCount);
++    cbdataUnlock(o);
++    UNREF(o); /* calls the shlibObject dtor if needed */
++}
++
++/* The actual unloading via dlclose() of a module is deferred
++   because it must be called from the main loop directly, not via
++   UNREF. Otherwise, a module could possibly unload its own code
++   segment. With several seconds delay, a module which is unchanged
++   after reconfig will just be reused (but not its moduleObject(s)!)
++*/
++static void moduleDestroyProxy(void *obj)
++{
++    moduleOwner *o = ((moduleObject*)obj)->info.owner;
++    debug(92, 8) ("moduleDestroyProxy: %s %s\n", o->owner->name,
++                  ((moduleObject*)obj)->description);
++    assert(cbdataValid(o));
++    o->realDestroy(obj);
++    cbdataLock(o->owner);
++    eventAddIsh("shlibUnload", shlibUnloadCB, o->owner, 15.0, 1);
++    cbdataUnlock(o);
++    cbdataFree(o);
++}
++
++/* ---------- Module loader, implementation ---------- */
++
++/* Register a moduleObject. Called from the modules' moduleInit functions. */
++void moduleRegister(moduleObject *theModule)
++{
++    moduleObject *p;
++    moduleOwner *o;
++    CBDATA_TYPE(moduleOwner);
++    
++    if (theModule->info.version != MODULE_API_VERSION) {
++        debug(92, 1) ("moduleRegister: rejecting incompatible module\n");
++        return;
++    }
++    debug(92, 4) ("moduleRegister: registering %s %s\n",
++                  theModule->description,
++                  theModule->trigger ? theModule->trigger : "");
++    p = chain[theModule->chain.typ];
++    if (p) {
++        for (; p->chain.next; p = p->chain.next);
++        p->chain.next = REF(theModule);
++    } else {
++        p = REF(theModule);
++        chain[theModule->chain.typ] = p;
++    }
++    theModule->chain.next = NULL;
++    assert(currentlyLoading);
++/*
++    o = leakAdd(xmalloc(sizeof(moduleOwner)));
++    cbdataAdd(o, cbdataLfree, 0);
++*/
++    CBDATA_INIT_TYPE(moduleOwner);
++    o = cbdataAlloc(moduleOwner);
++    cbdataLock(o);
++    o->owner = REF(currentlyLoading);
++    o->realDestroy = theModule->destroy;
++    theModule->info.owner = o;
++    theModule->destroy = moduleDestroyProxy;
++}
++
++void moduleLoad(const char *module, const wordlist *args)
++{
++    void (*initf)(const wordlist *);
++    const char *dle;
++    shl_t hndl;
++    shlibObject *sc;
++    const char *name = strrchr(module, '/');
++    if (name)
++        ++name;
++    else
++        name = module;
++
++    debug(92, 4) ("moduleLoad: loading %s\n", name);
++
++    hndl = dlopen(module, RTLD_NOW|RTLD_GLOBAL);
++    if (!hndl) {
++        dle = dlerror();
++        if (!dle)
++            dle = "(unknown)";
++        debug(92, 1) ("moduleLoad: %s: dlopen error: %s\n", module, dle);
++        return;
++    }
++    xdlsym(initf, hndl, "moduleInit");
++    if (!initf) {
++        dle = dlerror();
++        if (!dle)
++            dle = "NULL";
++        debug(92, 1) ("moduleInit not found: %s\n", dle);
++        dlclose(hndl);
++        return;
++    }
++    for (sc=modules; sc; sc=sc->next) {
++        if (hndl == sc->hndl) {
++#ifdef HAVE_LIBDL
++            dlclose(hndl);
++            /* for HAVE_LIBDLD: do not unload here! Refcounting seems to be
++               broken, at least for HPUX 10.20. */
++#endif
++            break;
++        }
++    }
++    if (!sc) {
++        sc = new(shlibObject);
++        sc->next = modules;
++        sc->prev = NULL;
++        sc->name = leakAdd(xstrdup(name));
++        sc->hndl = hndl;
++        if (modules)
++            modules->prev = sc;
++        modules = sc;
++    }
++    currentlyLoading = REF(sc);
++    initf(args);
++    UNREF(currentlyLoading);
++}
++
++void moduleLoadAll(void)
++{
++    load_module *list;
++    wordlist *w;
++    for (list = Config.modules; list; list = list->next) {
++        w = list->params;
++        moduleLoad(list->module, w);
++    }
++}
++
++void moduleUnloadAll(void)
++{
++    int i, m = 0;
++    moduleObject *p, *p0;
++
++    for (i=0; i<FIL_END; ++i) {
++        for (p = chain[i]; p; p = p0) {
++            p0 = p->chain.next;
++            debug(92, 5) ("moduleUnloadAll: unregistering %s\n",
++                          p->description);
++            UNREF(p);
++            ++m;
++        }
++        chain[i] = NULL;
++    }
++    debug(92, 4) ("moduleUnloadAll: unregistered %d objects\n", m);
++}
++
++
++/* ---------- Filtering hooks ---------- */
++
++char *canonType(const char *t)
++{
++    char *x, *p;
++    if (!t)
++	return NULL;
++    p = x = xstrdup(t);
++    while (*p) {
++	if (*p==';') {
++	    *p='\0';
++	    return x;
++	}
++	*p = tolower(*p);
++	++p;
++    }
++    return x;
++}
++
++int mtmatch(const char *ct, const char *tr)
++{
++    if (tr[0] == '*' && tr[1] == '/') {
++	for (; *ct && *ct != '/'; ++ct);
++	if (*ct)
++	    ++ct;
++	tr += 2;
++    }
++    while (*ct) {
++	if (*tr == '*')
++	    return 1;
++	if (*ct != *tr)
++	    return 0;
++	++ct;
++	++tr;
++    }
++    return (*tr == 0);
++}
++
++char *moduleUrlClean(const char *uri)
++{
++    static char buf[MAX_URL];
++    xstrncpy(buf, uri, MAX_URL);
++    if (Config.onoff.strip_query_terms) {
++	char *p = strchr(buf, '?');
++	if (p)
++	    p[1] = '\0';
++    }
++    if (stringHasCntl(buf))
++	return rfc1738_escape_unescaped(buf);
++    return buf;
++}
++
++char *moduleRedirect(const void *req)
++{
++    const char *tmp;
++    moduleObject *f;
++    reqParam *rp = (reqParam *)req;
++
++    for (f = chain[FIL_REDIRECT]; f; f = f->chain.next) {
++        tmp = f->filter(f, req);
++	if (tmp)
++	    return (char *)tmp;
++    }
++    return (char *)rp->uri; /* XX */
++}
++
++
++char *moduleRejecttype(const char *typ, const char *uri)
++{
++    moduleObject *f;
++    typParam tp;
++    char *r = (char *)uri; /* XX */
++    tp.uri = r;
++    tp.typ = canonType(typ);
++    for (f = chain[FIL_REJECTTYPE]; f; f = f->chain.next) {
++	if (!*f->trigger || (tp.typ && mtmatch(tp.typ, f->trigger))) {
++	    r = f->filter(f, &tp);
++	    break;
++	}
++    }
++    xfree(tp.typ);
++    return r;
++}
++
++
++void moduleReqHeader(const char *uri, HttpHeader *hdr)
++{
++    hdrParam hp;
++    moduleObject *f;
++    hp.uri = uri;
++    hp.hdr = hdr;
++    for (f = chain[FIL_REQHEADER]; f; f = f->chain.next) {
++        (void) f->filter(f, &hp);
++    }
++}
++
++void moduleRepHeader(const char *uri, HttpHeader *hdr)
++{
++    hdrParam hp;
++    moduleObject *f;
++    hp.uri = uri;
++    hp.hdr = hdr;
++    for (f = chain[FIL_REPHEADER]; f; f = f->chain.next) {
++        (void) f->filter(f, &hp);
++    }
++}
++
++
++filterObject *moduleCFilterNew(const char *typ, const char *uri,
++                               HttpReply *rep)
++{
++    repParam rp;
++    moduleObject *f;
++    filterObject *fo = NULL, *fo1 = NULL;
++    rp.uri = uri;
++    rp.rep = rep;
++    if (typ) {
++	char *tt = canonType(typ);
++        for (f = chain[FIL_CONTFILTER]; f; f = f->chain.next) {
++            if (mtmatch(tt, f->trigger)) {
++                filterObject *n = f->filter(f, &rp);
++                if (n) {
++		    n->owner = REF(f);
++		    n->uri = leakAdd(xstrdup(uri));
++		    if (fo) {
++			fo->next = REF(n);
++			fo = fo->next;
++		    } else {
++			fo = fo1 = REF(n);
++		    }
++		}
++            }
++        }
++	xfree(tt);
++    }
++    return fo1;
++}
++
++Ddef(filterObject)
++{
++    UNREF(this->next);
++    UNREF(this->owner);
++    xfree(leakFree(this->uri));
++}
++
++void moduleCFilterDestroy(void *f)
++{
++    filterObject *o = f;
++    UNREF(o);
++}
++
++int moduleCFilter(void *filter, MemBuf *target, const char *buf, int len)
++{
++    filterObject *f;
++    MemBuf tmp[2];
++    int i = 0, r = 0, res;
++    char tmpu[2] = {0, 0};
++
++    for (f = filter; f->next; f = f->next) {
++        if (tmpu[i]) {
++            memBufReset(&tmp[i]);
++        } else {
++            memBufDefInit(&tmp[i]);
++            tmpu[i] = 1;
++        }
++        if ((res = f->filter(f, &tmp[i], buf, len)) < 0) {
++            debug(92, 4) ("moduleCFilter: aborted by %s\n",
++                          f->owner->description);
++            r = res;
++            break;
++        }
++        buf = tmp[i].buf;
++        len = tmp[i].size;
++        i = 1-i;
++    }
++    if (r >= 0) {
++        if ((res = f->filter(f, target, buf, len)) < 0) {
++            debug(92, 4) ("moduleCFilter: aborted by %s\n",
++                          f->owner->description);
++            r = res;
++        }
++    }
++    for (i=0; i<2; ++i)
++        if (tmpu[i])
++            memBufClean(&tmp[i]);
++    return r;
++}
++
++
++/*
++* Not ported to squid 2.5
++*
++*/
++#if 0
++static void moduleAuthResult(void *data, char *result)
++{
++    moduleAuthCBData *d = data;
++    moduleObject *f;
++    if (result == NULL) {
++        debug(92, 8) ("moduleAuthResult: pass\n");
++        if (cbdataValid(d))
++            d->callback(d->check, "OK");
++        goto out;
++    }
++    if (result != RREJECT) {
++        debug(92, 8) ("moduleAuthResult: challenge %s\n", result);
++        d->check->request->proxy_realm = result;
++        if (cbdataValid(d))
++            d->callback(d->check, NULL);
++        goto out;
++    }
++    if (!(f = d->next)) {
++        debug(92, 8) ("moduleAuthResult: all failed, try core auth\n");
++        authenticateStart(d->check->auth_user, d->callback, d->check);
++        goto out;
++    }
++    d->next = REF(f->chain.next);
++    debug(92, 8) ("moduleAuth: trying %s\n", f->description);
++    f->filter(f, d);
++    UNREF(f);
++    return;
++
++ out:
++    cbdataUnlock(d->check);
++    UNREF(d->next);
++    cbdataUnlock(d);
++    cbdataFree(d);
++}
++#endif
++
++/*
++* Not ported to squid 2.5
++*
++*/
++#if 0
++void moduleAuth(aclCheck_t *check, RH *callback)
++{
++    moduleAuthCBData *d;
++    moduleObject *f;
++    if (!(f = REF(chain[FIL_AUTH]))) {
++        authenticateStart(check->auth_user, callback, check);
++        return;
++    }
++    d = xmalloc(sizeof(moduleAuthCBData));
++    cbdataAdd(d, cbdataXfree, 0);
++    cbdataLock(check);
++    d->check = check;
++    d->authResult = moduleAuthResult;
++    d->callback = callback;
++    cbdataLock(d);
++    d->next = REF(f->chain.next);
++    debug(92, 8) ("moduleAuth: trying %s\n", f->description);
++    f->filter(f, d);
++    UNREF(f);
++}
++#endif
+--- squid-2.6.STABLE2/src/Makefile.am.filter	2006-09-29 14:41:34.000000000 +0200
++++ squid-2.6.STABLE2/src/Makefile.am	2006-09-29 14:41:34.000000000 +0200
+@@ -182,10 +182,12 @@
+ 	MemPool.c \
+ 	MemBuf.c \
+ 	mime.c \
++	module.c \
+ 	multicast.c \
+ 	neighbors.c \
+ 	net_db.c \
+ 	Packer.c \
++	patfile.c \
+ 	pconn.c \
+ 	peer_digest.c \
+ 	peer_monitor.c \
+@@ -308,6 +310,7 @@
+ DEFAULT_PINGER		= $(libexecdir)/`echo pinger | sed '$(transform);s/$$/$(EXEEXT)/'`
+ DEFAULT_UNLINKD		= $(libexecdir)/`echo unlinkd | sed '$(transform);s/$$/$(EXEEXT)/'`
+ DEFAULT_DISKD		= $(libexecdir)/`echo diskd-daemon | sed '$(transform);s/$$/$(EXEEXT)/'`
++DEFAULT_REDIRECT_SO	= $(libexecdir)/redirect.so
+ DEFAULT_ICON_DIR	= $(datadir)/icons
+ DEFAULT_ERROR_DIR	= $(datadir)/errors/@ERR_DEFAULT_LANGUAGE@
+ DEFAULT_MIB_PATH	= $(datadir)/mib.txt
+@@ -420,3 +423,13 @@
+ ##		$(RM) -f $(libexecdir)/-$$f; \
+ ##	fi
+ 
++classes.th classes.dh: module.c patfile.c module.h patfile.h ../filters/classdef
++	$(PERL) ../filters/classdef -sC -o classes module.c patfile.c module.h patfile.h
++
++# XX can't we generate these automatically?
++acl.o: module.h classes.th
++client_side.o: module.h classes.th
++http.o: module.h classes.th
++main.o: module.h classes.th
++module.o: module.c patfile.h module.h classes.th
++patfile.o: patfile.c patfile.h module.h classes.th
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/src/patfile.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,245 @@
++/*
++ * DEBUG: section 94     Pattern file library for filters
++ * AUTHOR: Olaf Titz
++ *
++ * SQUID Internet Object Cache  http://squid.nlanr.net/Squid/
++ * ----------------------------------------------------------
++ *
++ *  Squid is the result of efforts by numerous individuals from the
++ *  Internet community.  Development is led by Duane Wessels of the
++ *  National Laboratory for Applied Network Research and funded by the
++ *  National Science Foundation.  Squid is Copyrighted (C) 1998 by
++ *  Duane Wessels and the University of California San Diego.  Please
++ *  see the COPYRIGHT file for full details.  Squid incorporates
++ *  software developed and/or copyrighted by other sources.  Please see
++ *  the CREDITS file for full details.
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2 of the License, or
++ *  (at your option) any later version.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, write to the Free Software
++ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111, USA.
++ *
++ */
++
++#include "squid.h"
++#include "module.h"
++#include "patfile.h"
++
++#include <sys/stat.h>
++#include <unistd.h>
++#include <stdio.h>
++
++#define BUFINCR 1024            /* Size increment of replacement buffer */
++
++typedef struct _patChain {
++    struct _patChain *next;             /* next in chain */
++    regex_t patbuf;                     /* compiled pattern */
++    union {
++        int negate;                     /* non-replace: is negative match */
++        char *replace;                  /* replace: replacement string */
++    } action;
++} patChain;
++
++classdef(patFileObject, Object, ({
++    struct _patChain *chain;            /* the pattern chain */
++    char *fileName;                     /* name of pattern file */
++    time_t mtime;                       /* modtime of pattern file */
++    int replace;                        /* Process replace rules? */
++    char *buf;                          /* buffer space */
++    size_t buflen;                      /* buffer size */
++}))
++
++#define PATFILE_C
++#include <classes.dh>
++
++Ddef(patFileObject)
++{
++    patfileUnload(this);
++    xfree(leakFree(this->fileName));
++    xfree(this->buf);
++}
++
++patFileObject *patfileNew(const char *name, int replace)
++{
++    patFileObject *p = new(patFileObject);
++    p->fileName = leakAdd(xstrdup(name));
++    p->replace = replace;
++    return p;
++}
++
++void patfileCheckReload(patFileObject *this)
++{
++    struct stat st;
++    FILE *f;
++    int ln = 0, np = 0, e, neg, fl;
++    char buf[256];
++    char *p0, *p1, *p2, *bang = NULL;
++    patChain *n, *l = NULL;
++
++    if (stat(this->fileName, &st)<0) {
++        debug(94, 1) ("%s: stat: %s\n", this->fileName, xstrerror());
++        return;
++    }
++    if (this->mtime >= st.st_mtime)
++        return;
++    this->mtime = st.st_mtime;
++
++    f = fopen(this->fileName, "r");
++    if (!f) {
++        debug(94, 1) ("%s: open: %s\n", this->fileName, xstrerror());
++        return;
++    }
++    debug(94, 4) ("patfile: reloading %s\n", this->fileName);
++    patfileUnload(this);
++
++    while (fgets(buf, sizeof(buf), f)) {
++        ++ln;
++        neg = 0;
++        fl = this->replace ? REG_EXTENDED : REG_EXTENDED|REG_NOSUB;
++        for (p0=buf; *p0==' ' || *p0=='\t'; ++p0);
++        if (*p0=='#' || *p0=='\n' || *p0=='\0')
++            continue;
++        for (p1=p0; *p1 && *p1!='\t' && *p1!='\n'; ++p1);
++        if (*p1) {
++            for (*p1++='\0'; *p1=='\t'; ++p1);
++            for (p2=p1; *p2 && *p2!='\n'; ++p2);
++            *p2='\0';
++            if (*p1=='\t' || *p1=='\n' || *p1=='!' || *p1=='\0')
++                p1=NULL;
++        } else {
++            p1=NULL;
++        }
++        if (*p0=='-') {
++            ++p0;
++            fl |= REG_ICASE;
++        }
++        if (*p0=='!') {
++            if (this->replace) {
++                if (bang)
++                    debug(94, 1) ("%s:%d: duplicate reject definition\n",
++                                  this->fileName, ln);
++                else
++                    if (p1)
++                        bang=xstrdup(p1);
++                continue;
++            } else {
++                ++p0;
++                neg = 1;
++            }
++        }
++        n = leakAdd(xmalloc(sizeof(patChain)));
++        e = regcomp(&n->patbuf, p0, fl);
++        if (e) {
++            (void)regerror(e, &n->patbuf, buf, sizeof(buf));
++            debug(94, 1) ("%s:%d: regex error: %s\n", this->fileName, ln, buf);
++            xfree(n);
++            continue;
++        }
++        if (this->replace) {
++            if (p1)
++                n->action.replace = xstrdup(p1);
++            else if (bang)
++                n->action.replace = xstrdup(bang);
++            else {
++		debug(94, 1) ("%s:%d: missing replacement\n",
++			      this->fileName, ln);
++                n->action.replace = NULL;
++	    }
++        } else {
++            n->action.negate = neg;
++        }
++        n->next = NULL;
++        if (l)
++            l->next = n;
++        else
++            this->chain = n;
++        l = n;
++        ++np;
++    }
++    fclose(f);
++    if (bang)
++        xfree(bang);
++    debug(94, 4) ("%s: loaded %d patterns\n", this->fileName, np);
++}
++
++void patfileUnload(patFileObject *this)
++{
++    patChain *p0, *p;
++    for (p = this->chain; p; p = p0) {
++        p0 = p->next;
++        regfree(&p->patbuf);
++        if (this->replace)
++            xfree(p->action.replace);
++        xfree(leakFree(p));
++    }
++    this->chain = NULL;
++}
++
++#define MAXSUBPAT 10
++
++/* Do the \0..\9 substitutions in the replacement pattern */
++static char *patfileSubst(patFileObject *this, const char *uri,
++			  patChain *r, const regmatch_t *subs)
++{
++    char *p0;
++    int n, i, k;
++    char c;
++
++    if (!(p0 = r->action.replace))
++	return NULL; /* Should return generic reject URI */
++    n = 0;
++    i = k = -1;
++    while (*p0 || i>=0) {
++	if (k >= 0) {
++	    if (i < subs[k].rm_eo) {
++		c = uri[i++];
++	    } else {
++		k = i = -1;
++		continue;
++	    }
++	} else if (*p0=='\\' && p0[1]>='0' && p0[1]<='9') {
++	    k = p0[1] - '0';
++	    p0 += 2;
++	    if ((i = subs[k].rm_so) < 0)
++		k = -1;
++	    continue;
++	} else {
++	    c = *p0++;
++	}
++	if (n+1 >= this->buflen) {
++	    this->buflen += BUFINCR;
++	    this->buf = xrealloc(this->buf, this->buflen);
++	}
++	this->buf[n++] = c;
++    }
++    this->buf[n] = '\0';
++    return this->buf;
++}
++
++char *patfileMatch(patFileObject *this, const char *uri)
++{
++    patChain *r;
++    regmatch_t subs[MAXSUBPAT];
++    int i;
++
++    for (r=this->chain, i=0; r; r=r->next, ++i) {
++        if (!regexec(&r->patbuf, uri, MAXSUBPAT, subs, 0)) {
++            debug(94, 8) ("patfileMatch: matched pattern %d\n", i);
++	    if (this->replace)
++		return patfileSubst(this, uri, r, subs);
++	    else
++                return r->action.negate ? NULL : (char*)uri; /* XX */
++        }
++    }
++    return NULL;
++}
++
+--- squid-2.6.STABLE2/src/cf.data.pre.filter	2006-09-29 14:41:34.000000000 +0200
++++ squid-2.6.STABLE2/src/cf.data.pre	2006-09-29 14:41:34.000000000 +0200
+@@ -328,6 +328,19 @@
+ 	"0".
+ DOC_END
+ 
++NAME: nofilter_port
++IFDEF: SQUID_FILTERS
++TYPE: ushort
++DEFAULT: none
++LOC: Config.Port.nofilter
++DOC_START
++	The port number where Squid listens for HTTP requests, which
++	will be processed bypassing all filters. Must be one of those
++	listed in http_port, or 0 to disable.
++
++	Only available when --enable-filters is given to the configure script.
++nofilter_port 3129
++DOC_END
+ 
+ NAME: mcast_groups
+ TYPE: wordlist
+@@ -1397,6 +1410,20 @@
+ 	"ALL,1".
+ DOC_END
+ 
++NAME: load_module
++TYPE: module
++DEFAULT: none
++IFDEF: SQUID_FILTERS
++LOC: Config.modules
++DOC_START
++	Specify here any number of loadable filter modules.
++	Each module may have an argument list, usually containing the
++	name of a configuration file.
++	See the documentation for the individual modules.
++
++	Only available when --enable-filters is given to the configure script.
++load_module @DEFAULT_REDIRECT_SO@ @DEFAULT_PREFIX@/etc/redirect
++DOC_END
+ 
+ NAME: log_fqdn
+ COMMENT: on|off
+--- squid-2.6.STABLE2/src/cache_cf.c.filter	2006-07-31 01:27:03.000000000 +0200
++++ squid-2.6.STABLE2/src/cache_cf.c	2006-09-29 14:41:34.000000000 +0200
+@@ -1837,6 +1837,50 @@
+     }
+ }
+ 
++#ifdef SQUID_FILTERS
++static void
++dump_module(StoreEntry * entry, const char *name, load_module * list)
++{
++    wordlist *w;
++    while (list != NULL) {
++        storeAppendPrintf(entry, "%s %s", name, list->module);
++	for (w = list->params; w != NULL; w = w->next) {
++	    storeAppendPrintf(entry, " %s", w->key);
++	}
++	storeAppendPrintf(entry, "\n");
++	list = list->next;
++    }
++}
++
++static void
++parse_module(load_module ** head)
++{
++    char *module = NULL;
++    wordlist *params = NULL;
++    load_module *p;
++    load_module **P;
++    parse_string(&module);
++    parse_wordlist(&params);
++    p = xcalloc(1, sizeof(load_module));
++    p->module = module;
++    p->params = params;
++    for (P = head; *P; P = &(*P)->next);
++    *P = p;
++}
++
++static void
++free_module(load_module ** head)
++{
++    load_module *p;
++    while ((p = *head) != NULL) {
++	*head = p->next;
++	xfree(p->module);
++	wordlistDestroy(&p->params);
++	xfree(p);
++    }
++}
++#endif
++
+ static void
+ dump_denyinfo(StoreEntry * entry, const char *name, acl_deny_info_list * var)
+ {
+--- squid-2.6.STABLE2/src/structs.h.filter	2006-07-31 01:27:03.000000000 +0200
++++ squid-2.6.STABLE2/src/structs.h	2006-09-29 14:41:34.000000000 +0200
+@@ -481,6 +481,9 @@
+ #if SQUID_SNMP
+ 	u_short snmp;
+ #endif
++#if SQUID_FILTERS
++        u_short nofilter;
++#endif
+     } Port;
+     struct {
+ 	http_port_list *http;
+@@ -767,6 +770,9 @@
+     header_mangler header_access[HDR_ENUM_END];
+     char *coredump_dir;
+     char *chroot_dir;
++#ifdef SQUID_FILTERS
++    load_module *modules;
++#endif
+ #if USE_CACHE_DIGESTS
+     struct {
+ 	int bits_per_entry;
+@@ -1206,6 +1212,9 @@
+     } redirect;
+     dlink_node active;
+     squid_off_t maxBodySize;
++#ifdef SQUID_FILTERS
++    void *filter;
++#endif
+ };
+ 
+ struct _ConnStateData {
+@@ -1805,6 +1814,9 @@
+ #if LINUX_TPROXY
+     unsigned int tproxy:1;
+ #endif
++#ifdef SQUID_FILTERS
++    unsigned int filter:1;
++#endif
+ };
+ 
+ struct _link_list {
+@@ -1863,6 +1875,7 @@
+     HierarchyLogEntry hier;
+     err_type err_type;
+     char *peer_login;		/* Configured peer login:password */
++    char *proxy_realm;
+     time_t lastmod;		/* Used on refreshes */
+     char *vary_hdr;		/* Used when varying entities are detected. Changes how the store key is calculated */
+     char *vary_headers;		/* Used when varying entities are detected. Changes how the store key is calculated */
+@@ -2474,4 +2487,11 @@
+     Array etags;
+ };
+ 
++#ifdef SQUID_FILTERS
++struct _load_module {
++    char *module;
++    wordlist *params;
++    load_module *next;
++};
++#endif
+ #endif /* SQUID_STRUCTS_H */
+--- squid-2.6.STABLE2/src/HttpReply.c.filter	2006-06-11 02:28:19.000000000 +0200
++++ squid-2.6.STABLE2/src/HttpReply.c	2006-09-29 14:41:34.000000000 +0200
+@@ -353,6 +353,10 @@
+     rep->content_length = httpHeaderGetSize(hdr, HDR_CONTENT_LENGTH);
+     rep->date = httpHeaderGetTime(hdr, HDR_DATE);
+     rep->last_modified = httpHeaderGetTime(hdr, HDR_LAST_MODIFIED);
++#ifdef LASTMOD_HACK
++    if (rep->last_modified < 0)
++	rep->last_modified = rep->date;
++#endif
+     str = httpHeaderGetStr(hdr, HDR_CONTENT_TYPE);
+     if (str)
+ 	stringLimitInit(&rep->content_type, str, strcspn(str, ";\t "));
+@@ -393,6 +397,7 @@
+     assert(parse_start);
+     assert(rep->pstate < psParsed);
+ 
++    debug(58, 3) ("httpReplyParseStep: '%s'\n", buf);
+     *parse_end_ptr = parse_start;
+     if (rep->pstate == psReadyToParseStartLine) {
+ 	if (!httpReplyIsolateStart(&parse_start, &blk_start, &blk_end))
+--- squid-2.6.STABLE2/src/url.c.filter	2006-06-18 01:31:03.000000000 +0200
++++ squid-2.6.STABLE2/src/url.c	2006-09-29 14:41:34.000000000 +0200
+@@ -258,6 +258,9 @@
+     int port;
+     protocol_t protocol = PROTO_NONE;
+     int l;
++#ifdef SQUID_FILTERS
++    int f = 1;
++#endif
+     proto[0] = host[0] = urlpath[0] = login[0] = '\0';
+ 
+     if ((l = strlen(url)) + Config.appendDomainLen > (MAX_URL - 1)) {
+@@ -290,6 +293,16 @@
+ 		port = atoi(t);
+ 	}
+     }
++#if defined(SQUID_FILTERS) && defined(OLD_NOFILTER)
++    if (!strncmp(host, "NOFILTER.", 9)) {
++        const char *h = getMyHostname();
++        l = strlen(h);
++        if (!strncmp(host + 9, h, l) && host[9+l]=='.') {
++            f = 0;
++            strcpy(host, host+9+l+1);
++        }
++    }
++#endif
+     for (t = host; *t; t++)
+ 	*t = xtolower(*t);
+     if (stringHasWhitespace(host)) {
+@@ -310,8 +323,28 @@
+     if (Config.appendDomain && !strchr(host, '.'))
+ 	strncat(host, Config.appendDomain, SQUIDHOSTNAMELEN - strlen(host) - 1);
+     /* remove trailing dots from hostnames */
+-    while ((l = strlen(host)) > 0 && host[--l] == '.')
+-	host[l] = '\0';
++#if defined(SQUID_FILTERS) && !defined(OLD_NOFILTER)
++    /* check if hostname ends in ("." myhost ".nofilter") */
++    if (l > 9) {
++	for (t = host + l - 9, l = 8; l > 0; l--)
++	    if (t[l] != ".nofilter"[l])
++		break;
++	if (!l) {
++	    const char *h = getMyHostname();
++	    int k = strlen(host) - 10;
++	    l = strlen(h) - 1;
++	    if (k > l) {
++		for (; l >= 0; k--, l--)
++		    if (host[k] != xtolower(h[l]))
++			break;
++		if (l == -1 && host[k] == '.') {
++		    host[k] = '\0';
++		    f = 0;
++		}
++	    }
++	}
++    }
++#endif
+     /* reject duplicate or leading dots */
+     if (strstr(host, "..") || *host == '.') {
+ 	debug(23, 1) ("urlParse: Illegal hostname '%s'\n", host);
+@@ -358,6 +391,9 @@
+     xstrncpy(request->host, host, SQUIDHOSTNAMELEN);
+     xstrncpy(request->login, login, MAX_LOGIN_SZ);
+     request->port = (u_short) port;
++#ifdef SQUID_FILTERS
++    request->flags.filter = f;
++#endif
+     return request;
+ }
+ 
+--- squid-2.6.STABLE2/src/typedefs.h.filter	2006-07-31 01:27:03.000000000 +0200
++++ squid-2.6.STABLE2/src/typedefs.h	2006-09-29 14:41:34.000000000 +0200
+@@ -238,6 +238,10 @@
+ typedef struct _delaySpec delaySpec;
+ #endif
+ 
++#if SQUID_FILTERS
++typedef struct _load_module load_module;
++#endif
++
+ typedef void CWCB(int fd, char *, size_t size, int flag, void *data);
+ typedef void CNCB(int fd, int status, void *);
+ 
+--- squid-2.6.STABLE2/src/HttpHeader.c.filter	2006-07-19 18:05:11.000000000 +0200
++++ squid-2.6.STABLE2/src/HttpHeader.c	2006-09-29 14:41:34.000000000 +0200
+@@ -216,7 +216,7 @@
+     HDR_IF_MATCH, HDR_IF_MODIFIED_SINCE, HDR_IF_NONE_MATCH,
+     HDR_IF_RANGE, HDR_MAX_FORWARDS, HDR_PROXY_CONNECTION,
+     HDR_PROXY_AUTHORIZATION, HDR_RANGE, HDR_REFERER, HDR_REQUEST_RANGE,
+-    HDR_USER_AGENT, HDR_X_FORWARDED_FOR
++    HDR_USER_AGENT, HDR_X_FORWARDED_FOR, HDR_COOKIE
+ };
+ 
+ /* header accounting */
+@@ -1251,6 +1251,40 @@
+ 	return NULL;
+     }
+     /* set field value */
++#if SQUID_FILTERS
++#ifdef OLD_NOFITLER
++    /* Remove the NOFILTER hack from all headers.
++       FIXME: This is not foolproof, we assume header starts with host name
++       (do we really care about headers other than Host?)
++       Should find some better way to avoid the strncmp in the common case.
++    */
++    if (*value_start=='N' && !strncmp(value_start+1, "OFILTER", 7)
++        && value_start[8]=='.') {
++        const char *h = getMyHostname();
++        int l = strlen(h);
++        if (!strncmp(value_start + 9, h, l) && value_start[9+l]=='.')
++            value_start += 9+l+1;
++    }
++#else
++    /* Remove the NOFILTER hack from all headers.
++       FIXME: This is not foolproof, we assume header ends with host name
++       (do we really care about headers other than Host?)
++    */
++    if (field_end - value_start > 9 &&
++	!strncasecmp(field_end - 9, ".nofilter", 9)) {
++	const char *h = getMyHostname();
++	int k = field_end - value_start - 10;
++	int l = strlen(h) - 1;
++	if (k > l) {
++	    for (; l >= 0; k--, l--)
++		if (value_start[k] != xtolower(h[l]))
++		    break;
++	    if (l == -1 && value_start[k] == '.')
++		field_end = value_start + k;
++	}
++    }
++#endif
++#endif
+     stringLimitInit(&e->value, value_start, field_end - value_start);
+     Headers[id].stat.seenCount++;
+     Headers[id].stat.aliveCount++;
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/src/module.h	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,217 @@
++/*
++ * DEBUG: section 92     Module loader
++ * AUTHOR: Olaf Titz
++ *
++ * SQUID Internet Object Cache  http://squid.nlanr.net/Squid/
++ * ----------------------------------------------------------
++ *
++ *  Squid is the result of efforts by numerous individuals from the
++ *  Internet community.  Development is led by Duane Wessels of the
++ *  National Laboratory for Applied Network Research and funded by the
++ *  National Science Foundation.  Squid is Copyrighted (C) 1998 by
++ *  Duane Wessels and the University of California San Diego.  Please
++ *  see the COPYRIGHT file for full details.  Squid incorporates
++ *  software developed and/or copyrighted by other sources.  Please see
++ *  the CREDITS file for full details.
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2 of the License, or
++ *  (at your option) any later version.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, write to the Free Software
++ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111, USA.
++ *
++ */
++
++#ifndef MODULE_H
++#define MODULE_H
++
++#include "squid.h"
++
++/* Define this to track REF/UNREF usage */
++/* #define REF_DEBUG */
++
++#define MODULE_API_VERSION 0xa040
++
++/* -------------------------- Object framework ----------------------------- */
++
++/* Create global cbdata type for each class */
++
++#define ADD_CLASSDEF(t) CBDATA_GLOBAL_TYPE(t);
++
++/* The general structure of an object is specified by this definition: */
++
++#include <classes.th>
++
++classdef(Object,, ({
++    int refCount;                       /* Reference count */
++    void (*destroy)(void *this);        /* Destructor function */
++}))
++
++/* See the classdef program (in filters/) on syntax and destructor semantics.
++
++   REF and UNREF usage:
++
++   Whenever a pointer to an object is stored somewhere, do it like this:
++       genericObject *stuff = REF(someobject);
++   Whenever such a stored pointer goes out of use, do this:
++       UNREF(stuff);
++   (most importantly, do this in destructors for objects pointed to)
++   This ensures the destructor will be called at the right time.
++   Do not explicitly call destructors.
++   The arguments to REF and UNREF must be suitable pointer _variables_.
++   The redundant assignments help ensure this.
++
++   All objects are implicitly cbdata, by default unlocked.
++*/
++
++#ifdef REF_DEBUG
++#ifdef __GNUC__
++#define REF(obj) \
++    ({ if ((obj=obj)) { \
++         debug(92,9)("%s:%d: REF %d\n",__FILE__,__LINE__,(obj)->refCount); \
++         ++(obj)->refCount; \
++       } else { \
++         debug(92,9)("%s:%d: REF (null)\n",__FILE__,__LINE__); \
++       } obj; })
++#else
++#define REF(obj) (((obj=obj)) ? (++(obj)->refCount, obj) : NULL)
++#endif
++#define UNREF(ptr) \
++    do{ if (ptr) { \
++          debug(92,9)("%s:%d: UNREF %d\n",__FILE__,__LINE__,(ptr)->refCount); \
++          if((--(ptr)->refCount)<=0) (ptr)->destroy(ptr); \
++          (ptr)=NULL; \
++        } else { \
++          debug(92,9)("%s:%d: UNREF (null)\n",__FILE__,__LINE__); \
++        } }while(0)
++#else
++
++#define REF(obj) (((obj=obj)) ? (++(obj)->refCount, obj) : NULL)
++#define UNREF(ptr) \
++    do{ if ((ptr) && ((--(ptr)->refCount)<=0)) { \
++          (ptr)->destroy(ptr); (ptr)=NULL; } \
++    }while(0)
++
++#endif
++
++/* The global ctor; the macro makes it easier to use cbdata */
++#define void_O_CTOR(s,d,t) (CBDATA_INIT_TYPE(t) >= 0 ? void_O_CTOR_((Object *)cbdataAlloc(t), d) : NULL)
++ 
++extern void *void_O_CTOR_(Object *this, _DTOR dtor);
++
++/* Used for narrowing casts. Should find a way to check types here? */
++#define CC(ptr,tptrtype) ((tptrtype*)(ptr))
++
++/* -------------------------- Module stuff --------------------------------- */
++
++/* Filter types */
++
++typedef enum _squidFilterType {
++    FIL_DUMMY,                          /* Library module */
++    FIL_AUTH,                           /* Authentication checker */
++    FIL_REDIRECT,                       /* URI redirector */
++    FIL_REQHEADER,                      /* Request header filter */
++    FIL_REPHEADER,                      /* Reply header filter */
++    FIL_REJECTTYPE,                     /* Reject based on content type */
++    FIL_CONTFILTER,                     /* Content filter */
++    FIL_END
++} squidFilterType;
++
++/* The module object */
++
++classdef(moduleObject, Object, ({
++    union {                             /* Modified by moduleRegister */
++        int typ;                        /* - Filter type */
++        struct _moduleObject *next;     /* - Next in chain */
++    } chain;
++    union {                             /* Modified by moduleRegister */
++        int version;                    /* - must be MODULE_API_VERSION */
++        struct _moduleOwner *owner;     /* - shlib info */
++    } info;
++    const char *description;            /* Description of filter purpose */
++    const char *trigger;                /* Trigger argument (like file type) */
++    void *(*filter)(class *this, const void *arg);
++                                        /* Either: module filter function */
++                                        /*  Or: filter object constructor */
++    patFileObject *patFile;             /* pattern file */
++}))
++
++/* Called from core: Initialize the module. */
++void moduleInit(const wordlist *args);
++
++/* Called from module: Register a newly created module object. */
++void moduleRegister(moduleObject *theModule);
++
++/* The filter object */
++
++classdef(filterObject, Object, ({
++    moduleObject *owner;                /* Owning module */
++    char *uri;                          /* Request URI */
++    struct _filterObject *next;         /* Next filter in chain */
++    int (*filter)(struct _filterObject *this, MemBuf *target,
++                  const char *buf, int len);
++                                        /* Filtering function */
++}))
++
++void moduleLoad(const char *module, const wordlist *args);
++void moduleLoadAll(void);
++void moduleUnloadAll(void);
++
++/* --------------------------- Filtering hooks ----------------------------- */
++
++char *canonType(const char *t);
++int mtmatch(const char *ct, const char *tr);
++char *moduleUrlClean(const char *uri);
++
++char *moduleRedirect(const void *req);
++
++typedef struct _typParam {
++    const char *uri;
++    char *typ;
++} typParam;
++
++char *moduleRejecttype(const char *typ, const char *uri);
++
++typedef struct _hdrParam {
++    const char *uri;
++    HttpHeader *hdr;
++} hdrParam;
++
++void moduleReqHeader(const char *uri, HttpHeader *hdr);
++void moduleRepHeader(const char *uri, HttpHeader *hdr);
++
++typedef struct _repParam {
++    const char *uri;
++    HttpReply *rep;
++} repParam;
++
++typedef struct _reqParam {
++    const char *uri;
++    clientHttpRequest *req;
++} reqParam;
++
++filterObject *moduleCFilterNew(const char *typ, const char *uri,
++                               HttpReply *rep);
++int moduleCFilter(void *filter, MemBuf *target, const char *buf, int len);
++void moduleCFilterDestroy(void *filter);
++
++#define RREJECT ((char*)-1)
++
++typedef struct _moduleAuthCBData {
++    aclCheck_t *check;
++    RH *authResult;
++    RH *callback;
++    moduleObject *next;
++} moduleAuthCBData;
++
++void moduleAuth(aclCheck_t *check, RH *callback);
++
++#endif
+--- squid-2.6.STABLE2/src/http.c.filter	2006-07-26 22:09:33.000000000 +0200
++++ squid-2.6.STABLE2/src/http.c	2006-09-29 14:41:34.000000000 +0200
+@@ -39,6 +39,7 @@
+  */
+ 
+ #include "squid.h"
++#include "module.h"
+ 
+ static const char *const crlf = "\r\n";
+ 
+@@ -1219,6 +1220,10 @@
+     /* Now mangle the headers. */
+     httpHdrMangleList(hdr_out, orig_request);
+     stringClean(&strConnection);
++#if SQUID_FILTERS
++    if (request->flags.filter)
++        moduleReqHeader(urlCanonical(orig_request), hdr_out);
++#endif
+ }
+ 
+ /* build request prefix and append it to a given MemBuf; 
+--- squid-2.6.STABLE2/src/main.c.filter	2006-07-31 01:27:03.000000000 +0200
++++ squid-2.6.STABLE2/src/main.c	2006-09-29 14:41:34.000000000 +0200
+@@ -34,6 +34,7 @@
+  */
+ 
+ #include "squid.h"
++#include "module.h"
+ 
+ #if defined(USE_WIN32_SERVICE) && defined(_SQUID_WIN32_)
+ #include <windows.h>
+@@ -401,6 +402,9 @@
+     useragentLogClose();
+     refererCloseLog();
+     errorClean();
++#if SQUID_FILTERS
++    moduleUnloadAll();
++#endif
+     enter_suid();		/* root to read config file */
+     parseConfigFile(ConfigFile);
+     setUmask(Config.umask);
+@@ -415,6 +419,9 @@
+     storeLogOpen();
+     useragentOpenLog();
+     refererOpenLog();
++#if SQUID_FILTERS
++    moduleLoadAll();
++#endif
+ #if USE_DNSSERVERS
+     dnsInit();
+ #else
+@@ -579,6 +586,9 @@
+ #ifdef SQUID_SNMP
+     snmpInit();
+ #endif
++#ifdef SQUID_FILTERS
++    moduleLoadAll();
++#endif
+ #if MALLOC_DBG
+     malloc_debug(0, malloc_debug_level);
+ #endif
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/jsattrib.gperf	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,24 @@
++%{
++/* gperf output needs postprocessing for case-insensitivity! */
++%}
++# gperf defines const char *isJSAttrib(const char *str, int len);
++# to return NULL iff str is not one of the following words.
++# Words must be in lower case.
++onload
++onunload
++onclick
++ondblclick
++onmousedown
++onmouseup
++onmouseover
++onmousemove
++onmouseout
++onfocus
++onblur
++onkeypress
++onkeydown
++onkeyup
++onsubmit
++onreset
++onselect
++onchange
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/bugfinder.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,91 @@
++/* mod_bugfinder - hunt for 1x1 images
++   When we detect such a beast it is too late to do anything about it,
++   so we just log the URI and assume a log-analyzer will blacklist them
++*/
++
++#include "squid.h"
++#include "module.h"
++#include "patfile.h"
++
++#define MODNAME "mod_bugfinder"
++
++#define HDRBUFSIZ 24
++#define TRIG 3
++
++classdef(private bugfinderFilterObject, filterObject, ({
++    int posin;
++    unsigned char bufr[HDRBUFSIZ];
++}))
++
++#define BUGFINDER_C
++#include <classes.dh>
++
++Ddef_none(bugfinderFilterObject)
++
++static int cfFilter(filterObject *this, MemBuf *target,
++                    const char *buf, int len)
++{
++    bugfinderFilterObject *cf = CC(this, bugfinderFilterObject);
++    debug(93,9) (MODNAME ": %s: pos %d len %d\n", moduleUrlClean(cf->uri),
++		 cf->posin, len);
++    if (cf->posin >= 0 && cf->posin < HDRBUFSIZ) {
++	memcpy(cf->bufr+cf->posin, buf, XMIN(len, HDRBUFSIZ-cf->posin));
++	cf->posin += len;
++    }
++    if (cf->posin >= HDRBUFSIZ) {
++	int x = 10000, y = 10000;
++	if (!memcmp(cf->bufr, "GIF8", 4)) {
++	    x = cf->bufr[6] + (cf->bufr[7]<<8);
++	    y = cf->bufr[8] + (cf->bufr[9]<<8);
++	} else if (!memcmp(cf->bufr, "\x89PNG", 4)) {
++	    x = ntohl(*(unsigned long *)(cf->bufr+16));
++	    y = ntohl(*(unsigned long *)(cf->bufr+20));
++	}
++	if (x < TRIG && y < TRIG) {
++	    debug(93, 0) (MODNAME ": is a %dx%d image: %s\n", x, y,
++			  moduleUrlClean(cf->uri));
++	}
++	cf->posin = -1;
++    }
++    memBufAppend(target, buf, len);
++    return len;
++}
++
++/* moduleObject->filter for FIL_CONTFILTER:
++   filterObject constructor.
++*/
++static void *bugfinderFilter(moduleObject *this, const void *arg)
++{
++    bugfinderFilterObject *f;
++    const repParam *rp = arg;
++    if (this->patFile && (patfileCheckReload(this->patFile),
++                          patfileMatch(this->patFile, rp->uri)))
++        return NULL;
++
++    f = new(bugfinderFilterObject);
++    f->filter = cfFilter;
++    f->posin = 0;
++
++    return f;
++}
++
++static void moduleInit1(const char *t, patFileObject *p)
++{
++    moduleObject *m = new(moduleObject);
++    m->chain.typ = FIL_CONTFILTER;
++    m->info.version = MODULE_API_VERSION;
++    m->description = "Web-bug logger";
++    m->trigger = t;
++    m->filter = bugfinderFilter;
++    m->patFile = REF(p);
++
++    moduleRegister(m);
++}
++
++void moduleInit(const wordlist *args)
++{
++    patFileObject *pf = args ? patfileNew(args->key, 0) : NULL;
++    moduleInit1("image/gif", pf);
++    moduleInit1("image/png", pf);
++}
++
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/htmlfilter.h	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,70 @@
++#ifndef HTMLFILTER_H
++#define HTMLFILTER_H
++
++#include "squid.h"
++#include "module.h"
++
++/* Use of htmlfilter:
++
++   Create a htmlModuleObject (or a subclass thereof) and set its
++   processTag element, then call htmlfilterRegister() with that object
++   (instead of moduleRegister()). This arranges for the processTag
++   function to be called for every tag encountered in the source with
++   the following arguments:
++
++   cf - an htmlFilterObject structure containing info about the processed file
++   target - target buffer
++   nattribs - max no of elements in the following arrays
++   attribs - attributes array
++   values - values array
++   attribs[0] is the tag name.
++   attribs[x]==NULL means "ignore this".
++   values[x]==NULL means "attribute without value".
++
++   This routine may call insertTag() with arguments like itself to
++   insert an HTML tag into the output stream. It may modify attrs and
++   valus and the buffers they point to; these are temp buffers and
++   such modifications are ignored after exit from this function. It
++   should return 1 if it has processed the tag. If it returns 0,
++   htmlfilter.c inserts the original tag (unmodified) into the output.
++
++   It may also set cf->eating. As long as this is non-zero, output is
++   suppressed.
++*/
++
++typedef enum {  /* parsing state */
++    T_TEXT=0,           /* in ordinary text */
++    T_STAG,             /* at start of tag */
++    T_TAG,              /* inside tag */
++    T_EQU,              /* inside tag after an equals sign */
++    T_META,             /* inside a meta-tag */
++    T_COMM,             /* inside a comment */
++    T_DQUOT='"',        /* in double-quoted string */
++    T_SQUOT='\''        /* in single-quoted string */
++} tpos;
++
++typedef int processTagFunc(htmlFilterObject *cf, MemBuf *target,
++                           int nattribs, char *attribs[], char *values[]);
++
++classdef(private htmlModuleObject, moduleObject, ({
++    moduleObject *libObject;    /* Lock to htmlfilter library */
++    processTagFunc *processTag; /* Do-it func SET BY SUB */
++}))
++
++classdef(private htmlFilterObject, filterObject, ({
++    int contlen;                /* Content-Length of original HTML page */
++    int posin, posout;          /* Input/output positions */
++    MemBuf tag;                 /* Buffer holding incomplete tag */
++    tpos inTag;                 /* current parsing state */
++    int inBSQuot;               /* currently parsing \-quote? */
++    int eating;                 /* Currently in eat mode? */
++}))
++
++/* Insert a tag into the output stream */
++void insertTag(htmlFilterObject *cf, MemBuf *target,
++               int nattribs, char *attribs[], char *values[]);
++
++/* Init and register a client module */
++void htmlfilterRegister(htmlModuleObject *this, const char *description);
++
++#endif
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/jsattrib.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,104 @@
++/* C code produced by gperf version 2.7 */
++/* Command-line: gperf -k1,5,$ -o -l -C -NisJSAttrib  */
++/* gperf output needs postprocessing for case-insensitivity! */
++
++#define TOTAL_KEYWORDS 18
++#define MIN_WORD_LENGTH 6
++#define MAX_WORD_LENGTH 11
++#define MIN_HASH_VALUE 6
++#define MAX_HASH_VALUE 26
++/* maximum key range = 21, duplicates = 0 */
++
++#ifdef __GNUC__
++__inline
++#endif
++static unsigned int
++hash (str, len)
++     register const char *str;
++     register unsigned int len;
++{
++  static const unsigned char asso_values[] =
++    {
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 10,  5, 10,
++      10,  5, 27, 27, 27,  0, 27, 10,  0, 27,
++      10,  0,  0, 27,  0,  5,  0,  0, 27, 27,
++      27,  0, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
++      27, 27, 27, 27, 27, 27
++    };
++  return len + asso_values[tolower((unsigned char)str[4])] + asso_values[tolower((unsigned char)str[0])] + asso_values[tolower((unsigned char)str[len - 1])];
++}
++
++#ifdef __GNUC__
++__inline
++#endif
++const char *
++isJSAttrib (str, len)
++     register const char *str;
++     register unsigned int len;
++{
++  static const unsigned char lengthtable[] =
++    {
++       0,  0,  0,  0,  0,  0,  6,  7,  8,  9, 10, 11,  7,  8,
++       0, 10, 11,  7,  8,  9, 10, 11,  7,  8,  0,  0,  6
++    };
++  static const char * const wordlist[] =
++    {
++      "", "", "", "", "", "",
++      "onblur",
++      "onkeyup",
++      "onselect",
++      "onmouseup",
++      "onmouseout",
++      "onmouseover",
++      "onreset",
++      "onsubmit",
++      "",
++      "onkeypress",
++      "onmousemove",
++      "onclick",
++      "onunload",
++      "onkeydown",
++      "ondblclick",
++      "onmousedown",
++      "onfocus",
++      "onchange",
++      "", "",
++      "onload"
++    };
++
++  if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)
++    {
++      register int key = hash (str, len);
++
++      if (key <= MAX_HASH_VALUE && key >= 0)
++        if (len == lengthtable[key])
++          {
++            register const char *s = wordlist[key];
++
++            if (!strcasecmp(str, s))
++              return s;
++          }
++    }
++  return 0;
++}
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/script.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,138 @@
++/* mod_script - remove Javascript from HTML pages
++   This removes all SCRIPT elements as well as known event handler
++   attributes, javascript entities and "mocha" URLs from arbitrary tags.
++*/
++
++#include "squid.h"
++#include "module.h"
++#include "htmlfilter.h"
++#include "patfile.h"
++
++#define MODNAME         "mod_script"
++
++classdef(private jscriptModuleObject, htmlModuleObject, ({
++    regex_t jsStyleRE;
++    regex_t jsEntityRE;
++}))
++
++#define SCRIPT_C
++#include <classes.dh>
++
++Ddef(jscriptModuleObject)
++{
++    regfree(&this->jsStyleRE);
++    regfree(&this->jsEntityRE);
++}
++
++/* the isJSAttrib function */
++#include "jsattrib.c"
++/* the HTML_* REs */
++#include "jsre.h"
++
++/* SUBMIT tag */
++static char *submit_attrs[] = { "INPUT", "TYPE" };
++static char *submit_valus[] = { NULL, "SUBMIT" };
++#define submit_nattribs 2
++
++
++/* Currently known ways to specify Javascript scripts:
++   <SCRIPT> ... </SCRIPT>
++   <STYLE TYPE="text/javascript"> ... </STYLE>  (Netscape)
++   <anytag anyparam="&{ ... }">                 (Netscape)
++   <anytag anyparam="mocha: ... ">              (Netscape)
++   <anytag anyparam="expression(eval( ... ))">  (MSIE)
++*/
++
++static int scriptProcessTag(htmlFilterObject *cf, MemBuf *target,
++                            int nattribs, char *attrs[], char *valus[])
++{
++    int i, mod = 0, sub = 0;
++
++    /* Opening SCRIPT: eat this tag and everything that follows */
++    if (!strcasecmp(attrs[0], "SCRIPT")) {
++        debug(93, 3) (MODNAME ": %s: removing SCRIPT\n",
++		      moduleUrlClean(cf->uri));
++        cf->eating = 1;
++        return 1;
++    }
++
++    /* Closing SCRIPT: eat this tag, resume normal operation */
++    if (cf->eating==1 && !strcasecmp(attrs[0], "/SCRIPT")) {
++        cf->eating = 0;
++        return 1;
++    }
++
++    /* Opening STYLE: start eat if javascript style */
++    if (!strcasecmp(attrs[0], "STYLE"))
++        for (i=1; i<nattribs; ++i)
++            if (attrs[i] && valus[i] &&
++                !regexec(&CC(cf->owner, jscriptModuleObject)->jsStyleRE,
++                         valus[i], 0, NULL, 0)) {
++                debug(93, 3) (MODNAME ": %s: removing javascript STYLE\n",
++                              moduleUrlClean(cf->uri));
++                cf->eating = 2;
++                return 1;
++            }
++
++    /* Closing STYLE: eat this tag, resume normal operation */
++    if (cf->eating==2 && !strcasecmp(attrs[0], "/STYLE")) {
++        cf->eating = 0;
++        return 1;
++    }
++
++    /* Remove Javascript attributes from tags */
++    for (i=1; i<nattribs; ++i) {
++        if (attrs[i] && isJSAttrib(attrs[i], strlen(attrs[i]))) {
++            debug(93, 3) (MODNAME ": %s: removing %s from %s\n",
++                          moduleUrlClean(cf->uri), attrs[i], attrs[0]);
++            mod = 1;
++            /* If the Javascript attribute contains a submit function,
++               fake a submit button. Otherwise we may end up with
++               a non-submittable form */
++            if (valus[i] && strstr(valus[i], "submit()"))
++                sub = 1;
++            attrs[i] = NULL;
++        } else if (attrs[i] && valus[i] &&
++            !regexec(&CC(cf->owner, jscriptModuleObject)->jsEntityRE,
++                     valus[i], 0, NULL, 0)) {
++            debug(93, 3) (MODNAME ": %s: removing %s from %s\n",
++                          moduleUrlClean(cf->uri), valus[i], attrs[0]);
++            if (valus[i] && strstr(valus[i], "submit()"))
++                sub = 1;
++            mod = 1;
++            attrs[i] = NULL;
++        }
++    }
++    if (!mod)
++        return 0;
++
++    /* Insert the cleaned tag */
++    insertTag(cf, target, nattribs, attrs, valus);
++    if (sub) {
++        debug(93, 3) (MODNAME ": %s: faking SUBMIT\n",
++		      moduleUrlClean(cf->uri));
++        insertTag(cf, target, submit_nattribs, submit_attrs, submit_valus);
++    }
++    return 1;
++}
++
++void moduleInit(const wordlist *args)
++{
++    jscriptModuleObject *m = new(jscriptModuleObject);
++    patFileObject *pf = args ? patfileNew(args->key, 0) : NULL;
++    int e;
++
++    m->patFile = REF(pf);
++    m->processTag = scriptProcessTag;
++    e = regcomp(&m->jsStyleRE,  "text/javascript",
++                REG_EXTENDED|REG_ICASE|REG_NOSUB);
++    if (e)
++        debug(93, 1) (MODNAME ": regcomp 1: %d\n", e);
++    e = regcomp(&m->jsEntityRE,
++                "&\\{.*\\}|" HTML_mocha ":|" HTML_javascript ":|"
++                HTML_livescript ":|" HTML_eval "\\(.*\\)",
++                REG_EXTENDED|REG_ICASE|REG_NOSUB);
++    if (e)
++        debug(93, 1) (MODNAME ": regcomp 2: %d\n", e);
++    htmlfilterRegister(CC(m, htmlModuleObject), "Javascript filter");
++}
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/rejecttype.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,54 @@
++/* mod_rejecttype - reject stuff based on its MIME type.
++   The arguments to the module are: type [file]
++   type is the MIME type.
++   file is a file containing an allow list of URL regexes.
++   If file is not given, everything with that type is rejected.
++*/
++
++#include "squid.h"
++#include "module.h"
++#include "patfile.h"
++
++#define MODNAME "mod_rejecttype"
++#define REJECTTYPE_C
++#include <classes.dh>
++
++/* moduleObject->filter for FIL_REJECTTYPE:
++   arg is typParam struct.
++   Returns NULL iff the object is to be rejected.
++*/
++static void *rejectFilter(moduleObject *this, const void *arg)
++{
++    const typParam *tp = arg;
++    char *r = NULL;
++    if (this->patFile) {
++	patfileCheckReload(this->patFile);
++	r = patfileMatch(this->patFile, tp->uri);
++    }
++    if (!r)
++	debug(93, 3) (MODNAME ": %s: rejecting type %s\n", tp->uri, tp->typ);
++    return r;
++}
++
++void moduleInit(const wordlist *args)
++{
++    moduleObject *m;
++    patFileObject *pf;
++    if (!args) {
++        debug(93, 1) (MODNAME ": needs one or two arguments\n");
++        return;
++    }
++    m = new(moduleObject);
++    m->chain.typ = FIL_REJECTTYPE;
++    m->info.version = MODULE_API_VERSION;
++    m->description = "Rejection by MIME type";
++    m->trigger = args->key;
++    m->filter = rejectFilter;
++
++    args = args->next;
++    pf = args ? patfileNew(args->key, 0) : NULL;
++    m->patFile = REF(pf);
++
++    moduleRegister(m);
++}
++
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/allowtype.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,94 @@
++/* mod_allowtype - reject stuff based on its MIME type, only let specified
++   types through.
++   The arguments to the module are: type [type...] [file]
++   type are the MIME types.
++   file is a file containing an allow list of URL regexes.
++   File name must start with a / to be recognized.
++*/
++
++#include "squid.h"
++#include "module.h"
++#include "patfile.h"
++
++classdef(allowtypeObject, moduleObject, ({
++    wordlist *types;
++}))
++
++#define MODNAME "mod_allowtype"
++#define ALLOWTYPE_C
++#include <classes.dh>
++
++Ddef(allowtypeObject) {
++    wordlist *p0, *p;
++    for (p = this->types; p; p = p0) {
++	p0 = p->next;
++	xfree(p->key);
++	xfree(p);
++    }
++}
++
++/* moduleObject->filter for FIL_REJECTTYPE:
++   arg is typParam struct.
++   Returns NULL iff the object is to be rejected.
++*/
++static void *allowFilter(allowtypeObject *this, const void *arg)
++{
++    const typParam *tp = arg;
++    char *r = NULL;
++    wordlist *w;
++
++    /* check for allowed type */
++    if (tp->typ) {
++        char *x = canonType(tp->typ);
++	for (w = this->types; w; w = w->next)
++	    if (mtmatch(x, w->key)) {
++                xfree(x);
++		return (char *)tp->uri; /* XX */
++            }
++        xfree(x);
++    }
++
++    /* check for URI on allow list */
++    if (this->patFile) {
++	patfileCheckReload(this->patFile);
++	r = patfileMatch(this->patFile, tp->uri);
++    }
++    if (!r)
++	debug(93, 3) (MODNAME ": %s: rejecting type %s\n", tp->uri, tp->typ);
++    return r;
++}
++
++
++void moduleInit(const wordlist *args)
++{
++    allowtypeObject *m;
++    patFileObject *pf = NULL;
++    wordlist *w;
++
++    if (!args) {
++        debug(93, 1) (MODNAME ": needs at least one argument\n");
++        return;
++    }
++    m = new(allowtypeObject);
++    m->chain.typ = FIL_REJECTTYPE;
++    m->info.version = MODULE_API_VERSION;
++    m->description = "Rejection by MIME type";
++    m->trigger = "";
++    m->filter = allowFilter;
++
++    while (args) {
++	if (args->key[0] == '/') {
++	    pf = patfileNew(args->key, 0);
++	    break;
++	}
++	w = xmalloc(sizeof(*w));
++	w->key = xstrdup(args->key);
++	/* we may reverse the list here since it is always checked at once */
++	w->next = m->types;
++	m->types = w;
++	args = args->next;
++    }
++    m->patFile = REF(pf);
++    moduleRegister(CC(m, moduleObject));
++}
++
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/auth_passwd.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,266 @@
++/* Password-file based authentication module.
++   This module takes as argument the name of a password file, default
++   is "/etc/passwd". The file is read in completely whenever it changes,
++   lookup is done in memory.
++
++   We don't use getpwnam() because that could block (e.g. when using
++   NIS), and thus would block the whole Squid process. If the passwd
++   file is to be taken from NIS, "ypcat" a local copy.
++
++   Note: empty passwords in the file mean "match none" instead of
++   "match all" here.
++
++   Olaf Titz, 1999-09-07
++*/
++
++#include "squid.h"
++#include "module.h"
++#ifdef HAVE_CRYPT_H
++#include "crypt.h"
++#endif
++
++#define MODNAME "mod_auth_passwd"
++
++#undef DEBUG_HTABLE /* for debugging the hash tables */
++
++typedef struct _passwdList {    /* Structure for storing one passwd line */
++    struct _passwdList *next;           /* chain */
++    char *user;                         /* user name */
++    char *passwd;                       /* crypt()ed password */
++} passwdList;
++
++classdef(private passwdObject, moduleObject, ({
++    char *fileName;                     /* Password file name */
++    time_t mtime;                       /* Password file mtime */
++    float sizefactor;                   /* Relative hash table size */
++    int buckets;                        /* Actual hash table size */
++    passwdList **pwd;                   /* The hash table */
++}))
++
++#define AUTH_PASSWD_C
++#include <classes.dh>
++
++static void passwdUnload(passwdObject *d);
++
++Ddef(passwdObject)
++{
++    passwdUnload(this);
++    xfree(leakFree(this->fileName));
++}
++
++#ifdef DEBUG_HTABLE
++/* Dump the hash table */
++static void passwd_dump_table(passwdObject *d)
++{
++    int i;
++    passwdList *w;
++    char buf[128];
++    MemBuf mb;
++    memBufDefInit(&mb);
++    for (i=0; i<d->buckets; ++i)
++        if (d->pwd[i]) {
++            snprintf(buf, sizeof(buf), "%d", i);
++            memBufAppend(&mb, buf, strlen(buf));
++            for (w=d->pwd[i]; w; w=w->next) {
++                snprintf(buf, sizeof(buf), "\t%s\t%s\n", w->user, w->passwd);
++                memBufAppend(&mb, buf, strlen(buf));
++            }
++        }
++    memBufAppend(&mb, "\0", 1);
++    debug(95, 9) ("auth_passwd.c: %s: %d\n%s", d->fileName, d->buckets,
++                  mb.buf);
++    memBufClean(&mb);
++}
++#endif
++
++/* Free the in-memory copy of password file */
++static void passwdUnload(passwdObject *d)
++{
++    passwdList *w, *w0;
++    int i;
++    for (i=0; i<d->buckets; ++i) {
++        for (w = d->pwd[i]; w; w = w0) {
++            w0 = w->next;
++            xfree(leakFree(w->user));
++            xfree(leakFree(w->passwd));
++            xfree(leakFree(w));
++        }
++    }
++    if (d->buckets)
++        xfree(leakFree(d->pwd));
++    d->buckets = 0;
++}
++
++/* String hash function. */
++static unsigned int simpleHash(const unsigned char *p, int n)
++{
++    register unsigned int r = 0;
++    register unsigned char c;
++    while ((c = *p++))
++        r = ((r<<19) | (r>>13)) ^ c;
++    return r % n;
++}
++
++/* Euclid's. */
++static unsigned int gcd(unsigned int a, unsigned int b)
++{
++    while (1) {
++        if (!a)
++            return b;
++        if (!b)
++            return a;
++        if (a > b)
++            a %= b;
++        else
++            b %= a;
++    }
++}
++
++/* Reload the password file, if necessary */
++static void passwdCheckReload(passwdObject *d)
++{
++    struct stat st;
++    FILE *f;
++    char buf[256];
++    passwdList *w0 = NULL, *w1 = NULL, *w;
++    char *p1, *p2;
++    int ln = 0, n, z0 = 0, z1 = 0;
++
++    if (stat(d->fileName, &st)<0) {
++        debug(95, 1) ("%s: stat: %s\n", d->fileName, xstrerror());
++        return;
++    }
++    if (d->mtime >= st.st_mtime)
++        return;
++    d->mtime = st.st_mtime;
++
++    f = fopen(d->fileName, "r");
++    if (!f) {
++        debug(95, 1) ("%s: open: %s\n", d->fileName, xstrerror());
++        return;
++    }
++    debug(95, 4) (MODNAME ": reloading %s\n", d->fileName);
++    passwdUnload(d);
++
++    /* Read all lines of password file into a single chain */
++    while (fgets(buf, sizeof(buf), f)) {
++        for (p1=buf; *p1 && *p1!=':'; ++p1);
++        if (*p1!=':')
++            continue;
++        *p1++='\0';
++        if (*p1=='!' || *p1=='*' || *p1==':' || *p1=='\n')
++            continue;
++        for (p2=p1; *p2 && *p2!=':' && *p2!='\n'; ++p2);
++        *p2='\0';
++        w = leakAdd(xmalloc(sizeof(passwdList)));
++        w->user = leakAdd(xstrdup(buf));
++        w->passwd = leakAdd(xstrdup(p1));
++        if (w1)
++            w1->next = w;
++        else
++            w0 = w;
++        w1 = w;
++        ++ln;
++    }
++    if (!ln)
++        return;
++    w1->next = NULL;
++    fclose(f);
++    debug(95, 4) (MODNAME ": loaded %d users\n", ln);
++
++    /* Allocate hash table. Size is odd, >=5 and relatively prime to ln. */
++    n = ((int)(d->sizefactor * ln) + 4) | 1;
++    while (gcd(ln, n) > 1)
++        n += 2;
++    d->buckets = n;
++    d->pwd = leakAdd(xcalloc(d->buckets, sizeof(passwdList *)));
++
++    /* Distribute the passwd entries into the hash table */
++    for (w = w0; w; w = w1) {
++        z1+=2;
++        n = simpleHash(w->user, d->buckets);
++        if (d->pwd[n]) {
++            ++z1;
++            for (w1 = d->pwd[n]; w1->next; w1 = w1->next, ++z1);
++            w1->next = w;
++        } else {
++            d->pwd[n] = w;
++            ++z0;
++        }
++        w1 = w->next;
++        w->next = NULL;
++    }
++    /* The numbers presented here are: allocated buckets, used buckets,
++       average string comparisons needed to find an entry. The latter is at
++       least 2.0 because the initial hash calculation is just as expensive
++       as one comparison.
++    */
++    debug(95, 4) (MODNAME ": hashtable usage %d %d %.3f\n", d->buckets,
++                  z0, (float)z1/(float)ln);
++#ifdef DEBUG_HTABLE
++    if (debugLevels[95]>=9)
++        passwd_dump_table(d);
++#endif
++}
++
++
++/* moduleObject->filter for FIL_AUTH:
++   arg is moduleAuthCBData struct which contains an aclCheck_t which in
++   turn contains an acl_proxy_auth_user with user and passwd.
++   Calls or enqueues call to arg->authResult(arg, result) with result as:
++      NULL              if auth succeeded
++      RREJECT           if auth failed
++      alloced string    for presenting a challenge
++   Return value is ignored.
++*/
++static void *auth_passwdFilter(passwdObject *this, const void *arg)
++{
++    moduleAuthCBData *m = (moduleAuthCBData*)arg;
++    const acl_proxy_auth_user *a = m->check->auth_user;
++
++    passwdCheckReload(this);
++    if (this->buckets) {
++        passwdList *w;
++        for (w = this->pwd[simpleHash(a->user, this->buckets)]; w; w = w->next)
++            if (!strcmp(w->user, a->user)) {
++                if (!strcmp(w->passwd, (char*)crypt(a->passwd, w->passwd))) {
++                    debug(95, 3) (MODNAME ": user `%s' pass\n", a->user);
++                    m->authResult(m, NULL);
++                    return NULL;
++                } else {
++                    debug(95, 3) (MODNAME ": user `%s' password mismatch\n",
++                                  a->user);
++                }
++            }
++    }
++    debug(95, 3) (MODNAME ": user `%s' not found\n", a->user);
++    m->authResult(m, RREJECT);
++    return NULL;
++}
++
++void moduleInit(const wordlist *args)
++{
++    passwdObject *m = new(passwdObject);
++
++    m->chain.typ = FIL_AUTH;
++    m->info.version = MODULE_API_VERSION;
++    m->description = "password authenticator";
++    m->filter = auth_passwdFilter;
++
++    if (args) {
++        m->fileName = leakAdd(xstrdup(args->key));
++        args = args->next;
++    } else {
++        m->fileName = leakAdd(xstrdup("/etc/passwd"));
++    }
++    if (args) {
++        m->sizefactor = atof(args->key);
++        if (m->sizefactor < 0.0)
++            m->sizefactor = 0.0;
++    } else {
++        m->sizefactor = 0.6;
++    }
++
++    moduleRegister((moduleObject *)m);
++}
++
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/redirect.sample	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,35 @@
++# This is an example on how to configure the redirect.so module.
++# Each line consists of either one field, or two fields separated by TAB.
++# One field means: redirect to the default replacement pattern.
++# First field being a single "!" means: define the default replacement
++# pattern. Two fields means: replace with second field.
++# Patterns with a - in front are case-insensitive.
++
++### This shows how to reject ad banners:
++# Define the replacement. In my case this is a 1x1 GIF.
++# Put this line first.
++!	http://127.0.0.1/dummy.gif
++
++# Ad banner patterns we don't want to see.
++-http://ad\.doubleclick\.net(:80)?(/.*)?$
++-http://adforce\.imgis\.com(:80)?(/.*)?$
++-/advert(i[sz](e(ments?)?|ing))?/
++-/banners?/
++
++### The replacement URL below returns error 404 on my server.
++# This is to guard against special Netscape stupidities.
++/netscape-related.html$		http://127.0.0.1/404
++http://javascript-of-unknown-origin\.netscape\.com	http://127.0.0.1/404
++# ...and Microsoft stupidities.
++/favicon.ico$			http://127.0.0.1/404
++
++### This example shows how to redirect requests to a nearer mirror.
++-http://www.xfree86.org(:80)?(/.*)?$	http://www.uni-paderborn.de/mirrors/xfree86\2
++
++# Note the common pattern
++# (:80)?(/.*)?$
++# at the end of the URLs. This should catch all combinations of URLs with
++# or without default port number, and with or without the trailing slash
++# if the path is null. \2 is the whole path component, including
++# leading slash.
++
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/auth_authsrv.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,256 @@
++/* This module allows proxy authentication via the TIS authserver.
++   The authserver can be configured to use passwords, but in most
++   cases it uses one of several challenge/response schemes. HTTP Basic
++   Authentication does not support a challenge which is displayed to
++   the user, so we use a trick here: put the challenge into the realm
++   parameter (which unfortunately requires some changes in the core).
++
++   The user then goes on like this: when first seeing the dialog
++   "Proxy authentication required for Squid proxy-caching
++   webserver...", enter your user name and an empty password.
++   Then you will get "Proxy authentication failed". Push "Retry".
++   Now the challenge is in the dialog, like "Proxy authentication
++   required for S/Key challenge..." Enter the correct response as
++   password.
++
++   This was verified to work with Netscape 4.5 and Lynx 2.8, but no
++   browser which supports authentication at all should be stupid
++   enough to not display the actual realm parameter or not give the
++   user a chance to retry.
++
++   Olaf Titz, 1999-09-06
++*/
++
++#include "squid.h"
++#include "module.h"
++
++#define MODNAME "mod_auth_authsrv"
++
++classdef(private authsrvObject, moduleObject, ({
++    char *host;
++    int port;
++}))
++
++#define AUTH_AUTHSRV_C
++#include <classes.dh>
++
++Ddef(authsrvObject)
++{
++    xfree(leakFree(this->host));
++}
++
++typedef enum {
++    AS_CONNECT, AS_CHALL, AS_RES
++} asState;
++
++#define TIMEOUT 15      /* authsrv connection timeout */
++#define SMBUF   256     /* buffer size */
++
++typedef struct {
++    asState state;
++    int fd;
++    char *result;
++    moduleAuthCBData *data;
++    authsrvObject *owner;
++    char buf[SMBUF];
++    int pos;
++} asCBData;
++
++static CNCB auth_authsrvCCB;
++static PF auth_authsrvRCB;
++static CWCB auth_authsrvWCB;
++static PF auth_authsrvClose;
++static PF auth_authsrvTimeout;
++
++static void cbdataLfree(void *p, int n)
++{
++    cbdataXfree(leakFree(p), n);
++}
++
++/* "Filter" function.
++   Conect to the authsrv; at the end will call arg->authResult()
++   (via the close handler).
++*/
++static void *auth_authsrvFilter(authsrvObject *this, const void *arg)
++{
++    moduleAuthCBData *m = (moduleAuthCBData*)arg;
++    int fd;
++    struct in_addr me;
++    asCBData *a;
++
++    me.s_addr = INADDR_ANY;
++    fd = comm_open(SOCK_STREAM, 0, me, 0, COMM_NONBLOCKING, "authsrv");
++    if (fd == COMM_ERROR) {
++        debug(95, 1) (MODNAME ": comm_open failed\n");
++        m->authResult(m, RREJECT);
++        return NULL;
++    }
++    a = leakAdd(xmalloc(sizeof(asCBData)));
++    cbdataAdd(a, cbdataLfree, 0);
++    cbdataLock(a);
++    cbdataLock(m);
++    a->state = AS_CONNECT;
++    a->fd = fd;
++    a->result = RREJECT;
++    a->data = m;
++    a->owner = REF(this);
++    a->pos = 0;
++    comm_add_close_handler(fd, auth_authsrvClose, a);
++    commSetTimeout(fd, TIMEOUT, auth_authsrvTimeout, a);
++    commConnectStart(fd, this->host, this->port, auth_authsrvCCB, a);
++    return NULL;
++}
++
++/* Connection complete handler. */
++static void auth_authsrvCCB(int fd, int status, void *data)
++{
++    if (status != COMM_OK) {
++        debug(95, 1) (MODNAME ": connect: %d\n", status);
++        comm_close(fd);
++        return;
++    }
++    commSetTimeout(fd, TIMEOUT, auth_authsrvTimeout, data);
++    commSetSelect(fd, COMM_SELECT_READ, auth_authsrvRCB, data, 0);
++}
++
++/* Read handler.
++   Here we do the real protocol work.
++*/
++static void auth_authsrvRCB(int fd, void *data)
++{
++    asCBData *a = data;
++    int len = -1, i;
++    MemBuf mb;
++
++    Counter.syscalls.sock.reads++;
++    len = read(fd, a->buf + a->pos, SMBUF - a->pos);
++    fd_bytes(fd, len, FD_READ);
++    if (len <= 0) {
++        debug(95, 3) (MODNAME ": read: %d\n", len ? errno : len);
++	comm_close(fd);
++	return;
++    }
++    /* Read a whole line? If not, continue. */
++    for (i = a->pos; i < a->pos + len; ++i)
++        if (a->buf[i] == '\n') {
++            a->buf[i] = '\0';
++            break;
++        }
++    if (i >= a->pos + len) {
++        a->pos += len;
++        if (a->pos >= SMBUF) {
++            /* authserv fed us garbage */
++            debug(95, 1) (MODNAME ": buffer overrun\n");
++            comm_close(fd);
++            return;
++        }
++        commSetSelect(fd, COMM_SELECT_READ, auth_authsrvRCB, data, 0);
++        return;
++    }
++    a->pos = 0;
++    debug(95, 8) (MODNAME ": %d<%s>\n", a->state, a->buf);
++
++    switch (a->state) {
++
++    case AS_CONNECT:
++        if (strncmp(a->buf, "Authsrv ready", 13)) {
++            debug(95, 1) (MODNAME ": authsrv(ready): %s\n", a->buf);
++            comm_close(fd);
++            return;
++        }
++        memBufDefInit(&mb);
++        memBufPrintf(&mb, "authorize %s squid\n",
++                     a->data->check->auth_user->user);
++        a->state = AS_CHALL;
++        comm_write_mbuf(fd, mb, auth_authsrvWCB, a);
++        return;
++
++    case AS_CHALL:
++        if (!strncmp(a->buf, "challenge ", 10)) {
++            a->result = xstrdup(a->buf+10);
++            goto resp;
++        }
++        if (strncmp(a->buf, "password", 8)) {
++            debug(95, 1) (MODNAME ": authserver(challenge): %s\n", a->buf);
++            comm_close(fd);
++            return;
++        }
++    resp:
++        memBufDefInit(&mb);
++        memBufPrintf(&mb, "response '%s'\n",
++                     a->data->check->auth_user->passwd);
++        a->state = AS_RES;
++        comm_write_mbuf(fd, mb, auth_authsrvWCB, a);
++        return;
++
++    case AS_RES:
++        if (strncmp(a->buf, "ok", 2))
++            debug(95, 3) (MODNAME ": authserver(password): %s\n", a->buf);
++        else
++            a->result = NULL; /* Pass! */
++        comm_close(fd);
++    }
++}
++
++/* Write handler.
++   Just keep the ball rolling.
++*/
++static void auth_authsrvWCB(int fd, char *buf, size_t size,
++                            int err, void *data)
++{
++    if (err) {
++        debug(95, 1) (MODNAME ": write: %d\n", err);
++        comm_close(fd);
++        return;
++    }
++    commSetTimeout(fd, TIMEOUT, auth_authsrvTimeout, data);
++    commSetSelect(fd, COMM_SELECT_READ, auth_authsrvRCB, data, 0);
++}
++
++/* Connection timeout handler.
++*/
++static void auth_authsrvTimeout(int fd, void *data)
++{
++    debug(95, 1) (MODNAME ": timeout\n");
++    comm_close(fd);
++}
++
++/* Connection close handler.
++   This calls the result callback.
++*/
++static void auth_authsrvClose(int fd, void *data)
++{
++    asCBData *a = data;
++    moduleAuthCBData *m = a->data;
++    comm_close(a->fd);
++    if (cbdataValid(m))
++        m->authResult(m, a->result);
++    cbdataUnlock(m);
++    UNREF(a->owner);
++    cbdataUnlock(a);
++    cbdataFree(a);
++}
++
++void moduleInit(const wordlist *args)
++{
++    authsrvObject *m;
++    int p;
++
++    if (!args || !args->next) {
++        debug(95, 1) (MODNAME ": needs two arguments\n");
++        return;
++    }
++    if (!(p = atoi(args->next->key))) {
++        debug(95, 1) (MODNAME ": argument syntax error\n");
++        return;
++    }
++    m = new(authsrvObject);
++    m->chain.typ = FIL_AUTH;
++    m->info.version = MODULE_API_VERSION;
++    m->description = "TIS FWTK authsrv authenticator";
++    m->filter = auth_authsrvFilter;
++    m->host = leakAdd(xstrdup(args->key));
++    m->port = p;
++
++    moduleRegister((moduleObject *)m);
++}
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/Makefile.in	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,100 @@
++#
++#  Makefile for the Squid filtering modules.
++#  Author: Olaf Titz
++#
++
++prefix		= @prefix@
++exec_prefix	= @exec_prefix@
++exec_suffix	= @exec_suffix@
++cgi_suffix	= @cgi_suffix@
++top_srcdir	= @top_srcdir@
++bindir		= @bindir@
++libexecdir	= @libexecdir@
++sysconfdir	= @sysconfdir@
++localstatedir	= @localstatedir@
++srcdir		= @srcdir@
++VPATH		= @srcdir@
++
++CC		= @CC@
++MAKEDEPEND	= @MAKEDEPEND@
++INSTALL		= @INSTALL@
++INSTALL_BIN	= @INSTALL_PROGRAM@
++INSTALL_FILE	= @INSTALL_DATA@
++INSTALL_SUID	= @INSTALL_PROGRAM@ -o root -m 4755
++RANLIB		= @RANLIB@
++LN_S		= @LN_S@
++PERL		= @PERL@
++AC_CFLAGS	= @CFLAGS@
++LDFLAGS		= @LDFLAGS@
++SHELL		= /bin/sh
++
++CFLAGS_SH	= @CFLAGS_SH@
++LD_SH		= @LD_SH@
++LDFLAGS_SH	= @LDFLAGS_SH@
++CPPFLAGS	= @CPPFLAGS@
++extra_modules	= @extra_modules@
++auth_modules	= # auth_passwd.so auth_authsrv.so # need adaptation
++
++INCLUDE		= -I. -I../include -I../src -I$(top_srcdir)/include
++CFLAGS		= $(AC_CFLAGS) $(CFLAGS_SH) $(INCLUDE) $(DEFINES) $(CPPFLAGS)
++
++MODULES=redirect.so rejecttype.so allowtype.so cookies.so \
++	htmlfilter.so script.so activex.so gifanim.so bugfinder.so \
++	urlfilter.so searchengine.so  \
++	$(auth_modules) $(extra_modules)
++
++OBJS=$(MODULES:.so=.o)
++
++all:	$(MODULES)
++
++# needeed for HPUX's broken make
++$(MODULES): $(OBJS)
++
++$(OBJS): classes.dh
++
++CLDEPS=$(MODULES:.so=.c) htmlfilter.h \
++	../src/module.c ../src/module.h  ../src/patfile.c ../src/patfile.h
++
++classes.dh: $(CLDEPS) classdef
++	$(PERL) classdef -sC -o classes $(CLDEPS)
++
++install: all
++	for i in $(MODULES); do \
++		mv -f $(DESTDIR)$(libexecdir)/$$i $(DESTDIR)$(libexecdir)/$$i- 2>/dev/null; \
++		$(INSTALL_BIN) $$i $(DESTDIR)$(libexecdir); \
++		rm -f $(DESTDIR)$(libexecdir)/$$i- 2>/dev/null; \
++	done
++	$(INSTALL_FILE) redirect.sample $(DESTDIR)$(sysconfdir)
++	$(INSTALL_FILE) urlfilter.sample $(DESTDIR)$(sysconfdir)
++
++# This is known to work only with gperf version 2.7.
++# We make an extra rule here instead of a direct dependency
++# in order to avoid unnecessary/accidental remake.
++jsattrib.c.new: Makefile jsattrib.gperf
++	gperf -k'1,5,$$' -o -l -C -NisJSAttrib <jsattrib.gperf |\
++	 sed -e 's:(unsigned char)str\[[^]]*\]:tolower(\0):g' \
++	     -e 's:\*\([a-z]*\) *== *\*\([a-z]*\) *&& *\!strcmp *(\1 *+ *1, *\2 *+ *1):!strcasecmp(\1, \2):g' \
++	>jsattrib.c.new
++
++jsre.h: Makefile makejsre
++	$(PERL) makejsre mocha javascript livescript eval >jsre.h
++
++.SUFFIXES: .c .o .so
++
++.c.o:
++	$(CC) -c $(CFLAGS) -o $@ $<
++
++.o.so:
++	$(LD_SH) $(LDFLAGS_SH) -o $@ $< -lc
++
++clean:
++	-rm -rf *.o *.so *pure_* core *.out *.s classes.th classes.dh jsre.h
++
++distclean: clean
++	-rm -f Makefile *~ *.bak *.new
++
++depend:
++	$(MAKEDEPEND) $(INCLUDE) -fMakefile *.c
++
++script.o: ../src/squid.h ../src/module.h htmlfilter.h jsattrib.c jsre.h
++
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/htmlfilter.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,412 @@
++/* Common code for HTML filters.
++   This is not a filter on its own, but a library to be used by modules
++   which "do something" with the HTML tags. See script.c for how to write
++   those.
++ */
++
++#include "squid.h"
++#include "module.h"
++#include "patfile.h"
++#include "htmlfilter.h"
++#ifdef HAVE_ALLOCA_H
++#include <alloca.h>
++#endif
++
++#define HTMLFILTER_C
++#include <classes.dh>
++
++Ddef(htmlModuleObject)
++{
++    UNREF(this->libObject);
++}
++
++Ddef(htmlFilterObject)
++{
++    memBufClean(&this->tag);
++}
++
++#define DEBUG_TAG_PARSER
++
++/* Insert a tag. Can be called from the module. */
++void insertTag(htmlFilterObject *this, MemBuf *target,
++               int nattribs, char *attribs[], char *values[])
++{
++    int i, len;
++    int *alen, *vlen;
++    if (this->eating)
++        return;
++
++#ifdef HAVE_ALLOCA
++    alen = alloca(2*nattribs*sizeof(int));
++#else
++    alen = xmalloc(2*nattribs*sizeof(int));
++#endif
++    vlen = alen + nattribs;
++    for (i=1, len=2+strlen(attribs[0]); i<nattribs; ++i)
++        if (attribs[i]) {
++            alen[i] = strlen(attribs[i]);
++            len += alen[i] + 1;
++            if (values[i]) {
++                vlen[i] = strlen(values[i]);
++                len += vlen[i] + 1;
++            }
++        }
++    if (this->contlen > 0 && this->posout+len > this->posin) {
++        debug(94, 3) ("htmlfilter.c: %s: insertTag (%s): no space!\n",
++                      moduleUrlClean(this->uri), attribs[0]);
++#ifndef HAVE_ALLOCA
++        xfree(alen);
++#endif
++        return;
++    }
++
++    memBufAppend(target, "<", 1);
++    memBufAppend(target, attribs[0], strlen(attribs[0]));
++    for (i=1; i<nattribs; ++i)
++        if (attribs[i]) {
++            memBufAppend(target, " ", 1);
++            memBufAppend(target, attribs[i], alen[i]);
++            if (values[i]) {
++                memBufAppend(target, "=", 1);
++                memBufAppend(target, values[i], vlen[i]);
++            }
++        }
++    memBufAppend(target, ">", 1);
++    this->posout += len;
++#ifndef HAVE_ALLOCA
++    xfree(alen);
++#endif
++}
++
++#ifdef DEBUG_TAG_PARSER
++static void debug_tag_parser(int nattribs, char *attribs[], char *values[])
++{
++    int i;
++    MemBuf mb;
++    memBufDefInit(&mb);
++    for (i=0; i<nattribs; ++i) {
++        memBufAppend(&mb, "\t", 1);
++        if (attribs[i]) {
++            memBufAppend(&mb, attribs[i], strlen(attribs[i]));
++        }
++        if (values[i]) {
++            memBufAppend(&mb, "\t", 1);
++            memBufAppend(&mb, values[i], strlen(values[i]));
++        }
++        memBufAppend(&mb, "\n", 1);
++    }
++    memBufAppend(&mb, "\0", 1);
++    debug(94, 9) ("htmlfilter.c: processTag: %d\n%s", nattribs, mb.buf);
++    memBufClean(&mb);
++}
++#endif
++
++typedef enum {
++    V_WSP, V_COMM, V_ATT, V_SVAL, V_VAL, V_DQUOT='"', V_SQUOT='\''
++} vpos;
++
++/* Parse a tag, hand it over to processTag() */
++/* Recognizes ATTR=VAL, ATTR="VAL" and ATTR='VAL'. */
++/* Handles SGML -- comments -- as an (empty) attribute. */
++static int processTag0(htmlFilterObject *this, MemBuf *target)
++{
++#ifdef HAVE_ALLOCA
++    char *scratch = alloca(this->tag.size);
++    /* Worst case: <A B C D ...> gives length/2 attributes */
++    char **atts = alloca(this->tag.size*sizeof(char *));
++#else
++    char *scratch = xmalloc(this->tag.size);
++    char **atts = xcalloc(this->tag.size, sizeof(char *));
++#endif
++    char **vals = atts+this->tag.size/2;
++    int ret, i, n = 0;
++    vpos v = V_WSP, v0 = V_WSP;
++    char *p = scratch+1;
++
++#ifdef HAVE_ALLOCA
++    memset(atts, 0, this->tag.size*sizeof(char *));
++#endif
++
++    assert(this->tag.buf[0]=='<');
++    xmemcpy(scratch, this->tag.buf, this->tag.size);
++    scratch[this->tag.size-1] = '\0';
++    i = 1;
++    for (; i<this->tag.size-1; ++i) {
++        switch (v) {
++        case V_WSP:
++            if (isspace(scratch[i]))
++                continue;
++            p = scratch + i;
++            if (scratch[i]=='=' && n>0) {
++                ++p;
++                v = V_VAL;
++                continue;
++            }
++            if (scratch[i]=='-' && scratch[i+1]=='-') {
++                v = V_COMM;
++                i+=2;
++                continue;
++            }
++            v = V_ATT;
++            continue;
++        case V_ATT:
++            if (isspace(scratch[i])) {
++                scratch[i] = '\0';
++                atts[n++] = p;
++                v = V_WSP;
++            } else if (scratch[i]=='=') {
++                scratch[i] = '\0';
++                atts[n++] = p;
++                p = scratch + i + 1;
++                v = V_SVAL;
++            }
++            continue;
++        case V_SVAL:
++            if (isspace(scratch[i]))
++                continue;
++            p = scratch + i;
++            v = V_VAL;
++            /* FALL THRU */
++        case V_VAL:
++            if (isspace(scratch[i])) {
++                if (v0 == V_DQUOT || v0 == V_SQUOT) {
++                    scratch[i-1] = '\0';
++                    vals[n-1] = p+1;
++                } else {
++                    scratch[i] = '\0';
++                    vals[n-1] = p;
++                }
++                v0 = v = V_WSP;
++            } else if (scratch[i]=='\'' || scratch[i]=='"') {
++                v0 = v = scratch[i];
++            }
++            continue;
++        case V_DQUOT:
++        case V_SQUOT:
++            if (scratch[i]==v && scratch[i-1]!='\\')
++                v = V_VAL;
++            continue;
++        case V_COMM:
++            if (i>2 && isspace(scratch[i]) &&
++                scratch[i-1]=='-' && scratch[i-2]=='-') {
++                scratch[i] = '\0';
++                atts[n++] = p;
++                v = V_WSP;
++            }
++            continue;
++        }
++    }
++    if (v==V_ATT || v==V_COMM) {
++        atts[n++]=p;
++    } else if (v==V_VAL) {
++        if (v0==V_DQUOT || v0==V_SQUOT) {
++            scratch[i-1] = '\0';
++            vals[n-1] = p+1;
++        } else {
++            vals[n-1] = p;
++        }
++    }
++
++    if (n > 0) {
++#ifdef DEBUG_TAG_PARSER
++        if (debugLevels[94]>=9)
++            debug_tag_parser(n, atts, vals);
++#endif
++        ret = CC(this->owner,htmlModuleObject)->processTag(this, target,
++                                                           n, atts, vals);
++    } else {
++        ret = 0;
++    }
++#ifndef HAVE_ALLOCA
++    xfree(scratch);
++    xfree(atts);
++#endif
++    return ret;
++}
++
++static int htmlCfFilter(filterObject *obj, MemBuf *target,
++                        const char *buf, int len)
++{
++    htmlFilterObject *this = CC(obj, htmlFilterObject);
++    int i, result;
++    debug(94, 9) ("htmlfilter: %s: pos %d/%d (%d) len %d\n",
++		  moduleUrlClean(this->uri),
++                  this->posin, this->posout, this->contlen, len);
++    this->posin += len;
++    for (i=0; i<len; ++i) {
++        if (buf[i]=='\0') {
++#ifdef FIX_BROKEN_HTML
++            buf[i]=' ';
++#else
++            debug(94, 3) ("htmlfilter: %s: no HTML, skipping\n",
++                          moduleUrlClean(this->uri));
++            return -2;
++#endif
++        }
++        switch (this->inTag) {
++        case T_TEXT:
++            if (buf[i]=='<') {
++                this->inTag = T_STAG;
++                goto storeTag;
++            }
++        storeText:
++            if (!this->eating) {
++                memBufAppend(target, buf+i, 1);
++                ++this->posout;
++            }
++            continue;
++
++        case T_META:
++            if (this->inBSQuot>=0) {
++                if (buf[i]=='-') {
++                    if (++this->inBSQuot >= 2) {
++                        this->inTag = T_COMM;
++                        this->inBSQuot = 0;
++                    }
++                } else {
++                    this->inBSQuot = -1;
++                }
++            }
++            if (buf[i]=='>')
++                this->inTag = T_TEXT;
++            goto storeText;
++
++        case T_COMM:
++            if (buf[i]=='>' && this->inBSQuot >= 2)
++                this->inTag = T_TEXT;
++            if (buf[i]=='-')
++                ++this->inBSQuot;
++            else
++                this->inBSQuot = 0;
++            goto storeText;
++
++        case T_STAG:
++            if (buf[i]=='!') {
++                /* Push back SGML meta-tags including legal HTML coments */
++                if (!this->eating) {
++                    memBufAppend(target, "<!", 2);
++                    this->posout += 2;
++                }
++                memBufReset(&this->tag);
++                this->inTag = T_META;
++                this->inBSQuot = 0;
++                continue;
++            }
++            if (buf[i]=='<')
++                continue; /* handle bad <<TAG> syntax */
++            if (!isspace(buf[i]))
++                this->inTag = T_TAG;
++            /* FALL THRU */
++        case T_EQU:
++            if ((buf[i]=='"' || buf[i]=='\'') && !this->inBSQuot) {
++                memBufAppend(&this->tag, buf+i, 1);
++                this->inTag = buf[i];
++                continue;
++            }
++            this->inTag = T_TAG;
++            /* FALL THRU */
++        case T_TAG:
++            switch (buf[i]) {
++            case '>':
++                memBufAppend(&this->tag, ">", 1);
++                result = processTag0(this, target);
++                if (!result && !this->eating) {
++                    memBufAppend(target, this->tag.buf, this->tag.size);
++                    this->posout += this->tag.size;
++                } else if (result == -2)
++                  return -2;
++                memBufReset(&this->tag);
++                this->inTag = T_TEXT;
++                continue;
++#if 0
++	    case '<':
++                /* syntax error, but best effort to recover - open new tag */
++                memBufAppend(&this->tag, ">", 1);
++                result = processTag0(this, target);
++                if (!result && !this->eating) {
++                    memBufAppend(target, this->tag.buf, this->tag.size);
++                    this->posout += this->tag.size;
++                } else if (result == -2)
++                  return -2;
++                memBufReset(&this->tag);
++                this->inTag = T_STAG;
++                goto storeTag;
++#endif
++            case '=':
++                this->inTag = T_EQU;
++                /* FALL THRU */
++            }
++            /* FALL THRU */
++        case T_DQUOT:
++        case T_SQUOT:
++            if (!this->inBSQuot) {
++                if (buf[i]=='\\') {
++                    this->inBSQuot = 1;
++                } else if (buf[i]==this->inTag) {
++                    this->inTag = T_TAG;
++                }
++            }
++            /* FALL THRU */
++        storeTag:
++            memBufAppend(&this->tag, buf+i, 1);
++            this->inBSQuot = 0;
++        }
++    }
++    if (this->contlen>=0 && this->posin>=this->contlen) {
++        /* Append blanks to end of file if needed */
++        for (i=this->posout; i<this->contlen; ++i)
++            memBufAppend(target, " ", 1);
++    }
++    return 0;
++}
++
++/* moduleObject->filter for FIL_CONTFILTER:
++   filterObject constructor.
++*/
++
++static void *htmlContFilter(htmlModuleObject *this, const void *arg)
++{
++    htmlFilterObject *cf;
++    const repParam *rp = arg;
++
++    if (this->patFile && (patfileCheckReload(this->patFile),
++                          patfileMatch(this->patFile, rp->uri)))
++        return NULL;
++
++    cf = new(htmlFilterObject);
++    cf->filter = htmlCfFilter;
++    cf->contlen = rp->rep->content_length;
++    memBufDefInit(&cf->tag);
++
++    return cf;
++}
++
++/* moduleObject holding the library module.
++   This gets REFd by every client, which means it will be freed and
++   release the library when the last client exits.
++   This is about the only legitimate use for a global variable in a module. */
++static moduleObject *libObject = NULL;
++
++/* Register a htmlfilter derivative */
++void htmlfilterRegister(htmlModuleObject *this, const char *description)
++{
++    this->chain.typ = FIL_CONTFILTER;
++    this->info.version = MODULE_API_VERSION;
++    this->description = description;
++    this->trigger = "text/html";
++    this->filter = htmlContFilter;
++    this->libObject = REF(libObject);
++
++    moduleRegister(CC(this, moduleObject));
++}
++
++/* Register the library itself */
++void moduleInit(const wordlist *args)
++{
++    moduleObject *m = new(moduleObject);
++    m->chain.typ = FIL_DUMMY;
++    m->info.version = MODULE_API_VERSION;
++    m->description = "HTML Filter Library";
++    moduleRegister(m);
++    libObject = m; /* weak reference! */
++}
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/redirect.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,43 @@
++
++#include "squid.h"
++#include "module.h"
++#include "patfile.h"
++
++#define MODNAME "mod_redirect"
++#define REDIRECT_C
++#include <classes.dh>
++
++/* moduleObject->filter for FIL_REDIRECT:
++   arg is the requested URI.
++   Returns the redirected URI. Returns NULL if no redirection.
++*/
++static void *redirFilter(moduleObject *this, const void *arg)
++{
++    reqParam *rp = (reqParam *)arg;
++    const char *uri = rp->uri;
++    char *r;
++    patfileCheckReload(this->patFile);
++    r = patfileMatch(this->patFile, uri);
++    if (r)
++        debug(93, 3) (MODNAME ": '%s' => '%s'\n", moduleUrlClean(uri), r);
++    return r;
++}
++
++void moduleInit(const wordlist *args)
++{
++    moduleObject *m;
++    patFileObject *pf;
++    if (!args) {
++        debug(93, 1) (MODNAME ": needs an argument\n");
++        return;
++    }
++    m = new(moduleObject);
++    m->chain.typ = FIL_REDIRECT;
++    m->info.version = MODULE_API_VERSION;
++    m->description = "URI Redirector";
++    m->filter = redirFilter;
++    pf = patfileNew(args->key, 1);
++    m->patFile = REF(pf);
++
++    moduleRegister(m);
++}
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/classdef	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,621 @@
++#!/usr/bin/perl -w
++
++$version="0.5";
++
++=head1 NAME
++
++classdef - the classdef compiler
++
++=head1 SYNOPSIS
++
++I<In a source file:>
++
++ #include "classes.th"
++ typedef statements;
++ classdef(newtype, supertype, ({
++     fields;
++ }))
++ #define FILE_C
++ #include "classes.dh"
++ Ddef(newtype) {
++     destructor statements;
++ }
++
++I<To call before compiling:>
++
++B<classdef> [I<-o headerfile>] [I<-s>] [I<-a>] [I<-v>] [I<-c>] [I<-c>]
++I<sourcefile...>
++
++=head1 DESCRIPTION
++
++This is a very simple framework for using "inheritance" on structures,
++facilitating object-oriented application design in C. A I<class> is a
++C struct which inherits all of the fields from its I<superclass>,
++adding its own fields. A class has a I<destructor>, which clears all
++its fields, deallocating any memory the class has allocated.
++
++A class is defined with the statement
++
++ classdef(newtype, supertype, ({
++     fields;
++ }))
++
++The syntax is dictated by the C preprocessor, which expects
++B<classdef> to be a macro with 3 arguments. In the complete program,
++this macro expands to nothing and the generated header file contains
++the structure definitions contained in the B<classdef>. The first
++argument to the B<classdef> macro is the name of the new type. The
++second is the name of its supertype. After that come the fields this
++type defines, like in a regular struct definition.
++
++If the newtype argument is prefixed with "I<private >" (with a blank
++in between), then the definition will only be visible in the defining
++file. For this each file has to define a macro indicating its
++filename, with all letters in uppercase and dots replaced by
++underscores.
++
++Inside the fields, the word B<class> as a type is substituted with the
++I<newtype> argument and the word B<super> is substituted with the
++I<supertype> argument of I<the type just being defined>, regardless
++whether it occurs in a field inherited from a supertype.
++
++Each classdef needs a I<destructor definition>. If no cleanup action
++is necessary, then define an empty destructor with
++
++ Ddef_none(newtype)
++
++If cleanup is needed, a destructor definition looks like a function definition:
++
++ Ddef(newtype) {
++     statements;
++ }
++
++Inside the function body, a pointer to the structure to be cleaned is
++available as B<this>.
++
++A I<global constructor> has to be defined somewhere in the program.
++This is a function with the signature
++
++ void *void_O_CTOR(size_t size, _DTOR dtor);
++
++(B<_DTOR> is defined in the generated include file; it is a pointer
++to a function taking a void* argument.)
++
++The global constructor has to allocate B<size> bytes for a new object
++and return the pointer to it. It also should store the destructor
++function pointer B<dtor> somewhere for later invocation.
++
++The macro
++
++ new(typ)
++
++where B<typ> was defined with the B<classdef> macro, calls the global
++constructor with the size and destructor of this type. Invoking a
++destructor calls the destructor of the supertype and recursively up to
++the I<global destructor>, which by default does B<free>(3).
++
++The B<classdef> program is called with all source files which contain
++classdef macro statements. It produces header files with all necessary
++definitions, which should be included by all affected source files in
++the order shown above.
++
++=head1 OPTIONS
++
++=over 8
++
++=item B<-o> I<file>
++
++Write output into I<file>.
++
++=item B<-s>
++
++Write the output split into I<file>B<.th> and I<file>B<.dh>. Without
++this argument, a single output file is generated. Many programs need
++the split form to properly order typedef statements.
++
++=item B<-a>
++
++Annotate the generated files with comments about the class hierarchy.
++
++=item B<-v>
++
++Be verbose, show processing info on standard error.
++
++=item B<-c>
++
++Prepare for using cascaded constructors.
++
++=item B<-C>
++
++Omit the global constructor declaration.
++
++=back
++
++=head1 RETURN VALUE
++
++The B<classdef> program returns exit code 0 for success, non-0 on any error.
++
++The global constructor, and the B<new> macro which invokes it, return
++a pointer to a newly allocated structure of the right type.
++
++Destructors call their supertype's destructor, ultimately ending in a
++B<free> operation, returning nothing.
++
++=head1 ERRORS
++
++Errors in the source files are printed in a B<cc>-like format on
++standard error.
++
++=head1 EXAMPLES
++
++This source file, I<example.c>, demonstrates how to use inheritance.
++It defines a "string" class which holds a string, and a "stringchain"
++class which holds a list of strings.
++
++ #include <stdio.h>
++ #include <stdlib.h>
++ #include <string.h>
++ #include "exclasses.th"
++
++ classdef(string,, ({
++     _DTOR destroy;      /* destructor */
++     char *str;          /* the string */
++ }))
++
++ classdef(stringchain, string, ({
++     stringchain *next;  /* next in chain */
++ }))
++
++ #define EXAMPLE_C
++ #include "exclasses.dh"
++
++ Ddef(string) {
++     /* free allocated memory */
++     free(this->str);
++ }
++
++ Ddef(stringchain) {
++     /* clear the chained elements too */
++     if (this->next)
++         this->next->destroy(this->next);
++ }
++
++ void *void_O_CTOR(size_t size, _DTOR destroy)
++ {
++     string *n = calloc(1, size);  /* alloc and set to zero */
++     n->destroy = destroy;         /* store the dtor */
++     return n;
++ }
++
++ int main(int argc, char *argv[])
++ {
++     stringchain *sc, *s0 = NULL;
++     while (argc-- > 0) {
++         /* link the arguments in reverse order */
++         sc = new(stringchain);
++         sc->str = strdup(*argv);
++         sc->next = s0;
++         s0 = sc;
++         argv++;
++     }
++     sc = s0;
++     while (sc) {
++         printf("%s\n", sc->str);
++         sc = sc->next;
++     }
++     s0->destroy(s0);
++ }
++
++To compile:
++
++ classdef -o exclasses -s example.c
++ cc -o example -I. example.c
++
++To get a feeling how it works, look at the following beautified,
++excerpted preprocessor output:
++
++ typedef struct _string string;
++ typedef struct _stringchain stringchain;
++
++ struct _string {
++     _DTOR destroy;
++     char *str;
++ };
++
++ struct _stringchain {
++     _DTOR destroy;
++     char *str;
++     stringchain *next;
++ };
++
++ static void string_O_DTOR_(string *this);
++ void string_O_DTOR(string *this)
++ {
++     string_O_DTOR_(this);
++     free((void *)this);
++ }
++ static void string_O_DTOR_(string *this) {
++     free(this->str);
++ }
++
++ static void stringchain_O_DTOR_(stringchain  *this);
++ void stringchain_O_DTOR(stringchain *this)
++ {
++     stringchain_O_DTOR_(this);
++     string_O_DTOR((string *)this);
++ }
++ static void stringchain_O_DTOR_(stringchain *this)
++ {
++     if (this->next)
++         this->next->destroy(this->next);
++ }
++
++=head1 FILES
++
++B<classdef> writes the files it generates, as specified by the B<-o>
++option, in a "move-if-change" fashion. It generates a lot of I<#line>
++statements telling exactly from which line in which source file a
++definition or declaration originates. While it can operate from
++standard input to standard output, this doesn't make much sense.
++
++=head1 SEE ALSO
++
++L<malloc(3)>, L<free(3)>
++
++=head1 NOTES
++
++In a header file with the usual include guard, a "private" classdef
++becomes visible to everyone who includes that header - i.e. it is more
++like "protected" than "private".
++
++=head1 CAVEATS
++
++The expected usage is that each structure somewhere contains a pointer
++to its own destructor, and that the global constructor stores it
++there. There currently is no macro for invoking it. Destructors take
++the object to be destroyed as their (only) argument.
++
++Typecasts between B<classdef>d structures are safe in the following
++situations:
++
++=over 8
++
++=item I<widening conversion>:
++
++The target is a direct or indirect supertype of the source.
++
++=item I<narrowing conversion>:
++
++The target is a direct or indirect subtype of the source, and the
++source was initially obtained via B<new> of the target or a direct or
++indirect subtype of it (and subsequently widening-converted).
++
++=back
++
++There is no general way to check for these rules at compile time.
++
++=head1 DIAGNOSTICS
++
++Diagnostics are written to standard error. With the B<-v> argument,
++some interesting or less interesting progress messages are written
++too.
++
++A forgotten B<Ddef> will only be found by the linker.
++
++=head1 BUGS
++
++Not all possible errors are detected. Syntax errors may result in
++incomprehensible error messages from the compiler. Any error messages
++involving names ending with B<O_DTOR> or B<O_CTOR> or B<O_SUPER> are
++probably due to wrong use of B<classdef> or B<Ddef> macros.
++
++Cascading constructors is not documented.
++
++The constructor/destructor scheme is not universal enough. Some ugly
++magic in the source files is still necessary. Handling of destructors
++needs aid from the implementation.
++
++=head1 RESTRICTIONS
++
++The syntax of the B<classdef> macro is critical, especially the
++placement of parentheses and newlines. Use only the order given in the
++example.
++
++Multiline comments inside B<classdef> macros are not allowed.
++
++There is no real access control, nor a split of public and private
++fields. Of all class definitions, at least the names become globally
++visible even when "private", so they must be distinct.
++
++=head1 VERSION
++
++0.4 as of 2002-04-14.
++
++=head1 AUTHOR
++
++Olaf Titz <olaf@bigred.inka.de>. This program is in the public domain.
++
++=head1 HISTORY
++
++April 2002: fixed Perl syntax bug.
++
++September 1999: first version written for the Squid-filters project.
++
++=cut
++
++require "getopts.pl";
++$opt_a=$opt_v=$opt_s=$opt_c=$opt_C=0;
++&Getopts("o:avscC");
++if ($opt_o) {
++    if ($opt_s) {
++	$outfilea="$opt_o.th$$";
++	$outfileb="$opt_o.dh$$";
++    } else {
++	$outfilea=$outfileb="$opt_o.$$";
++    }
++} else {
++    $outfilea=$outfileb="";
++    $opt_s="";
++}
++
++$state=0;
++$defn{""}="";
++
++while (<>) {
++    close ARGV if (eof);
++    if ($state==0) {
++	/^\s*classdef\(([^,()\{]+),\s*(\w+)?,\s*\(\s*\{\s*$/ && do {
++	    $newclass=$1;
++	    $parent=defined($2)?$2:"";
++	    if ($newclass=~s,^private\s+,,) {
++                if ($ARGV ne "-") {
++		    $private{$newclass}=$ARGV;
++        	    $private{$newclass}=~tr,a-z./,A-Z__,;
++                }
++	    }
++	    printf STDERR "classdef `%s' parent `%s' file %s%s\n",
++                   $newclass, $parent, $ARGV,
++                   ($private{$newclass}?" private":"")
++		     if ($opt_v);
++	    $parent{$newclass}=$parent;
++	    $wheref{$newclass}=$ARGV;
++	    $wherel{$newclass}=$.;
++	    $newdef="";
++	    $state=1;
++	    next;
++	};
++	/^\s*classdef/ && &err($ARGV, $., "syntax error in classdef", 1);
++    } else {
++	/^\s*\}\s*\)\s*\);?\s*$/ && do {
++	    $defn{$newclass}=$newdef;
++	    $state=0;
++	    next;
++	};
++	$newdef.=$_;
++    }
++}
++
++@classes=();
++print STDERR "Class hierarchy:\n" if ($opt_v);
++$hierarchy = "";
++&pushdeps("", -1);
++$e=0;
++foreach (keys %wheref) {
++    unless ($okay{$_}) {
++        &err($wheref{$_}, $wherel{$_},
++             "superclass not defined or circurlar dependency", 0);
++        $e=1;
++    }
++}
++exit 1 if ($e);
++
++$x="";
++@i = sort values %wheref;
++@inf = grep($_ ne $x && ($x=$_), @i);
++$inputfiles=join("\n   ", @inf);
++$inputfiles=~s,^(   )?-$,<standard input>,gm;
++$Pinputfiles = ($#inf>0 ? "s" : "");
++
++if ($outfilea) {
++    open(STDOUT, ">$outfilea") || die "open $outfilea: $!";
++    select STDOUT;
++    $outfilex=&fntom($outfilea);
++}
++
++&printhead;
++printf "/* Class hierarchy:\n%s*/\n", $hierarchy if ($opt_a);
++printf "#ifndef %s\n#define %s\n", $outfilex, $outfilex if ($outfilea);
++print
++ "\n#define classdef(class,parent,body)\ntypedef void (*_DTOR)(void *);\n";
++
++if ($opt_c) {
++    print <<'_END';
++
++#define Cdef(typ) static void typ##_O_CTOR_(typ *this, _DTOR dtor); \
++                  typ *typ##_O_CTOR(size_t size, _DTOR dtor) { \
++                           typ *this=(typ*)typ##_O_SCTOR(size, dtor); \
++                           typ##_O_CTOR_(this, dtor); return this; } \
++                  static void typ##_O_CTOR_(typ *this, _DTOR dtor)
++
++#define Cdef_none(typ) typ *typ##_O_CTOR(size_t size, _DTOR dtor) { \
++                           return (typ*)typ##_O_SCTOR(size, dtor); }
++
++#define void_O_CTOR(s,d) malloc(s)
++#define new(typ)      typ##_O_CTOR(sizeof(typ), (_DTOR)typ##_O_DTOR)
++
++_END
++} else {
++    print <<'_END';
++
++#define new(typ) (typ *)void_O_CTOR(sizeof(typ), (_DTOR)typ##_O_DTOR, typ)
++
++_END
++}
++
++print <<'_END';
++#define Ddef(typ) static void typ##_O_DTOR_(typ *this); \
++                  void typ##_O_DTOR(typ *this) { \
++                           typ##_O_DTOR_(this); \
++                           typ##_O_SDTOR((typ##_O_SUPER *)this); } \
++                  static void typ##_O_DTOR_(typ *this)
++
++#define Ddef_none(typ) void typ##_O_DTOR(typ *this) { \
++                            typ##_O_SDTOR((typ##_O_SUPER *)this); }
++
++#define void_O_DTOR(t)   free(t)
++
++/* TYPEDEFS */
++_END
++
++foreach (@classes) {
++    printf "%s\n", &where($_);
++    $x=sprintf "typedef struct _%s %s;", $_, $_;
++    printf "%s\n", &annotate($x, $parent{$_});
++}
++print "\n/* LINKS */\n";
++foreach (@classes) {
++    local($p)=$parent{$_};
++    $p="void" unless ($p);
++    printf "#define %s_O_SUPER %s\n", $_, $p;
++    printf "#define %s_O_SCTOR %s_O_CTOR\n", $_, $p if ($opt_c);
++    printf "#define %s_O_SDTOR %s_O_DTOR\n", $_, $p;
++}
++
++print "\n/* try this:*/\n";
++printf "#ifdef ADD_CLASSDEF\n";
++foreach (@classes) {
++    printf "    ADD_CLASSDEF(%s)\n", $_;
++}
++printf "#endif\n";
++
++if ($opt_s) {
++    print "\n#endif\n";
++    open(STDOUT, ">$outfileb") || die "open $outfileb: $!";
++    select STDOUT;
++    $outfilex=&fntom($outfileb);
++    &printhead;
++    printf "#ifndef %s\n#define %s\n", $outfilex, $outfilex if ($outfileb);
++}
++
++print "\n/* STRUCTS */\n";
++foreach (@classes) {
++    if ($private{$_}) {
++	printf "\n#ifdef %s", $private{$_};
++    }
++    printf "\n%s\nstruct _%s {\n", &where($_), $_;
++    &pdef($_, $_);
++    print "};\n";
++    if ($private{$_}) {
++	print "#endif\n";
++    }
++}
++print "\n/* CTOR/DTOR DECLS */\n";
++foreach (@classes) {
++    printf "%s\n", &where($_);
++    printf "extern %s *%s_O_CTOR(size_t, _DTOR);", $_, $_ if ($opt_c);
++    printf "extern void %s_O_DTOR(%s *);\n", $_, $_;
++}
++print "\nextern void *void_O_CTOR(size_t, _DTOR);\n" unless ($opt_c || $opt_C);
++print "\n#endif\n" if ($opt_o);
++close STDOUT;
++
++if ($opt_o) {
++    &mvifchg($outfilea);
++    &mvifchg($outfileb) unless ($outfilea eq $outfileb);
++}
++exit;
++
++sub pushdeps
++{
++    local($x,$l)=@_;
++    local($y,$z);
++    if ($x) {
++	$z = sprintf("   %s%s\n", "    " x $l, $x);
++	$hierarchy .= $z;
++	print STDERR $z if ($opt_v);
++    }
++    foreach $y (keys %defn) {
++	if ($y) {
++	    &pushdeps($y, $l+1) if (($parent{$y} eq $x));
++	}
++    }
++    if ($x) {
++	unshift(@classes, $x);
++	$okay{$x}=1;
++    }
++}
++
++sub pdef
++{
++    local($c,$d)=@_;
++    if ($parent{$c}) {
++	&pdef($parent{$c}, $d);
++    }
++    printf "%s\n", &where($c, 1);
++    local($_)=$defn{$c};
++    s~class~$d~g;
++    s~super~$parent{$d}~g;
++    s~[ \t]*/\*.*\*/[ \t]*~~gm;
++    s~^.*$~&annotate($&,$c)~gme;
++    print;
++}
++
++sub where
++{
++    local($c,$i)=@_;
++    $i=0 unless ($i);
++    sprintf '#line %d "%s"', $wherel{$c}+$i, $wheref{$c};
++}
++
++sub fntom
++{
++    local($x)=@_;
++    $x=~tr,a-z./,A-Z__,;
++    $x=~s,[0-9]*$,,;
++    $x;
++}
++
++sub annotate
++{
++    local($s,$x)=@_;
++    return $s unless ($opt_a);
++    local($n)=74-length($s)-length($x);
++    $s.=(" " x $n) if ($n>0);
++    sprintf "%s /*%s*/", $s, $x;
++}
++
++sub printhead
++{
++    print <<"_END";
++/* MACHINE GENERATED FILE - DO NOT EDIT */
++
++/* Produced by classdef $version from the source file$Pinputfiles:
++   $inputfiles
++*/
++_END
++}
++
++sub mvifchg
++{
++    local($f)=@_;
++    local($g)=$f;
++    $g=~s,[0-9]*$,,;
++    if (-f $g) {
++	$_=`cmp $f $g 2>/dev/null`;
++	if ($_) {
++	    unlink $g;
++	    rename $f, $g;
++	} else {
++	    unlink $f;
++	}
++    } else {
++	rename $f, $g;
++    }
++}
++
++sub err
++{
++    local($f,$l,$m, $e)=@_;
++    printf STDERR "%s:%d: %s\n", $f, $l, $m;
++    exit 1 if ($e);
++}
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/activex.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,48 @@
++/* mod_activex - remove ActiveX OBJECTs from HTML pages
++*/
++
++#include "squid.h"
++#include "module.h"
++#include "htmlfilter.h"
++#include "patfile.h"
++
++#define MODNAME         "mod_activex"
++
++#define ACTIVEX_C
++#include <classes.dh>
++
++static char *fake_attrs[] = { "OBJECT", "COMMENT" };
++static char *fake_valus[] = { NULL, "\"ACTIVEX_REMOVED_BY_PROXY\"" };
++#define fake_nattribs 2
++
++static int activexProcessTag(htmlFilterObject *cf, MemBuf *target,
++                            int nattribs, char *attrs[], char *valus[])
++{
++    int i;
++
++    /* Opening OBJECT: defang ActiveX classid */
++    if (!strcasecmp(attrs[0], "OBJECT"))
++        for (i=1; i<nattribs; ++i)
++            if (attrs[i] && valus[i] &&
++                !strcasecmp(attrs[i], "CLASSID")) {
++                char *p = valus[i];
++                if (!strncasecmp(p, "CLSID:", 6)) {
++                    debug(93, 3) (MODNAME ": %s: removing activex OBJECT\n",
++                                  moduleUrlClean(cf->uri));
++                    insertTag(cf, target, fake_nattribs, fake_attrs, fake_valus);
++                    return 1;
++                }
++            }
++
++    return 0;
++}
++
++void moduleInit(const wordlist *args)
++{
++    htmlModuleObject *m = new(htmlModuleObject);
++    patFileObject *pf = args ? patfileNew(args->key, 0) : NULL;
++
++    m->patFile = REF(pf);
++    m->processTag = activexProcessTag;
++    htmlfilterRegister(m, "ActiveX filter");
++}
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/makejsre	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,25 @@
++#!/usr/bin/perl
++
++# For all command line arguments, make REs (POSIX extended) out of them
++# where every character is matched by
++# - itself;
++# - the &#DEC; form,
++# - the &#xHEX; form,
++#   - each with the semicola optional;
++# - the %HEX form.
++#   - DEC and HEX forms match the character and its upcase equivalent.
++# Hopefully this catches all forms in which those keywords can be
++# expressed in HTML. (The whole RE is treated as case-insensitive.)
++
++print "/* This file was generated by makejsre - do not edit */\n";
++foreach (@ARGV) {
++    tr/A-Z/a-z/; # we need lowercase (and ASCII charset) below
++    $x=$_;
++    s~.~sprintf(
++                "(%s|&#(%d|%d|x[%x%x]%x);?|%%[%x%x]%x)",
++                $&, ord($&)-32, ord($&),
++                (ord($&)/16)-2, ord($&)/16, ord($&)&15,
++                (ord($&)/16)-2, ord($&)/16, ord($&)&15
++               )~ge;
++    printf "#define HTML_%s \"%s\"\n", $x, $_;
++}
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/cookies.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,65 @@
++/* mod_cookies.c - kill cookies
++   The module takes a file name as optional argument.
++   If available, this is a file containing an allow list of URL regexes.
++   Else, no cookies are allowed.
++*/
++
++#include "squid.h"
++#include "module.h"
++#include "patfile.h"
++
++#define MODNAME "mod_cookies"
++#define COOKIES_C
++#include <classes.dh>
++
++/* moduleObject->filter for FIL_REQHEADER/FIL_REPHEADER:
++   arg is a hdrParam structure containing request URI and header.
++   Return value is ignored.
++*/
++static void *cookieReqFilter(moduleObject *mod, const void *arg)
++{
++    const hdrParam *hp = arg;
++    if (!mod->patFile ||
++        (patfileCheckReload(mod->patFile),
++         !patfileMatch(mod->patFile, hp->uri))) {
++	if (httpHeaderDelById(hp->hdr, HDR_COOKIE) > 0)
++            debug(93, 3) (MODNAME ": %s: deleted client cookie\n",
++                          moduleUrlClean(hp->uri));
++    }
++    return NULL;
++}
++
++static void *cookieRepFilter(moduleObject *mod, const void *arg)
++{
++    const hdrParam *hp = arg;
++    if (!mod->patFile ||
++        (patfileCheckReload(mod->patFile),
++         !patfileMatch(mod->patFile, hp->uri))) {
++	if (httpHeaderDelById(hp->hdr, HDR_SET_COOKIE) > 0)
++            debug(93, 3) (MODNAME ": %s: deleted server cookie\n",
++                          moduleUrlClean(hp->uri));
++    }
++    return NULL;
++}
++
++void moduleInit(const wordlist *args)
++{
++    moduleObject *m;
++    patFileObject *pf = (args ? patfileNew(args->key, 0) : NULL);
++
++    m = new(moduleObject);
++    m->chain.typ = FIL_REQHEADER;
++    m->info.version = MODULE_API_VERSION;
++    m->description = "Cookie blocker";
++    m->filter = cookieReqFilter;
++    m->patFile = REF(pf);
++    moduleRegister(m);
++
++    m = new(moduleObject);
++    m->chain.typ = FIL_REPHEADER;
++    m->info.version = MODULE_API_VERSION;
++    m->description = "Set-Cookie blocker";
++    m->filter = cookieRepFilter;
++    m->patFile = REF(pf);
++    moduleRegister(m);
++}
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/gifanim.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,115 @@
++/* mod_gifanim - reset all GIF animations to one cycle
++ */
++
++#include "squid.h"
++#include "module.h"
++#include "patfile.h"
++
++#define MODNAME "mod_gifanim"
++
++static const char magic[] = "\x21\xff\x0bNETSCAPE2.0\x03\x01";
++static const char nomagic[] = "\x21\xfe\x0bXXXXXXXX1.0\x03\x01";
++#define TRIGGERLEN 16
++#define KILLLEN 3
++
++classdef(private gifanimObject, moduleObject, ({
++    int ncycles;
++}))
++
++classdef(private gifanimFilterObject, filterObject, ({
++    int posin;
++    int inHold;
++}))
++
++#define GIFANIM_C
++#include <classes.dh>
++
++Ddef_none(gifanimObject)
++
++Ddef_none(gifanimFilterObject)
++
++static int cfFilter(filterObject *this, MemBuf *target,
++                    const char *buf, int len)
++{
++    gifanimFilterObject *cf = CC(this, gifanimFilterObject);
++    int i;
++    debug(93,9) (MODNAME ": %s: pos %d len %d\n", moduleUrlClean(cf->uri),
++		 cf->posin, len);
++    for (i=0; i<len; ++i) {
++        if (cf->inHold >= TRIGGERLEN+KILLLEN) {
++            char x[3] = { 0 };
++            int nc = CC(this->owner,gifanimObject)->ncycles;
++            debug(93,3) (MODNAME ": %s: breaking animation to %d\n",
++                         moduleUrlClean(cf->uri), nc);
++            if (nc < 0)
++                return -1;
++            x[0] = nc & 255;
++            x[1] = nc >> 8;
++            memBufAppend(target, nc ? magic : nomagic, TRIGGERLEN);
++            memBufAppend(target, x, 3);
++            cf->inHold = 0;
++            memBufAppend(target, buf+i, 1);
++        } else if (cf->inHold >= TRIGGERLEN) {
++            ++cf->inHold;
++        } else if (cf->inHold > 0) {
++            if (buf[i] == magic[cf->inHold]) {
++                ++cf->inHold;
++            } else {
++                memBufAppend(target, magic, cf->inHold);
++                cf->inHold = 0;
++                memBufAppend(target, buf+i, 1);
++            }
++        } else {
++            if (buf[i] == magic[0])
++                cf->inHold = 1;
++            else
++                memBufAppend(target, buf+i, 1);
++        }
++    }
++    cf->posin += len;
++    return len;
++}
++
++/* moduleObject->filter for FIL_CONTFILTER:
++   filterObject constructor.
++*/
++static void *gifanimFilter(gifanimObject *this, const void *arg)
++{
++    gifanimFilterObject *f;
++    const repParam *rp = arg;
++    if (this->patFile && (patfileCheckReload(this->patFile),
++                          patfileMatch(this->patFile, rp->uri)))
++        return NULL;
++
++    f = new(gifanimFilterObject);
++    f->filter = cfFilter;
++    f->posin = f->inHold = 0;
++
++    return f;
++}
++
++
++void moduleInit(const wordlist *args)
++{
++    gifanimObject *m;
++    patFileObject *pf;
++
++    m = new(gifanimObject);
++    m->chain.typ = FIL_CONTFILTER;
++    m->info.version = MODULE_API_VERSION;
++    m->description = "animation breaker";
++    m->trigger = "image/gif";
++    m->filter = gifanimFilter;
++    if (args) {
++        m->ncycles = atoi(args->key);
++        args = args->next;
++    } else {
++        m->ncycles = 1;
++    }
++
++    pf = args ? patfileNew(args->key, 0) : NULL;
++    m->patFile = REF(pf);
++
++    moduleRegister(CC(m, moduleObject));
++}
++
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/urlfilter.sample	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,9 @@
++# The replacement URL below returns error 403 on my server.
++targeturl      http://jusa.telco-tech.de/nph-403.cgi
++# whether to block uncategorized websites or not
++blockunknown   0
++allowbypassing 0
++# The categories to block
++# Each stands for one category, i.e. Bit 1 stands for Pornography and so on.
++# Contact your local Cobion dealer for more informations.
++categories     0000000000000000380000600001F803
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/urlfilter.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,287 @@
++#include "squid.h"
++#include "module.h"
++#include "patfile.h"
++
++#define MODNAME "mod_urlfilter"
++#define URLFILTER_C
++#include <classes.dh>
++
++#define DEFAULT_SOCKET_PATH "/tmp/ofcdsock"
++/*
++ * load_module /usr/lib/squid/urlfilter.so 0000000000000000380000600001F803 http://red.irected.de/ /etc/squid/urlfilter.skip
++**/
++
++/* an urlfilter config file looks like this:
++
++key <whitespace> value
++----------------------------------------------------------------
++targeturl      http://redirect.de/
++blockunknown   0|1
++allowbypassing 0|1
++categories     0000000000000000380000600001F803
++----------------------------------------------------------------
++
++no spaces, no quotation marks, no nothing....
++*/
++
++static char rejectbuf[512];
++
++struct _urlfilter_config {
++  struct _urlfilter_config *next;
++  char   *filename;
++  char   *targeturl;
++  char   *categories;
++  int     targetlength;
++  int     blockunknown;
++  int	  allowbypassing;
++  time_t  mtime;
++};
++
++static struct _urlfilter_config *urlfilter_config = NULL;
++
++static int keyvalue(char *buf, char **key, char **value)
++{
++  char *tmp = buf;
++  static const char goodchars[] = "0123456789+-_.:/?%";
++
++  if (isspace(*tmp) || *tmp == '#')
++    return -1;
++
++  *key = tmp;
++
++  while (isalpha(*tmp)) tmp++;
++  if (!isspace(*tmp))
++    return -1;
++  *tmp++ = '\0';
++
++  /* advance to the next non space character */
++  while (isspace(*tmp)) tmp++;
++
++  *value = tmp;
++
++  while (isalpha(*tmp) || strchr(goodchars, *tmp)) tmp++;
++  *tmp = '\0';
++
++  if (**value == '\0')
++    return -1;
++
++  return 0;
++}
++
++void resetconfig(struct _urlfilter_config *cf)
++{
++  if (cf->categories) xfree(cf->categories);
++  if (cf->targeturl)  xfree(cf->targeturl);
++  cf->categories = cf->targeturl = NULL;
++  cf->allowbypassing = cf->blockunknown = cf->targetlength = 0;
++}
++
++static int checkconfig(struct _urlfilter_config *cf)
++{
++  struct stat st;
++  FILE *in;
++  char buf[1024];
++
++  if (stat(cf->filename, &st) == -1) {
++    debug(93, 1) (MODNAME ": Can't stat config file %s!\n", cf->filename);
++    return -1;
++  }
++
++  if (st.st_mtime == cf->mtime)
++    return 0;
++
++  if ((in = fopen(cf->filename, "r")) == NULL) {
++    debug(93, 1) (MODNAME ": Can't read config file %s!\n", cf->filename);
++    return -1;
++  }
++
++  while (fgets(buf, sizeof(buf), in)) {
++    char *key, *value;
++    if (keyvalue(buf, &key, &value) == -1)
++      continue;
++
++    debug(93, 1) (MODNAME ": key: %s, value: %s\n", key, value);
++
++    if (strcmp(key, "targeturl") == 0) {
++      cf->targeturl = xstrdup(value);
++      cf->targetlength = strlen(value);
++    } else if (strcmp(key, "categories") == 0) {
++      if (strlen(value) == 32) {
++	cf->categories = xstrdup(value);
++      } else {
++	debug(93, 1) (MODNAME ": Fatal, invalid category mask '%s'!\n", value);
++	goto error;
++      }
++    } else if (strcmp(key, "blockunknown") == 0) {
++      cf->blockunknown = atoi(value);
++    } else if (strcmp(key, "allowbypassing") == 0) {
++      cf->allowbypassing = atoi(value);
++    } else {
++      debug(93, 1) (MODNAME ": Warning, unknown key %s!\n", key);
++    }
++  }
++  
++  if (!cf->targeturl) {
++    debug(93, 1) (MODNAME ": Fatal, missing parameter <targeturl>!\n");
++    goto error;
++  }
++
++  if (!cf->categories) {
++    debug(93, 1) (MODNAME ": Fatal, missing parameter <categories>!\n");
++    goto error;
++  }
++
++  return 0;
++error:
++  if (cf->categories) xfree(cf->categories);
++  if (cf->targeturl)  xfree(cf->targeturl);
++  return -1;
++}
++
++static int hex2int(char c)
++{
++  c &= 0xff;
++  if (c >= '0' && c <= '9') {
++    return c - '0';
++  } else {
++    c |= ' ';                   /* lowercase */
++    if (c >= 'a' && c <= 'f')
++      return c - 'a' + 10;
++  }
++  return -1;
++}
++
++static int doquery(const char *uri, char *buf, size_t buflen)
++{
++  struct sockaddr_un address;
++  int sockfd, len = -1;
++  
++  if (uri) {
++    char querybuf[strlen(uri) + 7];
++
++    if ((sockfd = socket(AF_LOCAL, SOCK_STREAM, 0)) == -1) {
++      debug(93, 1) (MODNAME ": Failed to create unix domain socket!\n");
++      return -1;
++    }
++    
++    memset(&address, 0, sizeof(address));
++    address.sun_family = AF_LOCAL;
++    strncpy(address.sun_path, DEFAULT_SOCKET_PATH, 108);
++    
++    if (connect(sockfd, (struct sockaddr *) &address, sizeof(address)) == -1) {
++      debug(93, 1) (MODNAME ": Failed to connect to unix domain socket!\n");
++      goto error;
++    }
++    
++    len = snprintf(querybuf, buflen, "MATCH %s", uri);
++    if (write(sockfd, querybuf, len) <= 0) {
++      debug(93, 1) (MODNAME ": Failed to send the MATCH request!\n");
++      goto error;
++    }
++
++    if ((len = read(sockfd, buf, buflen)) <= 0) {
++      debug(93, 1) (MODNAME ": Failed to read the response!\n");
++      goto error;
++    }
++
++    if (write(sockfd, "QUIT", 4) <= 0)
++      debug(93, 1) (MODNAME ": Failed to send QUIT!\n");
++
++    buf[len] = '\0';
++
++error:
++    close(sockfd);
++  } /** if (uri) */
++  return len;
++}
++
++/* moduleObject->filter for FIL_REDIRECT:
++   arg->uri is the requested URI.
++   Returns the redirected URI if the requested URI falls in one of the
++   categories to filter.
++   Returns NULL if no redirection.
++*/
++static void *urlFilter(moduleObject *this, const void *arg)
++{
++    reqParam *req = (reqParam *)arg;
++    const char *uri = req->uri;
++    char *r;
++    int len, match = 0;
++    char buf[BUFSIZ];
++    struct _urlfilter_config *cf = (struct _urlfilter_config *)this->trigger;
++
++    patfileCheckReload(this->patFile);
++    r = patfileMatch(this->patFile, uri);
++    if (r) {
++        debug(93, 3) (MODNAME ": '%s'/'%s' is whitelisted\n", moduleUrlClean(uri), r);
++	return NULL;
++    }
++
++    if ((len = doquery(uri, buf, sizeof(buf))) == 32) {
++
++      if (strcmp("00000000FFFFFFFFFFFFFFFFFFFFFFFF", buf)==0) {
++/*
++	unknown ressource, match only if blockunknown is set
++*/
++	if (cf->blockunknown)
++	  match = 1;
++      } else {
++	int i;
++	for (i = 0; i <= 31; i++) {
++	  int a = hex2int(buf[i]);
++	  if (a < 0) {
++	    debug(93, 3) (MODNAME ": got invalid answer %s\n", buf);
++	    return NULL;
++	  }
++	  a &= hex2int(cf->categories[i]);
++	  match |= a;
++	  buf[i] = a < 10 ? a + '0' : a - 10 + 'a';
++	}
++      }
++    } else {
++      debug(93, 1) (MODNAME ": Warning: got invalid response!\n");
++    }
++
++    if (match) {
++      snprintf(rejectbuf, sizeof(rejectbuf), "%s?match=%s", cf->targeturl, buf);
++      debug(93, 3) (MODNAME ": Redirecting: %s\n", rejectbuf);
++      return rejectbuf;
++    }
++    return NULL;
++}
++
++void moduleInit(const wordlist *args)
++{
++    struct _urlfilter_config *cf;
++    moduleObject *m;
++    patFileObject *pf;
++    int i;
++
++    if (!args && !args->next) {
++        debug(93, 1) (MODNAME ": needs two or three arguments\n");
++        return;
++    }
++
++    if ((cf = xcalloc(1, sizeof(struct _urlfilter_config))) == NULL) {
++	debug(93, 1) (MODNAME ": memory allocation error\n");
++	return; 
++    }
++
++    cf->filename = args->key;
++    if (checkconfig(cf) == -1) {
++	xfree(cf);
++	return;
++    }
++
++    m = new(moduleObject);
++    m->trigger = (char *)cf;
++    m->chain.typ = FIL_REDIRECT;
++    m->info.version = MODULE_API_VERSION;
++    m->description = "URI Filter";
++    m->filter = urlFilter;
++
++    pf = patfileNew(args->key, 0);
++    m->patFile = REF(pf);
++
++    moduleRegister(m);
++}
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/filters/searchengine.c	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,79 @@
++/* mod_activex - remove ActiveX OBJECTs from HTML pages
++*/
++
++#include "squid.h"
++#include "module.h"
++#include "htmlfilter.h"
++#include "patfile.h"
++
++#define MODNAME         "mod_searchengine"
++
++#define ACTIVEX_C
++#include <classes.dh>
++
++static char *fake_attrs[] = { "A", "COMMENT" };
++static char *fake_valus[] = { NULL, "\"LINK_REMOVED_BY_PROXY\"" };
++#define fake_nattribs 2
++
++/*
++ * google: "search?q=cache"
++ * yahoo: "/search/cache?p="
++**/
++static int isCacheLink(char *value)
++{
++  char *hit, *decoded;
++  int len, retval = 0;
++  
++  if ((hit = strstr(value, "cache")) == NULL)
++    return 0;
++  
++  if ((decoded = url_convert_hex(value, 1)) == NULL) {
++    debug(93, 1) (MODNAME ": memory or decoding problem\n");
++    return 0;
++  }
++ 
++  /* MSN */
++  if (strstr(decoded, "cache.aspx?q="))
++    retval = 1;
++  /* Google */
++  else if (strstr(decoded, "search?q=cache"))
++    retval = 1;
++  /* YAHOO! */
++  else if (strstr(decoded, "/search/cache?p="))
++    retval = 1;
++
++  xfree(decoded);
++  return retval;
++}
++
++static int searchengineProcessTag(htmlFilterObject *cf, MemBuf *target,
++                            int nattribs, char *attrs[], char *valus[])
++{
++    int i;
++
++    /* Opening A tag: defang searchengines cache links */
++    if (!strcasecmp(attrs[0], "A"))
++        for (i=1; i<nattribs; ++i)
++            if (attrs[i] && valus[i] &&
++                !strcasecmp(attrs[i], "HREF")) {
++                char *p = valus[i];
++                if (isCacheLink(p)) {
++                    debug(93, 3) (MODNAME ": %s: removing searchengines cache link\n",
++                                  moduleUrlClean(cf->uri));
++                    insertTag(cf, target, fake_nattribs, fake_attrs, fake_valus);
++                    return 1;
++                }
++            }
++
++    return 0;
++}
++
++void moduleInit(const wordlist *args)
++{
++    htmlModuleObject *m = new(htmlModuleObject);
++    patFileObject *pf = args ? patfileNew(args->key, 0) : NULL;
++
++    m->patFile = REF(pf);
++    m->processTag = searchengineProcessTag;
++    htmlfilterRegister(m, "SearchEngine cache access filter");
++}
+--- squid-2.6.STABLE2/Makefile.am.filter	2006-06-02 23:35:38.000000000 +0200
++++ squid-2.6.STABLE2/Makefile.am	2006-09-29 14:41:34.000000000 +0200
+@@ -4,8 +4,8 @@
+ #
+ 
+ AUTOMAKE_OPTIONS = dist-bzip2 subdir-objects 1.5
+-DIST_SUBDIRS	= lib snmplib scripts src icons errors contrib doc helpers tools
+-SUBDIRS		= lib @makesnmplib@ scripts src icons errors doc helpers tools
++DIST_SUBDIRS	= lib snmplib scripts src icons errors contrib doc helpers tools filters
++SUBDIRS		= lib @makesnmplib@ scripts src icons errors doc helpers tools filters
+ 
+ DISTCLEANFILES = include/stamp-h include/stamp-h[0-9]*
+ DEFAULT_PINGER		= $(libexecdir)/`echo pinger | sed '$(transform);s/$$/$(EXEEXT)/'`
+--- squid-2.6.STABLE2/configure.in.filter	2006-07-31 04:53:51.000000000 +0200
++++ squid-2.6.STABLE2/configure.in	2006-09-29 14:41:34.000000000 +0200
+@@ -1446,7 +1446,15 @@
+   fi
+ ])
+ 
++# Defaults for generating shared libraries.
++# These make sense only with GCC and are not used
++# unless --enable-filters is given.
++CFLAGS_SH="-fpic"
++LD_SH="$CC"
++LDFLAGS_SH="-shared -fpic"
++
+ # Force some compilers to use ANSI features
++# Also check for shared library generation options
+ #
+ case "$host" in
+     alpha-dec-osf*)
+@@ -1461,9 +1469,15 @@
+ 		echo "adding '-Ae' to cc args for $host"
+ 		CC="cc -Ae";
+ 		ac_cv_prog_CC="$CC"
++                CFLAGS_SH="+z"
++                LD_SH="ld"
++                LDFLAGS_SH="-b"
+ 	fi
+ 	;;
+ esac
++AC_SUBST(CFLAGS_SH)
++AC_SUBST(LD_SH)
++AC_SUBST(LDFLAGS_SH)
+ 
+ dnl Check for programs
+ AC_PROG_EGREP
+@@ -2111,6 +2125,27 @@
+ fi
+ AC_SUBST(LIB_DB)
+ 
++dnl Loading of filter modules.
++AC_CHECK_LIB(dl, dlopen)
++AC_CHECK_LIB(dld, shl_load)
++filters=''
++MODULE_OBJS=''
++AC_ARG_ENABLE(filters,
++[  --enable-filters        Enable filtering by dynamically loaded modules],
++[ if test "$enableval" = "yes" ; then
++    if test "$ac_cv_lib_dl_dlopen" = "yes" -o "$ac_cv_lib_dld_shl_load" = "yes"; then
++      AC_DEFINE(SQUID_FILTERS)
++      LDFLAGS="-Wl,-E $LDFLAGS"
++      filters="filters"
++      MODULE_OBJS="module.o patfile.o"
++      echo "Modules and Filtering enabled".
++    else
++      AC_MSG_WARN(dynamic loading not available, disabling filters)
++    fi
++fi])
++AC_SUBST(filters)
++AC_SUBST(MODULE_OBJS)
++
+ dnl System-specific library modifications
+ dnl
+ case "$host" in
+@@ -2589,6 +2624,16 @@
+ 	initgroups
+ )
+ 
++extra_modules=''
++AC_ARG_WITH(modules,
++[  --with-modules=mod...   Specify extra modules (in filters/ dir)],
++[ if ! test "$withval" = "no"; then
++dnl if the user specifies source files, correct them; make spaces out of commas
++    extra_modules="`echo $withval|\
++        sed -e 's/\.c,/.so,/g' -e 's/\.c$/.so/' -e 's/,/ /g'`"
++fi])
++AC_SUBST(extra_modules)
++
+ dnl Not cached since people are likely to tune this
+ AC_MSG_CHECKING(Default FD_SETSIZE value)
+ AC_TRY_RUN([
+@@ -3017,6 +3062,7 @@
+ 	snmplib/Makefile \
+ 	icons/Makefile \
+ 	errors/Makefile \
++	filters/Makefile \
+ 	doc/Makefile \
+ 	helpers/Makefile \
+ 	helpers/basic_auth/Makefile \
+--- /dev/null	2006-09-27 11:39:39.472644104 +0200
++++ squid-2.6.STABLE2/squid-filter.html	2006-09-29 14:41:34.000000000 +0200
+@@ -0,0 +1,545 @@
++<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0//EN"
++        "http://www.w3.org/TR/REC-html40/strict.dtd">
++<html>
++ <head>
++  <title>Filter modules for Squid</title>
++  <link rev="made" href="mailto:olaf@bigred.inka.de">
++  <meta name="description" content="A patch for Squid that makes it a
++   very flexible, modular filtering proxy. Unlike most Squid add-ons,
++   this filters not only URLs but content as well.">
++  <meta name="keywords" content="Squid, Proxy, Filter">
++  <style type="text/css"><!--
++   BODY { background-color: #f0fff0; font-family: sans-serif; }
++   TD { font-family: sans-serif }
++   H1 { color: #369; padding: 8px 16px; border-bottom: 1px solid #369; }
++   H2 { background-color: #369; color: #f0fff0; padding: 0px 16px; }
++   H3,H4,H5,H6 { color: #369; }
++   A:link { color: #399; }
++   A:visited { color: #699; }
++   A:active { color: #999; }
++   SMALL { color: #666; }
++   .red { color: #c00; }
++   .footer { border-top: 1px solid #369; margin-top: 12px; padding-top: 6px; text-align: right; }
++   --></style>
++ </head>
++
++ <body>
++  <h1>Filter modules for Squid</h1>
++
++  <small>Version 0.9, September 2004</small>
++
++  <ol>
++   <li><a href="#purpose">Purpose</a>
++   <li><a href="#prereq">Prerequisites</a>
++   <li><a href="#install">Installation</a>
++   <li><a href="#config">Configuration</a>
++   <li><a href="#modules">Available modules</a>
++   <li><a href="#using">Using</a>
++   <li><a href="#intern">Internals</a>
++   <li><a href="#related">Related projects</a>
++   <li><a href="#bugs">Bugs</a>
++   <li><a href="#getting">Getting this package</a>
++  </ol>
++
++  <p>This is a project to build filtering capabilities comparable to
++   those of <a href="http://muffin.doit.org">Muffin</a> into <a
++    href="http://squid.nlanr.net">Squid</a>. It consists of
++  <ul>
++   <li>a patch to Squid, containing a module loader and filtering
++    hooks, and
++   <li>a set of filter modules.
++  </ul>
++  Currently available filters:
++  <ul>
++   <li>Redirection of URIs.
++   <li>Rejection of certain (configurable) MIME content types.
++   <li>Suppression of cookies.
++   <li>Removal of Javascript and ActiveX.
++   <li>Breaking of GIF animation loops.
++   <li>Detection of 1x1 images.
++  </ul>
++  Special features:
++  <ul>
++   <li>Modular, easily extensible by writing new filters.
++   <li>Flexible configuration. Filters are independent from each other.
++   <li>Each filter can take a list of URIs which should not be
++    filtered (allow list). URIs are specified as full regular expressions.
++   <li>Client can choose to bypass filters case-by-case.
++   <li>Filtering keeps Content-Length where possible.
++  </ul>
++
++  <h2><a name="purpose"></a>Purpose</h2>
++
++  A filtering proxy allows users to remove unwanted stuff from Web
++  pages as they browse them. What "unwanted stuff" is obviously
++  depends on the individual user, but things which are commonly regarded
++  as annoyances include
++  <ul>
++   <li>banner ads,
++   <li>user behaviour tracking via cookies,
++   <li>animated pictures,
++   <li>JavaScript, VBScript, ActiveX (dangerous as well as annoying).
++  </ul>
++  Some of those things can be avoided by filtering URIs, which Squid
++  can already do via an external redirect program. Others require a
++  content filter.
++
++  <p>Usually, a filtering proxy runs standalone and does nothing but
++   filtering. Users have to configure this proxy in their
++   browsers, and if they use a caching proxy too, chain them after the
++   filter. In situations where the user runs Squid anyway (mostly
++   because of caching for different browsers or a small LAN), it is
++   convenient to build this capability into Squid.
++
++  <h2><a name="prereq"></a>Prerequisites</h2>
++
++  This patch is for <a
++  href="http://squid.nlanr.net/Versions/v2/2.5/">Squid 2.5STABLE10</a>.
++  It requires an operating system with a <code>libdl</code> or
++  <code>libdld</code> dynamic-loader library and a compiler which can
++  produce the needed shared objects. Tested in the following
++  environments:
++  <ul>
++    <li>Linux 2.2 with glibc 2.0.7 (should work from 2.0 and libc5
++    upward), also tested with Linux 2.4-2.6 and glibc 2.1.3-2.2.5;
++    <li>Solaris 7 with gcc and GNU ld;
++    <li>HPUX 10.20 with the HP ANSI C compiler or gcc.
++  </ul>
++
++  <p>You need the Squid sources, everything for compiling them, GNU
++   "patch" and GNU "autoconf".
++
++  <h2><a name="install"></a>Installation</h2>
++
++  <ol>
++   <li>Apply the patch: (In the Squid source directory)<pre>
++gzip -cd squid-filter-0.9.patch.gz | patch -p1
++</pre>
++
++   <li>Run configure:<pre>
++aclocal
++automake
++autoconf
++sh configure (options...) --enable-filters
++</pre>
++        <strong>Note:</strong> --enable-leakfinder does not work in
++        this release, it causes crashes. This option is purely for
++        debugging and not used in any part of the original Squid
++        release, however.
++
++   <li>Compile and install Squid as usual. The filter modules will
++    be installed in the same directory as the binary.
++  </ol>
++
++  <h2><a name="config"></a>Configuration</h2>
++
++  <h3>Loading modules</h3>
++
++  There is a new squid.conf directive:<pre>
++load_module &lt;modulefile&gt; &lt;arguments&gt;
++</pre>
++
++  It tells Squid to load a filter module from the given file. The file
++  should be specified with a full path name. The filter modules can
++  take arguments as documented for the individual modules. Most filter
++  modules take the name of a pattern file as optional (last) argument.
++  Arguments are separated with whitespace, no quoting mechanism is
++  available (by now). A module can be specified more than once, in
++  that case several filter instances will be built from the already
++  loaded module code.
++
++  <p>When Squid is reconfigured, all active module instances are
++   deleted and all modules are unloaded,
++   then all modules in the (new) config file are loaded. (This does
++   not unload the actual code segments if they are used in the new
++   configuration. To update a module with a replaced binary a restart
++   of Squid is needed.)
++
++  <p>There is another new squid.conf directive:<pre>
++nofilter_port &lt;portnum&gt;
++</pre>
++   The port number given must be one of the numbers specified in
++   <code>http_port</code>. Requests arriving on this port will
++   <em>not</em> be filtered. Effectively this makes a filtering and a
++   non-filtering proxy running at once, on different ports.
++
++  <h3>Pattern files</h3>
++
++  Pattern files are files containing lists of regular expressions
++  (POSIX extended, or <code>grep -E</code> syntax), one pattern per
++  line, against which the URI is matched. Blank lines and lines
++  starting with a "number sign" are ignored in the usual fashion.
++  Whenever a pattern file is changed, it gets reloaded at the next
++  request automatically, no reconfigure needed. A pattern is marked as
++  case-insensitive by prepending a dash. (To place a real dash at the
++  start of a pattern use a class, like <code>[-]</code>). Patterns may
++  not contain literal TABs, use <code>\t</code> instead.
++
++  <p>There are two types of pattern files: allow lists and replacement
++  lists.
++
++  <h4>Allow lists</h4>
++  Unless otherwise stated, every filter can optionally take an
++  allow list. This is a list of URI patterns to which the filter
++  should <em>not</em> apply. Any pattern can be prepended with an
++  exclamation mark meaning "do not match this", in which case the
++  first matching pattern in the file counts. Example:<pre>
++!^http://example.com/foo/bar
++^http://example.com
++</pre>
++  means: Apply the filter to URIs starting with
++  <code>http://example.com/foo/bar</code>, but don't apply the
++  filter to anything else in <code>http://example.com</code>.
++  <br><small>If this sounds confusing, just stick to the word "allow list":
++   What matches is allowed through. Or look at it like this: "bang
++   means filter".
++  </small>
++
++  <h4>Replacement lists</h4>
++  A replacement list allows URIs to be replaced by other URIs,
++  in a <code>sed s///</code>-like fashion. This type of pattern file is
++  used by the redirection filter. Each line in the file consists of
++  two elements separated by (at least) one <em>TAB</em> character. The
++  first is a pattern, the second a replacement. The replacement may
++  contain <code>\1, \2... \9</code> references to parenthesized
++  subpatterns (<code>\0</code> means the whole match). 
++  A special replacement can be given as a shortcut for
++  patterns which have no explicit replacement. This default is
++  specified as replacement for the pattern consisting of a single
++  exclamation mark, which should be the first line in the file.
++  Negative match does not work in a replacement list.
++
++  <h3>Other configuration dependencies</h3>
++
++  When content filters (see next section) are in use, an
++  <code>header_access</code> clause must be set up to filter out
++  the Accept-Encoding request header.<br> 
++  Eg. use <code>header_access Accept-Encoding deny all</code><br>
++  See <a href="#contenc">below</a> for the exact reason.
++
++  <h2><a name="modules"></a>Available modules</h2>
++
++  <p>Currently there are the following modules:
++
++  <h3>Filters</h3>
++
++  Filters fall into one of the following categories:
++  <ul>
++    <li>Request filters (redirect.so), operating on the request URI;
++    <li>Header filters (rejecttype.so, cookies.so), operating on the
++        request or reply headers;
++    <li>Content filters (script.so, activex,so, gifanim.so), operating on the
++        reply body. (Currently there is no request body filter.)
++  </ul>
++  Filters of the same category operate either independently or chainable.
++  Chaining is described below where appropriate (for request and
++  content filters). In any case, all applicable filters are called in
++  exactly the order in which they are specified in the config file.
++
++  <h4>redirect.so</h4>
++
++  Replaces Squid's external redirect program. Takes one argument, the
++  name of a replacement list file. Performs pattern substitution on
++  the requested URI. As soon as a pattern is found, the search stops,
++  i.e. redirections are not chained within one redirection filter.
++  However, if the module is specified several times (probably with
++  different replacement list files), all of them are called in order,
++  with a later filter operating on the results of an earlier one. If
++  an external redirector is in use, it is called first, before the
++  filters. NOFILTER does not apply to external redirectors.
++
++  <h4>rejecttype.so</h4>
++
++  Allows to reject Web objects based on their MIME content type. Takes
++  the type to be rejected as first argument, an allow list file name
++  as optional second argument. The type must be given in lowercase
++  letters. It can contain a <code>*</code> as either of its components
++  (such as <code>audio/*</code>) meaning "all". To reject several
++  types, specify this module more than once. Bug: returns "empty"
++  (even without header) to the client instead of an error message.
++
++  <h4>allowtype.so</h4>
++
++  The opposite of rejecttype: rejects all MIME content types
++  <em>except</em> those specified. Takes a list of types to be allowed
++  through (must be given in lowercase letters, wildcards possible) as
++  arguments. An optional last argument specifies an allow list file,
++  given as an absolute file name (this allows to distinguish file name
++  and content type, as content types never start with a slash). It
++  makes little sense to chain this module with either itself or
++  <code>rejecttype.so</code> (unless one module should affect the
++  other one's allow list files).
++
++  <h4>cookies.so</h4>
++
++  Kills cookies in both request and reply. Takes an allow list file
++  name as optional argument.
++
++  <h4>htmlfilter.so</h4>
++
++  A library module which provides a generic HTML filtering service. It
++  does no filtering by itself, but <em>must</em> be loaded before
++  <code>script.so</code>, <code>activex.so</code> or any other future
++  HTML filter.
++
++  <h4>script.so</h4>
++
++  Removes JavaScript (<code>SCRIPT</code> tags, <code>on...</code>
++  handlers and browser-specific ways of inserting Javascript into tag
++  attributes) from HTML pages. (For also blocking JavaScript files use
++  rejecttype.so on "application/x-javascript".) Takes an allow list
++  file name as optional argument.
++
++  <h4>activex.so</h4>
++
++  Removes ActiveX <code>OBJECT</code> tags from HTML pages. The tags
++  are preserved, only the <code>classid</code> parameter is replaced
++  by a dummy, so the page will still be processed correctly (as if by
++  a non-ActiveX browser). Takes an allow list file name as optional
++  argument.
++
++  <h4>gifanim.so</h4>
++
++  Breaks animated GIF pictures to remove the annoying blinking. Takes
++  as first argument the allowed number of cycles. If zero, no
++  animation (show only the first picture). If &lt; zero, stop loading
++  animations altogether (client shows broken picture). Default is one,
++  meaning show the whole content but don't blink. An allow list file
++  name is optional second argument.
++
++  <h4>bugfinder.so</h4>
++
++  Identifies GIF and PNG images smaller than 3x3 pixels. Since these
++  are often used as "Web bugs", it may be desirable to block them with
++  a redirector. The filter can only log them to cache.log; to
++  effectively block bugs it is necessary to filter the requests for
++  these URIs, i.e. manual processing of the log file is needed.
++  Like others this filter takes an allow list file name as optional argument.
++
++  <p>Each content filter specifies the MIME content type to which it
++  applies (like <code>image/gif</code> for the gifanim module) and
++  ignores all other types.
++
++  <p>Content filters can be chained. When more than one filter applies
++  to a given MIME content type, every filter operates on the results
++  of its predecessor. (This will probably become important in later
++  releases.)
++
++  <h3>Authenticators</h3>
++
++  The authenticators from the 2.4 filter patch have not been ported to Squid 2.5.
++
++  <h2><a name="using"></a>Using</h2>
++
++  On the client side, no additional configuration is necessary.
++  Simply set the patched Squid as your proxy.
++
++  <h3>The NOFILTER feature</h3>
++
++  <em>Note: This feature has changed since version 0.5.</em><br>
++
++  Users can request that all filters (including the redirection
++  filter, but not the external redirector) are bypassed for a single
++  request. This is done by appending <code>.X.nofilter</code> to the
++  host name in the URL, where the <code>X</code> is replaced by the
++  Squid's visible host name. Example: to get
++  <code>http://www.example.com/foo/bar</code> unfiltered from a Squid
++  called <code>squid.cache</code>, use the URI
++  <code>http://www.example.com.squid.cache.nofilter/foo/bar</code>.
++
++  <p>The NOFILTER tag as part of the hostname in the URL implies
++   that correctly written relative links, including images, linked
++   scripts etc. on the same server, will also be unfiltered. Apply
++   the necessary caution.
++
++  <p>Reason for the inclusion of the Squid's host name is to avoid
++   that web servers add the NOFILTER tag to their junk banner links
++   themselves. This works best when <code>visible_hostname</code>,
++   <code>unique_hostname</code> and the canonical (DNS) host name of
++   the proxy are all different and not too related, because the origin
++   server sees the latter two but not the former.
++
++  <p>Since ".nofilter" is not a valid top level domain, it can't clash
++   with real host names.
++
++  <p>Another possible way to bypass filters is to use a
++   <code>nofilter_port</code>, as described above. Requests arriving
++   on that port will always bypass all filters.
++
++  <h2><a name="intern"></a>Internals</h2>
++
++  <h3>Object structure</h3>
++
++  The filter routines use a common object-oriented framework. An
++  object in this context is a structure which contains at least a
++  reference counter and a (pointer to a) destructor and is managed via
++  the <code>REF</code> and <code>UNREF</code> macros from
++  <code>src/module.h</code>. These structures are generated via the
++  <code>filters/classdef</code> preprocessor. A <em>module object</em>
++  is an object which is created by a module when it is loaded, and
++  contains data relevant to an instance of the module, which is
++  created by a <code>load_module</code> line. A <em>filter object</em>
++  is an object which is created for a single request. Documentation of
++  this stuff is spread across <code>src/module.h</code> and the
++  individual filters.
++
++  <h3>Library modules</h3>
++
++  The <em>patfile library</em> provides the pattern file facility
++  described above. So far every filter uses it, mostly for an optional
++  allow list. The patfile library is included in the Squid core and
++  described in <code>src/patfile.h</code>.
++
++  <p>Content filters for HTML pages use <code>htmlfilter.c</code>
++   for module framework and HTML parser. This is documented in
++   <code>script.c</code>. In theory the operating system's dynamic
++   linker should take care of the inter-module dependencies this
++   creates, but many dynamic linkers are too stupid, so this has to be
++   loaded manually before any HTML filtering module.
++
++  <h3>Debugging options</h3>
++
++  The following debugging sections and levels (see the
++  <code>debug_options</code> directive) are used:
++
++  <table border=0 summary="Table showing which debugging sections and
++  levels are used for which purposes in the filter patch">
++   <tr><td>Section 92
++       <td>&nbsp;Module loader (<code>src/module.c</code>)
++   <tr><td>Section 93
++       <td>&nbsp;Filter modules
++   <tr><td>Section 94
++       <td>&nbsp;Library modules (<code>src/patfile.c,
++           filters/htmlfilter.c</code>)
++   <tr><td>Section 95
++       <td>&nbsp;Authenticator modules
++   <tr><td>Level 1&nbsp;&nbsp;&nbsp
++       <td>&nbsp;Error messages
++   <tr><td>Level 3&nbsp;&nbsp;&nbsp
++       <td>&nbsp;"Filter caught something" messages
++   <tr><td>Level 4&nbsp;&nbsp;&nbsp
++       <td>&nbsp;Initialization/finalization messages
++   <tr><td>Level 5&nbsp;&nbsp;&nbsp
++       <td>&nbsp;Initialization/finalization trace
++   <tr><td>Level 8&nbsp;&nbsp;&nbsp
++       <td>&nbsp;Minor trace
++   <tr><td>Level 9&nbsp;&nbsp;&nbsp
++       <td>&nbsp;Full trace (big!)
++  </table>
++
++  <h3>Content-Length and Range</h3>
++
++  Content filters which alter the content of the data returned have to keep
++  the data length constant if the HTTP reply contains a Content-Length
++  header. Most other filtering proxies simply remove that header
++  instead, which breaks persistent connections and clients' progress
++  meters. Here the filters have to pad out the data at the end if they
++  remove anything in the middle, and are not allowed to insert stuff
++  which would lengthen it. It is the filter modules' own
++  responsibility to ensure this.
++
++  <p>If a content filter gets applied, the patched Squid will ignore
++   Range requests and always send all, since in general filters can
++   not properly determine ranges. Without Range requests the origin
++   server should refrain from sending Transfer-Encodings which would
++   confuse the filters.
++   See also next two paragraphs.
++
++  <h3><a name="contenc"></a>Content-Encoding</h3>
++
++  Content filters get the data as delivered by the server. With a
++  non-identity Content-Encoding the filter would operate on the
++  encoded data, which it generally can not process correctly. (It has
++  been confirmed by experience that HTML filters like
++  <code>script.so</code> applied to a file with compression encoding
++  will silently deliver corrupted files.)
++
++  <p>For this reason, the Accept-Encoding headers should always be
++  filtered out with an appropriate <code>header_access</code>
++  clause. This causes the origin server to always send unencoded data.
++
++  <h3>Filters in the data path</h3>
++
++  The cache stores always unfiltered objects. Content filtering
++  happens in the data path from cache or memory to the client. The
++  filter object is expected to copy the data into a new buffer, so it
++  can do anything with it including insertions and deletions (but see
++  the paragraph above on Content-Length).
++
++  <p>The only exception to the rule that filtering happens only in the
++  path to the client are those filters which alter the
++  <em>request</em>. This applies to the redirect and the cookies
++  module.
++
++  <p>In a cache hierarchy, a filtering cache should only be placed at
++  the bottom, i.e. where only clients directly access it. If another
++  cache sits between the filter and client, that one will cache
++  filtered pages and break the NOFILTER feature.
++
++  <h3>Blocking and callbacks</h3>
++
++  Authentication modules use a callback scheme which is explained in
++  <code>filters/auth_passwd.c</code>. Thus they may use arbitrary I/O
++  as long as they arrange for the proper callbacks. Filter modules
++  currently are simple functions, they can not use callbacks and are
++  expected to avoid blocking I/O (aside from reading config files,
++  which therefore should not be mounted over a network).
++
++  <h2><a name="related"></a>Related projects</h2>
++
++  This project was mostly inspired by <a
++  href="http://muffin.doit.org">Muffin</a>, a modular filtering proxy
++  written in Java and distributed under GPL. By now that is
++  the most powerful filter I know of.
++
++  <p>The <a href="http://www.junkbusters.com">Junkbusters</a> web
++   page has one of the oldest and best known web filters as well as a
++   very comprehensive <a
++   href="http://www.junkbusters.com/ht/en/links.html">resources
++   list</a> covering most issues from "What is this all about?" to a
++   list of filtering software (by now most of them are either for
++   Windows or for pay or both, which indicates there is a real demand
++   for filtering).
++
++  <h2><a name="bugs"></a>Bugs</h2>
++
++  As with any pre-release, this surely contains bugs. In particular
++  I'm not sure if I really avoided memory leaks (although the
++  module/object stuff carries leakfinder instrumentation and during
++  testing no remaining leaks were detected). If someone finds
++  problems, please tell me.
++
++  <h3>Known issues</h3>
++  <ul>
++   <li>Much of the code is not thread-safe (in particular
++       <code>patfile.c</code> and <code>module.c</code>).
++  </ul>
++
++  <h2><a name="getting"></a>Getting this package</h2>
++
++  This package can be found at <a
++
++href="http://sites.inka.de/bigred/devel/squid-filter-0.9.patch.gz">http://sites.inka.de/bigred/devel/squid.filter-0.9.patch.gz</a>.
++  <br>For use and distribution of this package, the same terms and
++  conditions as for the Squid package itself (i.e. the GNU General
++  Public License) apply. Note, however, that using a version or
++  installation setup which has the NOFILTER feature removed or
++  restricted in any way is in gross contradiction to the author's
++  intentions, and people who do so should feel guilty of abuse.
++
++  <p>An up-to-date version of this page is always found at
++   <a href="http://sites.inka.de/bigred/devel/squid-filter.html">http://sites.inka.de/bigred/devel/squid-filter.html</a>.
++
++  <h3>Acknowledgements</h3>
++  Many thanks to Andreas Schiller &lt;aschiller@probusiness.de&gt; for
++  porting the filter patch to Squid 2.5.
++
++  <div class="footer">
++  <address><a href="mailto:olaf@bigred.inka.de">Olaf Titz</a></address>
++<!-- Created: Sat Jul 24 12:57:43 CEST 1999 -->
++<!-- hhmts start -->
++Last modified: Sun Sep 19 12:05:53 CEST 2004
++<!-- hhmts end -->
++  </div>
++ </body>
++</html>

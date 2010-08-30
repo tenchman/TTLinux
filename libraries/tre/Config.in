@@ -1,0 +1,6 @@
+config CONFIG_TRE
+  bool "tre - Lightweight, robust, and efficient POSIX compliant regexp matching library"
+  default n
+  help
+
+    http://laurikari.net/tre/

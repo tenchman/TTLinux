@@ -1,0 +1,54 @@
+openswan-2.4.7-hookenv.patch
+
+exportiert die Information ob ein Tunnel per DPD gelöscht wurde ins Environment
+des /usr/lib/ipsec/_updown scripts
+
+--- openswan-2.4.7/programs/pluto/connections.c.hookenv	2007-05-10 09:34:59.000000000 +0200
++++ openswan-2.4.7/programs/pluto/connections.c	2007-05-10 09:35:00.000000000 +0200
+@@ -1305,6 +1305,7 @@
+         c->dpd_delay = wm->dpd_delay;
+         c->dpd_timeout = wm->dpd_timeout;
+         c->dpd_action = wm->dpd_action;
++        c->dpd_dropped = FALSE;
+ 
+ 	c->forceencaps = wm->forceencaps;
+ 
+--- openswan-2.4.7/programs/pluto/dpd.c.hookenv	2006-07-21 04:27:20.000000000 +0200
++++ openswan-2.4.7/programs/pluto/dpd.c	2007-05-10 09:35:00.000000000 +0200
+@@ -541,6 +541,8 @@
+ 
+     openswan_log("DPD: Info: No response from peer - declaring peer dead");
+ 
++    c->dpd_dropped = TRUE;	/* mark this connection as dpd_dropped */
++
+     switch(action) {
+     case DPD_ACTION_HOLD:
+ 	/** dpdaction=hold - Wipe the SA's but %trap the eroute so we don't
+--- openswan-2.4.7/programs/pluto/connections.h.hookenv	2007-05-10 09:34:59.000000000 +0200
++++ openswan-2.4.7/programs/pluto/connections.h	2007-05-10 09:35:00.000000000 +0200
+@@ -191,6 +191,7 @@
+     time_t          dpd_delay;              /* time between checks */
+     time_t          dpd_timeout;            /* time after which we are dead */
+     enum dpd_action dpd_action;             /* what to do when we die */
++    bool            dpd_dropped;            /* this will be set in case of DPD action */
+     
+     bool               forceencaps;         /* always use NAT-T encap */
+     
+--- openswan-2.4.7/programs/pluto/sysdep_linux.c.hookenv	2007-05-10 09:34:59.000000000 +0200
++++ openswan-2.4.7/programs/pluto/sysdep_linux.c	2007-05-10 09:35:00.000000000 +0200
+@@ -242,6 +242,7 @@
+ 			   "PLUTO_PEER_PORT='%u' "
+ 			   "PLUTO_PEER_PROTOCOL='%u' "
+ 			   "PLUTO_PEER_CA='%s' "
++			   "PLUTO_DPD_DROPPED='%u' "
+ 			   "PLUTO_CONN_POLICY='%s' "
+ 			   "%s "
+ 			   "%s "       /* PLUTO_MY_SRCIP */                    
+@@ -265,6 +266,7 @@
+ 			   , sr->that.port
+ 			   , sr->that.protocol
+ 			   , secure_peerca_str
++			   , c->dpd_dropped
+ 			   , prettypolicy(c->policy)
+ 			   , secure_xauth_username_str
+ 			   , srcip_str

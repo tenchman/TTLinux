@@ -1,0 +1,10 @@
+config CONFIG_BINUTILS
+	bool "binutils - Tools necessary to build programs"
+	default y
+	help
+	  GNU binutils work mostly behind the scenes of Linux development, largely
+	  because GNU make and the GCC frontend does so many things automatically.
+	  Utilities include: ld as nm objdump objcopy nm ar ranlib strip c filt size
+	  addr2line and dlltool.
+
+	  http://sources.redhat.com/binutils/

@@ -1,0 +1,28 @@
+--- libart_lgpl-2.3.20/Makefile.am.new	2007-08-16 16:08:29.000000000 +0000
++++ libart_lgpl-2.3.20/Makefile.am	2007-08-16 17:44:10.000000000 +0000
+@@ -6,7 +6,7 @@
+ BUILT_SOURCES = art_config.h
+ 
+ art_config.h:	gen_art_config$(EXEEXT)
+-	./gen_art_config > art_config.h
++	cp art_config.h.keep art_config.h
+ 
+ EXTRA_DIST = 			\
+ 	libart.def		\
+--- libart_lgpl-2.3.20/art_config.h.keep.new	1970-01-01 00:00:00.000000000 +0000
++++ libart_lgpl-2.3.20/art_config.h.keep	2007-08-16 17:53:25.000000000 +0000
+@@ -0,0 +1,14 @@
++#include <stdint.h>
++
++/* it looks like these definitions are not used at all */
++/*
++#define ART_SIZEOF_CHAR 1
++#define ART_SIZEOF_SHORT 2
++#define ART_SIZEOF_INT 4
++#define ART_SIZEOF_LONG 4
++*/
++
++
++typedef uint8_t art_u8;
++typedef uint16_t art_u16;
++typedef uint32_t art_u32;

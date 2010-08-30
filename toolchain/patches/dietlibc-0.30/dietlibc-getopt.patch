@@ -1,0 +1,153 @@
+--- dietlibc-0.30/libcruft/getopt_long_only.c.getopt	2005-07-01 14:00:30.000000000 +0200
++++ dietlibc-0.30/libcruft/getopt_long_only.c	2006-10-16 12:27:02.000000000 +0200
+@@ -34,33 +34,46 @@
+   {
+     char* max=strchr(arg,'=');
+     const struct option* o;
++    const struct option* match=0;
+     if (!max) max=arg+strlen(arg);
+     for (o=longopts; o->name; ++o) {
+-      if (!strncmp(o->name,arg,(size_t)(max-arg))) {	/* match */
+-	if (longindex) *longindex=o-longopts;
+-	if (o->has_arg>0) {
+-	  if (*max=='=')
+-	    optarg=max+1;
+-	  else {
+-	    optarg=argv[optind+1];
+-	    if (!optarg && o->has_arg==1) {	/* no argument there */
+-	      if (*optstring==':') return ':';
+-	      write(2,"argument required: `",20);
+-	      write(2,arg,(size_t)(max-arg));
+-	      write(2,"'.\n",3);
+-	      ++optind;
+-	      return '?';
+-	    }
++      size_t tlen=max-arg;
++      if (!strncmp(o->name,arg,tlen)) {	/* match */
++	if (strlen(o->name)==tlen) {
++	  match=o;	/* perfect match, not just prefix */
++	  break;
++	}
++	if (!match)
++	  match=o;
++	else
++	  /* Another imperfect match. */
++	  match=(struct option*)-1;
++      }
++    }
++    if (match!=(struct option*)-1 && (o=match)) {
++      if (longindex) *longindex=o-longopts;
++      if (o->has_arg>0) {
++	if (*max=='=')
++	  optarg=max+1;
++	else {
++	  optarg=argv[optind+1];
++	  if (!optarg && o->has_arg==1) {	/* no argument there */
++	    if (*optstring==':') return ':';
++	    write(2,"argument required: `",20);
++	    write(2,arg,(size_t)(max-arg));
++	    write(2,"'.\n",3);
+ 	    ++optind;
++	    return '?';
+ 	  }
++	  ++optind;
+ 	}
+-	++optind;
+-	if (o->flag)
+-	  *(o->flag)=o->val;
+-	else
+-	  return o->val;
+-	return 0;
+       }
++      ++optind;
++      if (o->flag)
++	*(o->flag)=o->val;
++      else
++	return o->val;
++      return 0;
+     }
+     if (argv[optind][1]!='-') goto shortopt;
+     if (*optstring==':') return ':';
+--- dietlibc-0.30/libcruft/getopt_long.c.getopt	2005-10-21 21:02:19.000000000 +0200
++++ dietlibc-0.30/libcruft/getopt_long.c	2006-10-16 12:25:42.000000000 +0200
+@@ -36,33 +36,46 @@
+     char* arg=argv[optind]+2;
+     char* max=strchr(arg,'=');
+     const struct option* o;
++    const struct option* match=0;
+     if (!max) max=arg+strlen(arg);
+     for (o=longopts; o->name; ++o) {
+-      if (!strncmp(o->name,arg,(size_t)(max-arg))) {	/* match */
+-	if (longindex) *longindex=o-longopts;
+-	if (o->has_arg>0) {
+-	  if (*max=='=')
+-	    optarg=max+1;
+-	  else {
+-	    optarg=argv[optind+1];
+-	    if (!optarg && o->has_arg==1) {	/* no argument there */
+-	      if (*optstring==':') return ':';
+-	      write(2,"argument required: `",20);
+-	      write(2,arg,(size_t)(max-arg));
+-	      write(2,"'.\n",3);
+-	      ++optind;
+-	      return '?';
+-	    }
++      size_t tlen=max-arg;
++      if (!strncmp(o->name,arg,tlen)) {	/* match */
++	if (strlen(o->name)==tlen) {
++	  match=o;	/* perfect match, not just prefix */
++	  break;
++	}
++	if (!match)
++	  match=o;
++	else
++	  /* Another imperfect match. */
++	  match=(struct option*)-1;
++      }
++    }
++    if (match!=(struct option*)-1 && (o=match)) {
++      if (longindex) *longindex=o-longopts;
++      if (o->has_arg>0) {
++	if (*max=='=')
++	  optarg=max+1;
++	else {
++	  optarg=argv[optind+1];
++	  if (!optarg && o->has_arg==1) {	/* no argument there */
++	    if (*optstring==':') return ':';
++	    write(2,"argument required: `",20);
++	    write(2,arg,(size_t)(max-arg));
++	    write(2,"'.\n",3);
+ 	    ++optind;
++	    return '?';
+ 	  }
++	  ++optind;
+ 	}
+-	++optind;
+-	if (o->flag)
+-	  *(o->flag)=o->val;
+-	else
+-	  return o->val;
+-	return 0;
+       }
++      ++optind;
++      if (o->flag)
++	*(o->flag)=o->val;
++      else
++	return o->val;
++      return 0;
+     }
+     if (*optstring==':') return ':';
+     write(2,"invalid option `",16);
+--- dietlibc-0.30/test/getopt.c.getopt	2001-07-31 16:24:34.000000000 +0200
++++ dietlibc-0.30/test/getopt.c	2006-10-11 07:21:33.000000000 +0200
+@@ -15,8 +15,10 @@
+                    {"append", 0, 0, 0},
+                    {"delete", 1, 0, 0},
+                    {"verbose", 0, 0, 0},
++                   {"ike-lifetime", 1, 0, 0},
+                    {"create", 1, 0, 'c'},
+                    {"file", 1, 0, 0},
++                   {"ike", 1, 0, 0},
+                    {0, 0, 0, 0}
+                };
+ 

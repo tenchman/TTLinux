@@ -1,0 +1,20 @@
+A libpretendroot osztott könyvtárat az LD_PRELOAD változó segítségével
+tudjuk használni. Amennyiben ez a változó a libpretendroot.so fájlra mutat
+(célszerű teljes útvonallal megadni), az esetben a dinamikusan linkelt
+alkalmazások betöltik ezt a csomagot.
+
+Ha nincsen definiálva PRETENDROOTDIR környezeti változó, akkor a
+libpretendroot nem csinál semmi különöset, mindegyik függvényt meghívja
+eredeti állapotában.
+
+Amennyiben érdemlegesen kívánjuk használni a progit, ezt a környezeti
+változót állítsuk be egy olyan fájlrendszerbeli könyvtár nevére, amely már
+létezik és írható az igazi felhasználó által. A libpretendroot ezen könyvtár
+alatt fogja tárolni a virtuális tulajdonost és csoportot mindazokra a
+fájlokra, amelyekre ez root.root-tól különbözik.
+
+Az LD_PRELOAD változó beállításához használhatjuk a pretendroot szkriptet.
+
+
+Koblinger Egmont <egmont@uhulinux.hu>
+2002. szept. 14.

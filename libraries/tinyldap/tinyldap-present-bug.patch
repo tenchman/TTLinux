@@ -1,0 +1,11 @@
+--- tinyldap-20050316/scan_ldapsearchfilterstring.c.present-bug	2007-08-13 10:56:57.000000000 +0200
++++ tinyldap-20050316/scan_ldapsearchfilterstring.c	2007-08-13 10:57:11.000000000 +0200
+@@ -40,7 +40,7 @@ scan_filterlist:
+ 	if (*(++s)=='*') {
+ 	  if (*(++s)==')') {
+ 	    (*f)->type=PRESENT;
+-	    return s-src;
++	    return s-src+1;
+ 	  }
+ 	 (*f)->type=SUBSTRING;
+ substring:

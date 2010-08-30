@@ -1,0 +1,15 @@
+# vim:set syntax=kconfig:
+config CONFIG_OPENVPN_2
+  bool "openvpn-2.1 - A full-featured SSL VPN solution (Generation TWO)"
+  default n
+  select CONFIG_LIBLZO
+  select CONFIG_OPENSSL
+  help
+    OpenVPN is a full-featured SSL VPN solution which can 
+    accomodate a wide range of configurations, including road 
+    warrior access, home/office/campus telecommuting, WiFi 
+    security, secure branch office linking, and enterprise-scale 
+    remote access solutions with load balancing, failover, and 
+    fine-grained access-controls.
+
+    http://openvpn.net/

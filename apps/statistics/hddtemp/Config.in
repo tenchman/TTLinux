@@ -1,0 +1,11 @@
+# vim:set syntax=kconfig:
+config CONFIG_HDDTEMP
+  bool "hddtemp - small utility to read hard drive temperature"
+  default n
+  help
+    hddtemp is a small utility that gives you the temperature of your hard
+    drive by reading S.M.A.R.T. informations (for drives that support this
+    feature).
+    Note: only recent hard drives have a temperature sensor.
+
+    http://www.guzu.net/linux/hddtemp.php

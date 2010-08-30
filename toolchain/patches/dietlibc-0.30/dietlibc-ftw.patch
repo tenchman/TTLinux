@@ -1,0 +1,403 @@
+--- /dev/null	2006-03-13 12:47:26.572774250 +0100
++++ dietlibc-cvs/lib/nftw.c	2006-03-13 15:21:01.000000000 +0100
+@@ -0,0 +1,377 @@
++/* nftw.c -- (new?) file tree walk
++   Copyright (C) 2006 Gernot Tenchio <gernot@tenchio.de>
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 2, or (at your option)
++   any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program; if not, write to the Free Software Foundation,
++   Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
++*/
++
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <string.h>
++#include <stdlib.h>
++#include <unistd.h>
++#include <dirent.h>
++#include <errno.h>
++#include <stdio.h>
++#ifndef PAGE_SIZE
++#define PAGE_SIZE 4096UL
++#endif
++#include "dietdirent.h"
++#include "ftw.h"
++
++typedef struct node {
++   char        *key;
++   struct node *left;
++   struct node *right;
++} node_t;
++
++/* We have to store the device too because we can have equal inodes
++ * on different devices */
++struct ftw_node {
++  ino_t ino;
++  dev_t dev;
++};
++
++struct ftw_conf {
++  int	 flags;
++  struct FTW ftw;
++  void   *ftw_list;
++  dev_t  basedev;
++  off_t  baselen;
++  int    (*statfunc)(const char *, struct stat *);
++  char  *fullpath;
++};
++
++struct ftw_data {
++  struct ftw_data *last;
++  struct ftw_node node;
++  int	fd;
++  int   len;
++};
++
++static int nodecmp(const void *p1, const void *p2)
++{
++  struct ftw_node *n1 = (struct ftw_node *)p1, *n2 =(struct ftw_node *)p2;
++  return ((n1->ino == n2->ino) && (n1->dev == n2->dev))?0:1;
++}
++
++#include <search.h>
++static int add_node(struct ftw_conf *conf, struct stat *st)
++{
++  struct ftw_node *node = malloc (sizeof (struct ftw_node));
++  if (node == NULL)
++    return -1;
++  node->ino = st->st_ino;
++  node->dev = st->st_dev;
++  return tsearch(node, &conf->ftw_list, nodecmp) ? 0 : -1;
++}
++
++static int find_node(struct ftw_conf *conf, struct stat *st)
++{
++  struct ftw_node node;
++  node.ino = st->st_ino;
++  node.dev = st->st_dev;
++  return tfind (&node, &conf->ftw_list, nodecmp) != NULL;
++}
++
++static void tdestroy_recurse(node_t *root, void (*free_node)(void *))
++{
++  if (root->left != NULL)
++    tdestroy_recurse (root->left, free_node);
++  if (root->right != NULL)
++    tdestroy_recurse (root->right, free_node);
++  free_node((void *) root->key);
++  free (root);
++}
++
++static int walker (const char *dir, __nftw_func_t fn, int nopenfd,
++	  struct ftw_conf *conf, struct ftw_data *last)
++{
++  struct dirent *de;
++  DIR *dh = NULL;
++  struct stat st;
++  int retval = 0, type;
++  struct ftw_data data;
++  const char *here;
++
++  if (conf->flags & FTW_CHDIR)
++    here = dir + conf->ftw.base;
++  else
++    here = dir;
++
++  if (conf->statfunc(here, &st)==-1) {
++    memset(&st, 0, sizeof(st));
++    if (errno == ENOENT) {
++      int ret, err = errno;
++      ret = lstat(here, &st);
++      errno = err;
++      if ((err == -1) || (st.st_mode & S_IFMT) != S_IFLNK)
++	return -1;
++      type = FTW_SLN;
++    } else
++      type = FTW_NS;
++  } else switch (st.st_mode & S_IFMT) {
++    case S_IFDIR:
++      type = FTW_D;
++      break;
++    case S_IFLNK:
++      type = FTW_SL;
++      break;
++    default:
++      type = FTW_F;
++  }
++
++  if (type == FTW_D) {
++    /*
++     * Symbolic links are followed, but no file is reported twice.
++     */
++    if (!(conf->flags & FTW_PHYS)) {
++      if (find_node(conf, &st))
++	return 0;
++      if (add_node(conf, &st))
++	goto error;
++    }
++
++    /*
++     * Item is a directory which can’t be read
++     */
++    if ((dh = opendir(here)) == NULL)
++      type = FTW_DNR;
++  }
++
++  /*
++   * Avoid loops
++   */
++  if (!(conf->flags & FTW_PHYS)) {
++    struct ftw_data *d = last;
++    while (d) {
++      if (d->node.ino == st.st_ino && d->node.dev == st.st_dev)
++	goto error;
++      d = d->last;
++    }
++  }
++
++  if (!(conf->flags & FTW_DEPTH))
++    retval = fn(dir, &st, type, &conf->ftw);
++
++  if (!retval && type == FTW_D) {
++    int n = strlen(dir);
++    int base;
++    char *path;
++
++    /* nothing more to do here */
++    if ((conf->flags & FTW_MOUNT) && (conf->basedev != st.st_dev))
++      return 0;
++
++    data.node.ino  = st.st_ino;
++    data.node.dev  = st.st_dev;
++    data.last = last;
++    data.fd   = dh->fd;
++
++    if (conf->flags & FTW_CHDIR) {
++      int baselen = ((last)?last->len:(int)strlen(conf->fullpath));
++      int complen = strlen(here);
++      
++      if (chdir(here))
++	goto error;
++      
++      conf->fullpath[baselen++]='/';
++      if (baselen + complen >= PATH_MAX) {
++	errno = ENAMETOOLONG;
++	goto error;
++      }
++      strcpy(&conf->fullpath[baselen], here);
++      data.len = baselen + complen;
++    }
++
++    path = alloca(n + NAME_MAX + 2);
++    strcpy(path, dir);
++    path[n++] = '/';
++
++    base = conf->ftw.base;
++    conf->ftw.level++;
++    conf->ftw.base = n;
++
++    /*
++     * recurse into directory
++     */
++    while ((de = readdir(dh))) {
++      off_t offset = 0;
++
++      if (de->d_name[0] == '.')
++	if (de->d_name[1] == '\0' || 
++	   (de->d_name[1] == '.' && de->d_name[2] == '\0'))
++	  continue;
++
++      strncpy(path + n, de->d_name, NAME_MAX);
++
++      if (nopenfd <= 1) {
++	offset = de->d_off;
++	closedir(dh);
++	data.fd = 0;
++	dh = NULL;
++      }
++
++      if ((retval = walker(path, fn, nopenfd - 1, conf, &data)))
++	break;
++      
++      if (data.fd == 0) {
++	if ((dh = opendir((conf->flags & FTW_CHDIR)?".":here))) {
++	  seekdir(dh, offset);
++	  data.fd = dh->fd;
++	} else
++	  goto error;
++      }
++    } /* end readdir() */
++
++    /*
++     * go back to previous directory
++     */
++    if ((conf->flags & FTW_CHDIR) && last) {
++      conf->fullpath[last->len] = '\0';
++      if (last->fd) {
++	if (fchdir(last->fd))
++	  goto error;
++      } else {
++	if (chdir(conf->fullpath))
++	  goto error;
++      }
++    }
++
++    conf->ftw.base = base;
++    conf->ftw.level--; 
++  } /* type == FTW_D */
++
++  if (!retval && (conf->flags & FTW_DEPTH)) {
++    if (type == FTW_D)
++      type = FTW_DP;
++    retval = fn(dir, &st, type, &conf->ftw);
++  }
++
++error:
++  if (dh)
++    closedir(dh);
++  return retval;
++}
++
++int nftw(const char *dir, __nftw_func_t fn, int nopenfd, int flags)
++{
++  int rc = -1, len = strlen(dir);
++  char path[PATH_MAX + 1];
++  char cwd[PATH_MAX + 1];
++  char *slash = NULL;
++  struct ftw_conf conf;
++  struct stat st;
++
++  conf.flags = flags;
++  conf.ftw_list = NULL;
++  conf.ftw.level = 0;
++  conf.ftw.base = 0;
++
++  /*
++   * Hmmh, I'm not really sure who is responsible to cleanup the path.
++   * Me or the caller?
++   */
++  strcpy(path, dir);
++  while (len && path[--len] == '/')
++    path[len] = '\0';
++
++  if (stat(dir, &st) == -1)
++    goto err;
++
++  /*
++   * Save the current device if we are enforced to stay within the
++   * same file system.
++   */
++  if ((flags & FTW_MOUNT) != 0)
++    conf.basedev = st.st_dev;
++
++  /* 
++   * Set the statfunc depending on if we are doing a physical walk
++   * or not
++   */
++  if ((flags & FTW_PHYS))
++    conf.statfunc = lstat;
++  else 
++    conf.statfunc = stat;
++
++  if (len && (slash = strrchr(path, '/')))
++    conf.ftw.base  = slash - path + 1;
++
++  /*
++   * If we are about to change directory, save the current working
++   * directory for better days.
++   */
++  if (flags & FTW_CHDIR) {
++    if (!(conf.fullpath = malloc(PATH_MAX)))
++      goto err;
++    
++    if (getcwd(cwd, PATH_MAX+1) == 0)
++      goto err;
++    
++    if (slash)
++      *slash = '\0';
++    
++    if (chdir(path))
++	goto err;
++    
++    if (path[0]=='/')
++      strcpy(conf.fullpath, path);
++    else
++      strcpy(conf.fullpath, cwd);
++    
++    if (slash)
++      *slash = '/';
++  }
++
++  /*
++   * And now..., let the games begin.
++   */
++  rc = walker(path, fn, nopenfd, &conf, NULL);
++
++  /*
++   * change back to the directory where we started from
++   */
++  if (flags & FTW_CHDIR) {
++    free(conf.fullpath);
++    if (chdir(cwd))
++      rc = -1;
++  }
++  if (conf.ftw_list)
++    tdestroy_recurse(conf.ftw_list, free);
++err:
++  return rc;
++}
++
++#ifdef STANDALONE
++int printout(const char *file,
++    const struct stat *sb,
++    int flag, struct FTW *s)
++{
++  printf(" -- flags: %04x s->base: %#3d s->level: %#3d s->ino: %ld - %s\n",
++      flag, s->base, s->level, sb->st_ino, file);
++  return 0;
++}
++
++int main(int argc, char **argv) {
++
++  char *testdir = argv[1];
++  // int flags = FTW_DEPTH|FTW_MOUNT|FTW_CHDIR;
++  int flags = FTW_CHDIR;
++  if (!testdir)
++    testdir="/tmp/test///";
++  nftw(testdir, printout, 10, flags);
++  return 0;
++}
++#endif
+--- dietlibc-cvs/include/ftw.h.ftw	2005-06-14 04:23:31.000000000 +0200
++++ dietlibc-cvs/include/ftw.h	2006-03-13 15:01:51.000000000 +0100
+@@ -41,6 +41,20 @@
+ # define FTW_SLN FTW_SLN
+ };
+ 
++enum
++{
++  FTW_PHYS = 1,		/* Perform physical walk, ignore symlinks.  */
++# define FTW_PHYS	FTW_PHYS
++  FTW_MOUNT = 2,	/* Report only files on same file system as the
++			   argument.  */
++# define FTW_MOUNT	FTW_MOUNT
++  FTW_CHDIR = 4,	/* Change to current directory while processing it.  */
++# define FTW_CHDIR	FTW_CHDIR
++  FTW_DEPTH = 8		/* Report files in directory before directory itself.*/
++# define FTW_DEPTH	FTW_DEPTH
++};
++
++
+ typedef int (*__ftw_func_t) (const char *__filename,
+ 			     const struct stat *__status, int __flag);
+ 

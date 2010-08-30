@@ -1,0 +1,11 @@
+# vim:set syntax=kconfig:
+config CONFIG_DRBD
+  bool "drbd - DRBD userland tools. (Distributed Redundant Block Device)"
+  default n
+  help
+    Drbd is a distributed replicated block device. It mirrors a
+    block device over the network to another machine. Think of it
+    as networked raid 1. It is a building block for setting up
+    high availability (HA) clusters.
+
+    http://www.drbd.org/

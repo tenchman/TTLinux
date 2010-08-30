@@ -1,0 +1,297 @@
+--- portsentry-1.2/portsentry.c.types	2008-08-13 12:25:06.000000000 +0200
++++ portsentry-1.2/portsentry.c	2008-08-13 12:32:43.000000000 +0200
+@@ -310,8 +310,8 @@ PacketReadTCP (int socket, struct iphdr 
+   char packetBuffer[TCPPACKETLEN];
+   struct in_addr addr;
+ 
+-  bzero (ipPtr, sizeof (struct iphdr));
+-  bzero (tcpPtr, sizeof (struct tcphdr));
++  memset (ipPtr, 0, sizeof (struct iphdr));
++  memset (tcpPtr, 0, sizeof (struct tcphdr));
+ 
+   if(read (socket, packetBuffer, TCPPACKETLEN) == ERROR)
+     return(ERROR);
+@@ -320,7 +320,7 @@ PacketReadTCP (int socket, struct iphdr 
+ 
+   if ((ipPtr->ihl < 5) || (ipPtr->ihl > 15))
+     {
+-      addr.s_addr = (u_int) ipPtr->saddr;
++      addr.s_addr = (unsigned int) ipPtr->saddr;
+       Log ("attackalert: Illegal IP header length detected in TCP packet: %d from (possible) host: %s\n",
+ 	 ipPtr->ihl, inet_ntoa (addr));
+       return (FALSE);
+@@ -342,8 +342,8 @@ PacketReadUDP (int socket, struct iphdr 
+   char packetBuffer[UDPPACKETLEN];
+   struct in_addr addr;
+ 
+-  bzero (ipPtr, sizeof (struct iphdr));
+-  bzero (udpPtr, sizeof (struct udphdr));
++  memset (ipPtr, 0, sizeof (struct iphdr));
++  memset (udpPtr, 0, sizeof (struct udphdr));
+ 
+   if(read (socket, packetBuffer, UDPPACKETLEN) == ERROR)
+     return(ERROR);
+@@ -352,7 +352,7 @@ PacketReadUDP (int socket, struct iphdr 
+ 
+   if ((ipPtr->ihl < 5) || (ipPtr->ihl > 15))
+     {
+-      addr.s_addr = (u_int) ipPtr->saddr;
++      addr.s_addr = (unsigned int) ipPtr->saddr;
+       Log ("attackalert: Illegal IP header length detected in UDP packet: %d from (possible) host: %s\n",
+ 	 ipPtr->ihl, inet_ntoa (addr));
+       return (FALSE);
+@@ -472,7 +472,7 @@ PortSentryStealthModeTCP (void)
+ 		    break;
+ 
+ 		  /* copy the clients address into our buffer for nuking */
+-		  addr.s_addr = (u_int) ip.saddr;
++		  addr.s_addr = (unsigned int) ip.saddr;
+ 		  SafeStrncpy (target, (char *) inet_ntoa (addr), IPMAXBUF);
+ 		  /* check if we should ignore this IP */
+ 		  result = NeverBlock (target, gblIgnoreFile);
+@@ -655,7 +655,7 @@ PortSentryAdvancedStealthModeTCP (void)
+ 
+ 	      if (smartVerify != TRUE)
+ 		{
+-		  addr.s_addr = (u_int) ip.saddr;
++		  addr.s_addr = (unsigned int) ip.saddr;
+ 		  SafeStrncpy (target, (char *) inet_ntoa (addr), IPMAXBUF);
+ 		  /* check if we should ignore this IP */
+ 		  result = NeverBlock (target, gblIgnoreFile);
+@@ -821,7 +821,7 @@ PortSentryStealthModeUDP (void)
+ 	      if (SmartVerifyUDP (client, server, incomingPort) == TRUE)
+ 		break;
+ 
+-	      addr.s_addr = (u_int) ip.saddr;
++	      addr.s_addr = (unsigned int) ip.saddr;
+ 	      SafeStrncpy (target, (char *) inet_ntoa (addr), IPMAXBUF);
+ 	      /* check if we should ignore this IP */
+ 	      result = NeverBlock (target, gblIgnoreFile);
+@@ -999,7 +999,7 @@ PortSentryAdvancedStealthModeUDP (void)
+ 	  if (smartVerify != TRUE)
+ 	    {
+ 	      /* copy the clients address into our buffer for nuking */
+-	      addr.s_addr = (u_int) ip.saddr;
++	      addr.s_addr = (unsigned int) ip.saddr;
+ 	      SafeStrncpy (target, (char *) inet_ntoa (addr), IPMAXBUF);
+ 	      /* check if we should ignore this IP */
+ 	      result = NeverBlock (target, gblIgnoreFile);
+@@ -1077,7 +1077,8 @@ PortSentryModeTCP (void)
+ {
+ 
+   struct sockaddr_in client, server;
+-  int length, portCount = 0, ports[MAXSOCKS];
++  socklen_t length;
++  int portCount = 0, ports[MAXSOCKS];
+   int openSockfd[MAXSOCKS], incomingSockfd, result = TRUE;
+   int count = 0, scanDetectTrigger = TRUE, showBanner = FALSE, boundPortCount = 0;
+   int selectResult = 0;
+@@ -1277,7 +1278,8 @@ int
+ PortSentryModeUDP (void)
+ {
+   struct sockaddr_in client, server;
+-  int length, ports[MAXSOCKS], openSockfd[MAXSOCKS], result = TRUE;
++  socklen_t length;
++  int ports[MAXSOCKS], openSockfd[MAXSOCKS], result = TRUE;
+   int count = 0, portCount = 0, selectResult = 0, scanDetectTrigger = 0;
+   int boundPortCount = 0, showBanner = FALSE;
+   char *temp, target[IPMAXBUF], bannerBuffer[MAXBUF], configToken[MAXBUF];
+@@ -1581,8 +1583,7 @@ void
+ Usage (void)
+ {
+   printf ("PortSentry - Port Scan Detector.\n");
+-  printf ("Copyright 1997-2003 Craig H. Rowland <craigrowland at users dot 
+-sourceforget dot net>\n");
++  printf ("Copyright 1997-2003 Craig H. Rowland <craigrowland at users dot sourceforget dot net>\n");
+   printf ("Licensing restrictions apply. Please see documentation\n");
+   printf ("Version: %s\n\n", VERSION);
+ #ifdef SUPPORT_STEALTH
+--- portsentry-1.2/portsentry_tcpip.h.types	2008-08-13 12:28:13.000000000 +0200
++++ portsentry-1.2/portsentry_tcpip.h	2008-08-13 12:28:22.000000000 +0200
+@@ -48,36 +48,36 @@ __BEGIN_DECLS
+ 
+ struct tcphdr
+   {
+-    u_int16_t source;
+-    u_int16_t dest;
+-    u_int32_t seq;
+-    u_int32_t ack_seq;
++    uint16_t source;
++    uint16_t dest;
++    uint32_t seq;
++    uint32_t ack_seq;
+ #if __BYTE_ORDER == __LITTLE_ENDIAN
+-    u_int16_t res1:4;
+-    u_int16_t doff:4;
+-    u_int16_t fin:1;
+-    u_int16_t syn:1;
+-    u_int16_t rst:1;
+-    u_int16_t psh:1;
+-    u_int16_t ack:1;
+-    u_int16_t urg:1;
+-    u_int16_t res2:2;
++    uint16_t res1:4;
++    uint16_t doff:4;
++    uint16_t fin:1;
++    uint16_t syn:1;
++    uint16_t rst:1;
++    uint16_t psh:1;
++    uint16_t ack:1;
++    uint16_t urg:1;
++    uint16_t res2:2;
+ #elif __BYTE_ORDER == __BIG_ENDIAN
+-    u_int16_t doff:4;
+-    u_int16_t res1:4;
+-    u_int16_t res2:2;
+-    u_int16_t urg:1;
+-    u_int16_t ack:1;
+-    u_int16_t psh:1;
+-    u_int16_t rst:1;
+-    u_int16_t syn:1;
+-    u_int16_t fin:1;
++    uint16_t doff:4;
++    uint16_t res1:4;
++    uint16_t res2:2;
++    uint16_t urg:1;
++    uint16_t ack:1;
++    uint16_t psh:1;
++    uint16_t rst:1;
++    uint16_t syn:1;
++    uint16_t fin:1;
+ #else
+ #error	"Adjust your <bits/endian.h> defines"
+ #endif
+-    u_int16_t window;
+-    u_int16_t check;
+-    u_int16_t urg_ptr;
++    uint16_t window;
++    uint16_t check;
++    uint16_t urg_ptr;
+ };
+ 
+ #endif /* tcp.h */
+@@ -91,61 +91,61 @@ __BEGIN_DECLS
+ 
+ struct timestamp
+   {
+-    u_int8_t len;
+-    u_int8_t ptr;
++    uint8_t len;
++    uint8_t ptr;
+ #if __BYTE_ORDER == __LITTLE_ENDIAN
+-    u_int8_t flags:4;
+-    u_int8_t overflow:4;
++    uint8_t flags:4;
++    uint8_t overflow:4;
+ #elif __BYTE_ORDER == __BIG_ENDIAN
+-    u_int8_t overflow:4;
+-    u_int8_t flags:4;
++    uint8_t overflow:4;
++    uint8_t flags:4;
+ #else
+ #error	"Please fix <bytesex.h>"
+ #endif
+-    u_int32_t data[9];
++    uint32_t data[9];
+   };
+ 
+ struct ip_options
+   {
+-    u_int32_t faddr;		/* Saved first hop address */
+-    u_int8_t optlen;
+-    u_int8_t srr;
+-    u_int8_t rr;
+-    u_int8_t ts;
+-    u_int8_t is_setbyuser:1;	/* Set by setsockopt?			*/
+-    u_int8_t is_data:1;		/* Options in __data, rather than skb	*/
+-    u_int8_t is_strictroute:1; /* Strict source route		*/
+-    u_int8_t srr_is_hit:1;	/* Packet destination addr was our one	*/
+-    u_int8_t is_changed:1;	/* IP checksum more not valid		*/
+-    u_int8_t rr_needaddr:1;	/* Need to record addr of outgoing dev	*/
+-    u_int8_t ts_needtime:1;	/* Need to record timestamp		*/
+-    u_int8_t ts_needaddr:1;	/* Need to record addr of outgoing dev  */
+-    u_int8_t router_alert;
+-    u_int8_t __pad1;
+-    u_int8_t __pad2;
+-    u_int8_t __data[0];
++    uint32_t faddr;		/* Saved first hop address */
++    uint8_t optlen;
++    uint8_t srr;
++    uint8_t rr;
++    uint8_t ts;
++    uint8_t is_setbyuser:1;	/* Set by setsockopt?			*/
++    uint8_t is_data:1;		/* Options in __data, rather than skb	*/
++    uint8_t is_strictroute:1; /* Strict source route		*/
++    uint8_t srr_is_hit:1;	/* Packet destination addr was our one	*/
++    uint8_t is_changed:1;	/* IP checksum more not valid		*/
++    uint8_t rr_needaddr:1;	/* Need to record addr of outgoing dev	*/
++    uint8_t ts_needtime:1;	/* Need to record timestamp		*/
++    uint8_t ts_needaddr:1;	/* Need to record addr of outgoing dev  */
++    uint8_t router_alert;
++    uint8_t __pad1;
++    uint8_t __pad2;
++    uint8_t __data[0];
+   };
+ 
+ struct iphdr
+   {
+ #if __BYTE_ORDER == __LITTLE_ENDIAN
+-    u_int8_t ihl:4;
+-    u_int8_t version:4;
++    uint8_t ihl:4;
++    uint8_t version:4;
+ #elif __BYTE_ORDER == __BIG_ENDIAN
+-    u_int8_t	version:4;
+-    u_int8_t ihl:4;
++    uint8_t	version:4;
++    uint8_t ihl:4;
+ #else
+ #error	"Please fix <bytesex.h>"
+ #endif
+-    u_int8_t tos;
+-    u_int16_t tot_len;
+-    u_int16_t id;
+-    u_int16_t frag_off;
+-    u_int8_t ttl;
+-    u_int8_t protocol;
+-    u_int16_t check;
+-    u_int32_t saddr;
+-    u_int32_t daddr;
++    uint8_t tos;
++    uint16_t tot_len;
++    uint16_t id;
++    uint16_t frag_off;
++    uint8_t ttl;
++    uint8_t protocol;
++    uint16_t check;
++    uint32_t saddr;
++    uint32_t daddr;
+     /*The options start here. */
+   };
+ 
+@@ -158,10 +158,10 @@ __BEGIN_DECLS
+ 
+ /* UDP header as specified by RFC 768, August 1980. */
+ struct udphdr {
+-  u_int16_t	source;
+-  u_int16_t	dest;
+-  u_int16_t	len;
+-  u_int16_t	check;
++  uint16_t	source;
++  uint16_t	dest;
++  uint16_t	len;
++  uint16_t	check;
+ };
+ 
+ __END_DECLS
+--- portsentry-1.2/portsentry_io.c.types	2008-08-13 12:30:09.000000000 +0200
++++ portsentry-1.2/portsentry_io.c	2008-08-13 12:30:26.000000000 +0200
+@@ -371,7 +371,7 @@ BindSocket (int sockfd, struct sockaddr_
+   Log ("debug: BindSocket: Binding to port: %d\n", port);
+ #endif
+ 
+-  bzero ((char *) &server, sizeof (server));
++  memset ((char *) &server, 0, sizeof (server));
+   server.sin_family = AF_INET;
+   server.sin_addr.s_addr = htonl (INADDR_ANY);
+   server.sin_port = htons (port);

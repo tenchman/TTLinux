@@ -1,0 +1,12 @@
+--- dietlibc-0.30/include/sys/types.h.sys_types	2009-06-20 14:54:28.000000000 +0200
++++ dietlibc-0.30/include/sys/types.h	2009-06-21 20:52:14.000000000 +0200
+@@ -12,6 +12,9 @@ typedef unsigned long int clock_t;	/* Us
+ 					   clock ticks or CLOCKS_PER_SEC
+ 					   (see <time.h>). */
+ 
++typedef uint64_t fsblkcnt_t;
++typedef uint64_t fsfilcnt_t;
++
+ /* TODO:
+      clockid_t
+              Used for clock ID type in the clock and timer functions.

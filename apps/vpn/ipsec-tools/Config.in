@@ -1,0 +1,10 @@
+# vim:set syntax=kconfig:
+config CONFIG_IPSEC_TOOLS
+  bool "ipsec-tools - A port of KAME's IPsec utilities to the Linux"
+  default n
+  select CONFIG_OPENSSL
+  help
+    IPsec-Tools is a port of KAME's IPsec utilities to the Linux-2.6 IPsec
+    implementation. It supports NetBSD and FreeBSD as well.
+
+    http://ipsec-tools.sourceforge.net/

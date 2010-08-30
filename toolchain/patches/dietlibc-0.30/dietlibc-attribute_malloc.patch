@@ -1,0 +1,16 @@
+Remove bogus __attribute_malloc__ declaration from asprintf, since the return type
+is not a pointer type.
+
+Gernot Tenchio
+diff -up dietlibc-0.30/include/stdio.h.attribute_malloc dietlibc-0.30/include/stdio.h
+--- dietlibc-0.30/include/stdio.h.attribute_malloc	2010-08-11 14:48:41.540022494 +0200
++++ dietlibc-0.30/include/stdio.h	2010-08-11 14:48:58.631022810 +0200
+@@ -20,7 +20,7 @@ int printf(const char *format, ...) __TH
+ int fprintf(FILE *stream, const char *format, ...) __THROW __attribute__((__format__(__printf__,2,3)));
+ int sprintf(char *str, const char *format, ...) __THROW __attribute__((__format__(__printf__,2,3)));
+ int snprintf(char *str, size_t size, const char *format, ...) __THROW __attribute__((__format__(__printf__,3,4)));
+-int asprintf(char **ptr, const char* format, ...) __THROW __attribute_malloc__ __attribute__((__format__(__printf__,2,3)));
++int asprintf(char **ptr, const char* format, ...) __THROW __attribute__((__format__(__printf__,2,3)));
+ 
+ int scanf(const char *format, ...) __THROW __attribute__((__format__(__scanf__,1,2)));
+ int fscanf(FILE *stream, const char *format, ...) __THROW __attribute__((__format__(__scanf__,2,3)));

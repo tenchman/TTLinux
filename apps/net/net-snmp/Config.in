@@ -1,0 +1,60 @@
+# vim:set syntax=kconfig:
+config CONFIG_NET_SNMP
+  bool "net-snmp - A collection of SNMP protocol tools and libraries"
+  default n
+  help
+    SNMP (Simple Network Management Protocol) is a protocol used for
+    network management. The NET-SNMP project includes various SNMP tools:
+    an extensible agent, an SNMP library, tools for requesting or setting
+    information from SNMP agents, tools for generating and handling SNMP
+    traps and a version of the netstat command which uses SNMP.
+
+    http://net-snmp.sourceforge.net/
+config CONFIG_NET_SNMP_DEBUG
+  bool "build net-snmp with debugging code"
+  default n
+  depends on CONFIG_NET_SNMP
+  help
+    Enabling this option builds the net-snmp package with debugging support.
+		This is required for the -D options to work.
+config CONFIG_NET_SNMP_SSL
+  bool "build net-snmp with SSL (required for SHA/DES/AES)"
+  default y
+  depends on CONFIG_NET_SNMP
+  help
+    Enabling this option builds the net-snmp package with SSL support.
+    This is required for SHA authentication and DES or SHA encryption
+    with SNMPv3.
+config CONFIG_NET_SNMP_TELCO_TECH_MIB
+  bool "build the TELCO-TECH-MIB module"
+  default y
+  depends on CONFIG_NET_SNMP
+  help
+    Enabling this option builds the TELCO-TECH-MIB module from code
+    generated with mib2c from the TELCO-TECH-MIB, LISS-MIB and
+    LISS-MANSEC-MIB text files.
+config CONFIG_NET_SNMP_LISS_RW_COMPLIANCE
+  bool "build a LISS-MIB read/write compliant TELCO-TECH-MIB module."
+  default y
+  depends on CONFIG_NET_SNMP_TELCO_TECH_MIB
+  help
+    Enabling this option builds a TELCO-TECH-MIB module which is a
+    read/write compliant implementation of the LISS-MIB module.
+    Disabling this option results in a read-only compliant
+    implementation to be built.
+config CONFIG_NET_SNMP_LISS_FULL_COMPLIANCE
+  bool "build a LISS-MIB fully compliant TELCO-TECH-MIB module."
+  default y
+  depends on CONFIG_NET_SNMP_LISS_RW_COMPLIANCE
+  help
+    Enabling this option builds a TELCO-TECH-MIB module which is a
+    read/write compliant implementation of the LISS-MIB module.
+    Disabling this option results in a read-only implementation to be
+    built.
+config CONFIG_NET_SNMP_LISS_MANSEC_FULL_COMPLIANCE
+  bool "build a LISS-MANSEC-MIB fully compliant TELCO-TECH-MIB module."
+  default y
+  depends on CONFIG_NET_SNMP_LISS_RW_COMPLIANCE
+  help
+    Enabling this option builds a TELCO-TECH-MIB module which is a
+    fully compliant implementation of the LISS-MANSEC-MIB module.

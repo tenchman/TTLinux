@@ -1,0 +1,158 @@
+--- sysvinit-2.84/contrib/start-stop-daemon.c.diet	1996-06-23 00:00:00.000000000 +0200
++++ sysvinit-2.84/contrib/start-stop-daemon.c	2004-07-07 22:18:51.000000000 +0200
+@@ -107,29 +107,26 @@
+ static void
+ do_help(void)
+ {
+-	printf("\
+-start-stop-daemon for Debian Linux - small and fast C version written by\n\
+-Marek Michalkiewicz <marekm@i17linuxb.ists.pwr.wroc.pl>, public domain.\n"
+-VERSION "\n\
+-\n\
+-Usage:
+-    start-stop-daemon -S|--start options ... -- arguments ...\n\
+-    start-stop-daemon -K|--stop options ...\n\
+-    start-stop-daemon -H|--help\n\
+-    start-stop-daemon -V|--version\n\
+-\n\
+-Options (at least one of --exec|--pidfile|--user is required):
+-    -x|--exec <executable>       program to start/check if it is running\n\
+-    -p|--pidfile <pid-file>      pid file to check\n\
+-    -u|--user <username>|<uid>   stop this user's processes\n\
+-    -n|--name <process-name>     stop processes with this name\n\
+-    -s|--signal <signal>         signal to send (default 15)\n\
+-    -a|--startas <pathname>      program to start (default <executable>)\n\
+-    -t|--test                    test mode, don't do anything\n\
+-    -o|--oknodo                  exit status 0 (not 1) if nothing done\n\
+-    -q|--quiet  |  -v, --verbose\n\
+-\n\
+-Exit status:  0 = done  1 = nothing done (=> 0 if --oknodo)  2 = trouble\n");
++	printf(""
++"start-stop-daemon for Debian Linux - small and fast C version written by\n"
++"Marek Michalkiewicz <marekm@i17linuxb.ists.pwr.wroc.pl>, public domain.\n"
++VERSION "\n\n"
++"Usage:"
++"    start-stop-daemon -S|--start options ... -- arguments ...\n"
++"    start-stop-daemon -K|--stop options ...\n"
++"    start-stop-daemon -H|--help\n"
++"    start-stop-daemon -V|--version\n\n"
++"Options (at least one of --exec|--pidfile|--user is required):"
++"    -x|--exec <executable>       program to start/check if it is running\n"
++"    -p|--pidfile <pid-file>      pid file to check\n"
++"    -u|--user <username>|<uid>   stop this user's processes\n"
++"    -n|--name <process-name>     stop processes with this name\n"
++"    -s|--signal <signal>         signal to send (default 15)\n"
++"    -a|--startas <pathname>      program to start (default <executable>)\n"
++"    -t|--test                    test mode, don't do anything\n"
++"    -o|--oknodo                  exit status 0 (not 1) if nothing done\n"
++"    -q|--quiet  |  -v, --verbose\n\n"
++"Exit status:  0 = done  1 = nothing done (=> 0 if --oknodo)  2 = trouble\n");
+ }
+ 
+ 
+--- sysvinit-2.84/src/Makefile.diet	2004-07-07 22:18:51.000000000 +0200
++++ sysvinit-2.84/src/Makefile	2004-07-07 22:18:51.000000000 +0200
+@@ -8,15 +8,14 @@
+ # Version:	@(#)Makefile  2.83-3  06-Nov-2001  miquels@cistron.nl
+ #
+ 
+-CC	= cc
+-CFLAGS	= -Wall -O2 -D_GNU_SOURCE
++#CC	= cc
++CFLAGS	= -Wall -O2 -D_BSD_SOURCE -D_GNU_SOURCE -fno-builtin-log
+ LDFLAGS	= -s
+ STATIC	=
+ 
+ # For Debian we do not build all programs, otherwise we do.
+ ifeq ($(DEBIAN),)
+-PROGS	= init halt shutdown killall5 runlevel sulogin utmpdump \
+-		last mesg wall
++PROGS	= init halt shutdown killall5 runlevel sulogin last mesg wall
+ else
+ PROGS	= init halt shutdown killall5 runlevel sulogin last mesg
+ endif
+@@ -28,9 +27,9 @@
+ MANDIR		= /usr/share/man
+ 
+ # Additional libs for Gnu Libc
+-ifneq ($(wildcard /usr/lib/libcrypt.a),)
+-LCRYPT		= -lcrypt
+-endif
++#ifneq ($(wildcard /usr/lib/libcrypt.a),)
++#LCRYPT		= -lcrypt
++#endif
+ 
+ all:		$(PROGS)
+ 
+@@ -95,7 +94,7 @@
+ 			runlevel shutdown $(ROOT)/sbin
+ 		# These are not installed by default
+ ifeq ($(DEBIAN),)
+-		$(INSTALL) -m 555 utmpdump wall $(ROOT)/usr/bin
++		$(INSTALL) -m 555 wall $(ROOT)/usr/bin
+ endif
+ 		# $(INSTALL) -m 755 etc/initscript.sample $(ROOT)/etc
+ 		$(INSTALL) -m 755 mesg last $(ROOT)/usr/bin
+--- sysvinit-2.84/src/last.c.diet	2001-06-13 14:13:21.000000000 +0200
++++ sysvinit-2.84/src/last.c	2004-07-07 22:18:51.000000000 +0200
+@@ -19,7 +19,7 @@
+ 
+ #include <sys/types.h>
+ #include <sys/stat.h>
+-#include <sys/fcntl.h>
++#include <fcntl.h>
+ #include <time.h>
+ #include <stdio.h>
+ #include <ctype.h>
+--- sysvinit-2.84/src/hddown.c.diet	2004-07-08 08:08:08.371611736 +0200
++++ sysvinit-2.84/src/hddown.c	2004-07-08 08:09:08.716437928 +0200
+@@ -15,12 +15,17 @@
+ 
+ #include <sys/ioctl.h>
+ 
++#ifndef __dietlibc__
+ #include <linux/hdreg.h>
++#else
++#define HDIO_DRIVE_CMD          0x031f
++#endif
+ 
+ #define MAX_DISKS	64
+ #define PROC_IDE	"/proc/ide"
+ #define DEV_BASE	"/dev"
+ 
++
+ /*
+  *	Find all IDE disks through /proc.
+  */
+--- sysvinit-2.84/src/ifdown.c.diet	1998-06-02 22:41:47.000000000 +0200
++++ sysvinit-2.84/src/ifdown.c	2004-07-07 22:18:51.000000000 +0200
+@@ -14,7 +14,7 @@
+ #include <sys/ioctl.h>
+ #include <sys/socket.h>
+ #include <sys/time.h>
+-#include <sys/errno.h>
++#include <errno.h>
+ 
+ #include <net/if.h>
+ #include <netinet/in.h>
+--- sysvinit-2.84/src/reboot.h.diet	1997-09-24 10:55:52.000000000 +0200
++++ sysvinit-2.84/src/reboot.h	2004-07-07 22:18:51.000000000 +0200
+@@ -6,9 +6,7 @@
+  *
+  */
+ 
+-#if defined(__GLIBC__)
+ #  include <sys/reboot.h>
+-#endif
+ 
+ #define BMAGIC_HARD	0x89ABCDEF
+ #define BMAGIC_SOFT	0
+@@ -16,8 +14,4 @@
+ #define BMAGIC_HALT	0xCDEF0123
+ #define BMAGIC_POWEROFF	0x4321FEDC
+ 
+-#if defined(__GLIBC__)
+   #define init_reboot(magic) reboot(magic)
+-#else
+-  #define init_reboot(magic) reboot(0xfee1dead, 672274793, magic)
+-#endif

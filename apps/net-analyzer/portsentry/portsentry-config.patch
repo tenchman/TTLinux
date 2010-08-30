@@ -1,0 +1,28 @@
+--- portsentry-1.2/portsentry_config.h.config	2008-08-13 12:38:18.000000000 +0200
++++ portsentry-1.2/portsentry_config.h	2008-08-13 12:38:33.000000000 +0200
+@@ -22,7 +22,7 @@
+ 
+ /* These are probably ok. Be sure you change the Makefile if you */
+ /* change the path */
+-#define CONFIG_FILE "/usr/local/psionic/portsentry/portsentry.conf"
++#define CONFIG_FILE "/etc/portsentry/portsentry.conf"
+ 
+ /* The location of Wietse Venema's TCP Wrapper hosts.deny file */
+ #define WRAPPER_HOSTS_DENY "/etc/hosts.deny"
+--- portsentry-1.2/portsentry.conf.config	2008-08-13 12:40:26.000000000 +0200
++++ portsentry-1.2/portsentry.conf	2008-08-13 12:42:22.000000000 +0200
+@@ -80,11 +80,11 @@ ADVANCED_EXCLUDE_UDP="520,138,137,67"
+ ######################
+ #
+ # Hosts to ignore
+-IGNORE_FILE="/usr/local/psionic/portsentry/portsentry.ignore"
++IGNORE_FILE="/etc/portsentry/portsentry.ignore"
+ # Hosts that have been denied (running history)
+-HISTORY_FILE="/usr/local/psionic/portsentry/portsentry.history"
++HISTORY_FILE="/etc/portsentry/portsentry.history"
+ # Hosts that have been denied this session only (temporary until next restart)
+-BLOCKED_FILE="/usr/local/psionic/portsentry/portsentry.blocked"
++BLOCKED_FILE="/etc/portsentry/portsentry.blocked"
+ 
+ ##############################
+ # Misc. Configuration Options#

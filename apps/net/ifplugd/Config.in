@@ -1,0 +1,13 @@
+# vim:set syntax=kconfig:
+config CONFIG_IFPLUGD
+  bool "ifplugd - Brings up/down ethernet ports automatically with cable detection"
+  default n
+  select CONFIG_LIBDAEMON
+  help
+    ifplugd is a Linux daemon which will automatically configure your ethernet
+    device when a cable is  plugged in and automatically unconfigure it if the
+    cable is  pulled. This is useful on laptops  with onboard network adapters,
+    since  it  will  only  configure  the interface  when a  cable  is  really
+    connected.
+
+    http://www.package.org/

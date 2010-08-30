@@ -1,0 +1,11 @@
+diff -up linux-2.6.30-rsbac/crypto/ocf/hifn/hifnHIPP.c.ocf_null_terminate_pci_device_id linux-2.6.30-rsbac/crypto/ocf/hifn/hifnHIPP.c
+--- linux-2.6.30-rsbac/crypto/ocf/hifn/hifnHIPP.c.ocf_null_terminate_pci_device_id	2009-09-08 14:25:52.000000000 +0200
++++ linux-2.6.30-rsbac/crypto/ocf/hifn/hifnHIPP.c	2009-09-08 14:26:32.000000000 +0200
+@@ -383,6 +383,7 @@ static struct pci_device_id hipp_pci_tbl
+ 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, },
+ 	{ PCI_VENDOR_HIFN, PCI_PRODUCT_HIFN_8155,
+ 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, },
++	{}
+ };
+ MODULE_DEVICE_TABLE(pci, hipp_pci_tbl);
+ 

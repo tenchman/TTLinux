@@ -1,0 +1,13 @@
+# vim:set syntax=kconfig:
+config CONFIG_CAPI4K
+  bool "capi4k-utils - CAPI 2.0 Utilities"
+  default y
+  depends CONFIG_PPP
+  help
+    This package contains the CAPI 2.0 library, which is needed for all
+    CAPI applications. It also contains programs to show information about
+    installed CAPI controllers and for the receiving and sending of FAX
+    messages. CAPI 2.0 drivers for Linux are available for a growing
+    number of ISDN devices.
+    
+    ftp://ftp.in-berlin.de/pub/capi4linux/

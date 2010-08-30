@@ -1,0 +1,42 @@
+--- vim-6.3/runtime/syntax/squid.vim.syntax	2004-02-01 20:11:24.000000000 +0100
++++ vim-6.3/runtime/syntax/squid.vim	2006-10-12 20:39:49.000000000 +0200
+@@ -59,6 +59,7 @@
+ syn keyword	squidConf	ipcache_size local_domain local_ip
+ syn keyword	squidConf	logfile_rotate log_fqdn log_icp_queries
+ syn keyword	squidConf	log_mime_hdrs maximum_object_size
++syn keyword	squidConf	maximum_object_size_in_memory request_body_max_size
+ syn keyword	squidConf	maximum_single_addr_tries mcast_groups
+ syn keyword	squidConf	mcast_icp_query_timeout mcast_miss_addr
+ syn keyword	squidConf	mcast_miss_encode_key mcast_miss_port
+@@ -92,6 +93,11 @@
+ syn keyword	squidConf	unique_hostname unlinkd_program
+ syn keyword	squidConf	uri_whitespace useragent_log visible_hostname
+ syn keyword	squidConf	wais_relay wais_relay_host wais_relay_port
++syn keyword     squidConf       icap_enable icap_preview_enable icap_preview_size
++syn keyword     squidConf       icap_check_interval icap_send_client_ip
++syn keyword     squidConf       icap_send_server_ip icap_send_auth_user
++syn keyword     squidConf       icap_auth_scheme icap_service icap_class
++syn keyword     squidConf       icap_access access_log
+ 
+ syn keyword	squidOpt	proxy-only weight ttl no-query default
+ syn keyword	squidOpt	round-robin multicast-responder
+@@ -99,15 +105,16 @@
+ 
+ " Security Actions for cachemgr_passwd
+ syn keyword	squidAction	shutdown info parameter server_list
+-syn keyword	squidAction	client_list
++syn keyword	squidAction	client_list reqmod_precache reqmod_postcache
++syn keyword     squidAction     respmod_precache respmod_postcache
+ syn match	squidAction	"stats/\(objects\|vm_objects\|utilization\|ipcache\|fqdncache\|dns\|redirector\|io\|reply_headers\|filedescriptors\|netdb\)"
+ syn match	squidAction	"log\(/\(status\|enable\|disable\|clear\)\)\="
+ syn match	squidAction	"squid\.conf"
+ 
+ " Keywords for the acl-config
+ syn keyword	squidAcl	url_regex urlpath_regex referer_regex port proto
+-syn keyword	squidAcl	req_mime_type rep_mime_type
+-syn keyword	squidAcl	method browser user src dst
++syn keyword	squidAcl	req_mime_type rep_mime_type req_header rep_header
++syn keyword	squidAcl	method browser user src dst 
+ 
+ syn match	squidNumber	"\<\d\+\>"
+ syn match	squidIP		"\<\d\{1,3}\.\d\{1,3}\.\d\{1,3}\.\d\{1,3}\>"

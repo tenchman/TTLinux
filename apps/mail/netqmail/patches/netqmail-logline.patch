@@ -1,0 +1,449 @@
+--- netqmail-1.06/qmail-smtpd.c.logline	2008-06-28 11:46:50.000000000 +0200
++++ netqmail-1.06/qmail-smtpd.c	2008-06-28 12:42:20.000000000 +0200
+@@ -27,6 +27,7 @@
+ #include "base64.h"
+ #include "wait.h"
+ #include "fd.h"
++#include "logline.h"
+   
+ #ifdef TLS
+ #define SERVERCERT "control/servercert.pem"
+@@ -105,37 +106,46 @@ char ssoutbuf[512];
+ substdio ssout = SUBSTDIO_FDBUF(safewrite,1,ssoutbuf,sizeof ssoutbuf);
+ 
+ void flush() { substdio_flush(&ssout); }
+-void out(s) char *s; { substdio_puts(&ssout,s); }
+-
+-void die_read() { _exit(1); }
+-void die_alarm() { out("451 timeout (#4.4.2)\r\n"); flush(); _exit(1); }
+-void die_nomem() { out("421 out of memory (#4.3.0)\r\n"); flush(); _exit(1); }
+-void die_control() { out("421 unable to read controls (#4.3.0)\r\n"); flush(); _exit(1); }
+-void die_ipme() { out("421 unable to figure out my IP addresses (#4.3.0)\r\n"); flush(); _exit(1); }
+-void straynewline() { out("451 See http://pobox.com/~djb/docs/smtplf.html.\r\n"); flush(); _exit(1); }
+-
+-void err_badbounce() { out("550 sorry, bounce messages should have a single envelope recipient (#5.7.1)\r\n"); }
+-void err_size() { out("552 sorry, that message size exceeds my databytes limit (#5.3.4)\r\n"); }
+-void err_bmf() { out("553 sorry, your envelope sender is in my badmailfrom list (#5.7.1)\r\n"); }
+-void err_nogateway() { out("553 sorry, that domain isn't in my list of allowed rcpthosts (#5.7.1)\r\n"); }
+-void err_unimpl(arg) char *arg; { out("502 unimplemented (#5.5.1)\r\n"); }
+-void err_syntax() { out("555 syntax error (#5.5.4)\r\n"); }
+-void err_wantmail() { out("503 MAIL first (#5.5.1)\r\n"); }
+-void err_wantrcpt() { out("503 RCPT first (#5.5.1)\r\n"); }
+-void err_noop(arg) char *arg; { out("250 ok\r\n"); }
+-void err_vrfy(arg) char *arg; { out("252 send some mail, i'll try my best\r\n"); }
+-void err_qqt() { out("451 qqt failure (#4.3.0)\r\n"); }
+-void err_nogwcert() { out("553 no valid cert for gatewaying (#5.7.1)\r\n"); }
+-void err_authd() { out("503 you're already authenticated (#5.5.0)\r\n"); }
+-void err_authmail() { out("503 no auth during mail transaction (#5.5.0)\r\n"); }
+-
+-int die_child() { out("454 oops, problem with child and I can't auth (#4.3.0)\r\n"); return -1; }
+-int die_fork() { out("454 oops, child won't start and I can't auth (#4.3.0)\r\n"); return -1; }
+-int die_pipe() { out("454 oops, unable to open pipe and I can't auth (#4.3.0)\r\n"); return -1; }
+-int die_write() { out("454 oops, unable to write pipe and I can't auth (#4.3.0)\r\n"); return -1; }
+-int die_noauth() { out("504 auth type unimplemented (#5.5.1)\r\n"); return -1; }
+-int die_authabrt() { out("501 auth exchange cancelled (#5.0.0)\r\n"); return -1; }
+-int die_input() { out("501 malformed auth input (#5.5.4)\r\n"); return -1; }
++void out(s) char *s; { 
++  substdio_puts(&ssout,s);
++  logline(3, s);
++}
++
++void out_log(s) char *s; {
++  substdio_puts(&ssout,s);
++  logline(0, s);
++}
++
++void die_read() { logline(0, "read error"); _exit(1); }
++void die_log(arg) char *arg; { logline(0, arg); _exit(1); }
++void die_alarm() { out_log("451 timeout (#4.4.2)\r\n"); flush(); _exit(1); }
++void die_nomem() { out_log("421 out of memory (#4.3.0)\r\n"); flush(); _exit(1); }
++void die_control() { out_log("421 unable to read controls (#4.3.0)\r\n"); flush(); _exit(1); }
++void die_ipme() { out_log("421 unable to figure out my IP addresses (#4.3.0)\r\n"); flush(); _exit(1); }
++void straynewline() { out_log("451 See http://pobox.com/~djb/docs/smtplf.html.\r\n"); flush(); _exit(1); }
++
++void err_badbounce() { out_log("550 sorry, bounce messages should have a single envelope recipient (#5.7.1)\r\n"); }
++void err_size() { out_log("552 sorry, that message size exceeds my databytes limit (#5.3.4)\r\n"); }
++void err_bmf() { out_log("553 sorry, your envelope sender is in my badmailfrom list (#5.7.1)\r\n"); }
++void err_nogateway() { out_log("553 sorry, that domain isn't in my list of allowed rcpthosts (#5.7.1)\r\n"); }
++void err_unimpl(arg) char *arg; { out_log("502 unimplemented (#5.5.1)\r\n"); }
++void err_syntax() { out_log("555 syntax error (#5.5.4)\r\n"); }
++void err_wantmail() { out_log("503 MAIL first (#5.5.1)\r\n"); }
++void err_wantrcpt() { out_log("503 RCPT first (#5.5.1)\r\n"); }
++void err_noop(arg) char *arg; { out_log("250 ok\r\n"); }
++void err_vrfy(arg) char *arg; { out_log("252 send some mail, i'll try my best\r\n"); }
++void err_qqt() { out_log("451 qqt failure (#4.3.0)\r\n"); }
++void err_nogwcert() { out_log("553 no valid cert for gatewaying (#5.7.1)\r\n"); }
++void err_authd() { out_log("503 you're already authenticated (#5.5.0)\r\n"); }
++void err_authmail() { out_log("503 no auth during mail transaction (#5.5.0)\r\n"); }
++
++int die_child() { out_log("454 oops, problem with child and I can't auth (#4.3.0)\r\n"); return -1; }
++int die_fork() { out_log("454 oops, child won't start and I can't auth (#4.3.0)\r\n"); return -1; }
++int die_pipe() { out_log("454 oops, unable to open pipe and I can't auth (#4.3.0)\r\n"); return -1; }
++int die_write() { out_log("454 oops, unable to write pipe and I can't auth (#4.3.0)\r\n"); return -1; }
++int die_noauth() { out_log("504 auth type unimplemented (#5.5.1)\r\n"); return -1; }
++int die_authabrt() { out_log("501 auth exchange cancelled (#5.0.0)\r\n"); return -1; }
++int die_input() { out_log("501 malformed auth input (#5.5.4)\r\n"); return -1; }
+ 
+ stralloc greeting = {0};
+ 
+@@ -183,10 +193,12 @@ void setup()
+ {
+   char *x;
+   unsigned long u;
++  int loglevel = 0;
+ #ifdef TLS
+   char *tlsciphers;
+ #endif
+- 
++  control_readint(&loglevel,"control/loglevel");
++  logline_init(loglevel, NULL); 
+   if (control_init() == -1) die_control();
+   if (control_rldef(&greeting,"control/smtpgreeting",1,(char *) 0) != 1)
+     die_control();
+@@ -387,11 +399,13 @@ void smtp_ehlo(arg) char *arg;
+ {
+   if(!spp_helo(arg)) return;
+   smtp_greet("250-");
+-  out("\r\n250-AUTH LOGIN PLAIN\r\n250-AUTH=LOGIN PLAIN");
++  out("\r\n250-AUTH LOGIN PLAIN");
++  out("\r\n250-AUTH=LOGIN PLAIN");
+ #ifdef TLS
+   if (!ssl && tlsenable) out("\r\n250-STARTTLS");
+ #endif
+-  out("\r\n250-PIPELINING\r\n250-8BITMIME\r\n");
++  out("\r\n250-PIPELINING");
++  out("\r\n250-8BITMIME\r\n");
+   smtp_size();
+   seenmail = 0; dohelo(arg);
+ }
+@@ -477,8 +491,11 @@ int saferead(fd,buf,len) int fd; char *b
+   else
+ #endif
+     r = timeoutread(timeout,fd,buf,len);
+-  if (r == -1) if (errno == error_timeout) die_alarm();
+-  if (r <= 0) die_read();
++  if (r == -1) {
++    if (errno == error_timeout) die_alarm();
++    die_log(strerror(errno));
++  } else if (r == 0)
++    die_log("EOF");
+   return r;
+ }
+ 
+@@ -614,8 +631,8 @@ void smtp_data(arg) char *arg; {
+  
+   qqx = qmail_close(&qqt);
+   if (!*qqx) { acceptmessage(qp); return; }
+-  if (hops) { out("554 too many hops, this message is looping (#5.4.6)\r\n"); return; }
+-  if (databytes) if (!bytestooverflow) { out("552 sorry, that message size exceeds my databytes limit (#5.3.4)\r\n"); return; }
++  if (hops) { out_log("554 too many hops, this message is looping (#5.4.6)\r\n"); return; }
++  if (databytes) if (!bytestooverflow) { out_log("552 sorry, that message size exceeds my databytes limit (#5.3.4)\r\n"); return; }
+   if (*qqx == 'D') out("554 "); else out("451 ");
+   out(qqx + 1);
+   out("\r\n");
+@@ -628,13 +645,13 @@ void smtp_tls(arg) char *arg;
+ 
+   if (*arg)
+   {
+-    out("501 Syntax error (no parameters allowed) (#5.5.4)\r\n");
++    out_log("501 Syntax error (no parameters allowed) (#5.5.4)\r\n");
+     return;
+   }
+ 
+   if (matrixSslOpen() < 0)
+   {
+-    out("454 TLS not available: unable to initialize ctx (#4.3.0)\r\n");
++    out_log("454 TLS not available: unable to initialize ctx (#4.3.0)\r\n");
+     return;
+   }
+ 
+@@ -645,13 +662,13 @@ void smtp_tls(arg) char *arg;
+   {
+     if (matrixSslReadKeys(&keys, SERVERCERT, SERVERKEY, NULL, NULL) < 0)
+     {
+-      out("454 TLS not available: error reading or parsing certificates (#4.3.0)\r\n");
++      out_log("454 TLS not available: error reading or parsing certificates (#4.3.0)\r\n");
+       return;
+     }
+   }
+-  out("220 ready for tls\r\n"); flush();
++  out_log("220 ready for tls\r\n"); flush();
+   
+-  if (sslAccept(&ssl, 0, keys, verify_cb, 0) != 0) die_read();
++  if (sslAccept(&ssl, 0, keys, verify_cb, 0) != 0) die_log("sslAccept failed");
+   substdio_fdbuf(&ssout,ssl_write,ssl,ssoutbuf,sizeof(ssoutbuf));
+ 
+   remotehost = env_get("TCPREMOTEHOST");
+@@ -681,7 +698,7 @@ int authgetl(void) {
+   for (;;) {
+     if (!stralloc_readyplus(&authin,1)) die_nomem(); /* XXX */
+     i = substdio_get(&ssin,authin.s + authin.len,1);
+-    if (i != 1) die_read();
++    if (i != 1) die_log("authgetl: read error!");
+     if (authin.s[authin.len] == '\n') break;
+     ++authin.len;
+   }
+@@ -834,7 +851,7 @@ char *arg;
+       authd = 1;
+       relayclient = "";
+       remoteinfo = user.s;
+-      if (!env_unset("TCPREMOTEINFO")) die_read();
++      if (!env_unset("TCPREMOTEINFO")) die_log("can't unset TCPREMOTEINFO");
+       if (!env_put2("TCPREMOTEINFO",remoteinfo)) die_nomem();
+       out("235 ok, go ahead (#2.0.0)\r\n");
+       break;
+@@ -879,6 +896,6 @@ char **argv;
+   smtp_greet("220 ");
+   out(" ESMTP\r\n");
+   }
+-  if (commands(&ssin,&smtpcommands) == 0) die_read();
++  if (commands(&ssin,&smtpcommands) == 0) die_log("command error");
+   die_nomem();
+ }
+--- netqmail-1.06/logline.c.logline	2008-06-28 11:46:50.000000000 +0200
++++ netqmail-1.06/logline.c	2008-06-28 12:05:21.000000000 +0200
+@@ -0,0 +1,34 @@
++#include "stralloc.h"
++#include "fmt.h"
++#include "logline.h"
++#include <unistd.h>
++
++static int loglevel = 1;
++static stralloc trailer = { 0 };
++
++void logline_init(int level, char *domain) {
++  char pid[16] = {0};
++  pid[fmt_uint(pid, getpid())]='\0';
++  stralloc_copys(&trailer, "");
++  if (domain) stralloc_cats(&trailer, domain);
++  stralloc_cats(&trailer, "[");
++  stralloc_cats(&trailer, pid);
++  stralloc_cats(&trailer, "]: ");
++  loglevel = level; 
++}
++
++void logline(int level, char *msg) {
++  static stralloc buf = {0};
++  
++  if (level > loglevel) return;
++  stralloc_copys(&buf, "");
++  if (trailer.len)
++    stralloc_copy(&buf, &trailer);
++  while (*msg == '\r' || *msg == '\n') msg++;
++  if (!*msg) return;
++  stralloc_cats(&buf, msg);
++  if (buf.s[buf.len]!='\n')
++    stralloc_cats(&buf, "\n");
++  write(2, buf.s, buf.len);
++}
++
+--- netqmail-1.06/logline.h.logline	2008-06-28 11:46:50.000000000 +0200
++++ netqmail-1.06/logline.h	2008-06-28 11:46:50.000000000 +0200
+@@ -0,0 +1,7 @@
++#ifndef _LOGLINE_H
++#define _LOGLINE_H
++
++void logline_init(int level, char *domain);
++void logline(int level, char *msg);
++
++#endif
+--- netqmail-1.06/Makefile.logline	2008-06-28 11:46:50.000000000 +0200
++++ netqmail-1.06/Makefile	2008-06-28 11:46:50.000000000 +0200
+@@ -16,6 +16,10 @@ alloc.o: \
+ compile alloc.c alloc.h error.h
+ 	./compile alloc.c
+ 
++logline.o: \
++compile logline.c logline.h 
++	./compile logline.c
++
+ alloc_re.o: \
+ compile alloc_re.c alloc.h byte.h
+ 	./compile alloc_re.c
+@@ -1250,9 +1254,9 @@ readwrite.h open.h error.h case.h auto_q
+ 
+ qmail-pop3d: \
+ load qmail-pop3d.o commands.o case.a timeoutread.o timeoutwrite.o \
+-maildir.o prioq.o now.o env.a strerr.a sig.a open.a getln.a \
++maildir.o prioq.o now.o logline.o env.a strerr.a sig.a open.a getln.a \
+ stralloc.a alloc.a substdio.a error.a str.a fs.a socket.lib
+-	./load qmail-pop3d commands.o case.a timeoutread.o \
++	./load qmail-pop3d commands.o case.a timeoutread.o logline.o \
+ 	timeoutwrite.o maildir.o prioq.o now.o env.a strerr.a sig.a \
+ 	open.a getln.a stralloc.a alloc.a substdio.a error.a str.a \
+ 	fs.a  `cat socket.lib`
+@@ -1264,16 +1268,16 @@ qmail-pop3d.8
+ qmail-pop3d.o: \
+ compile qmail-pop3d.c commands.h sig.h getln.h stralloc.h gen_alloc.h \
+ substdio.h alloc.h open.h prioq.h datetime.h gen_alloc.h scan.h fmt.h \
+-str.h exit.h maildir.h strerr.h readwrite.h timeoutread.h \
++str.h exit.h maildir.h strerr.h readwrite.h timeoutread.h logline.h \
+ timeoutwrite.h
+ 	./compile qmail-pop3d.c
+ 
+ qmail-popup: \
+-load qmail-popup.o commands.o timeoutread.o timeoutwrite.o now.o \
++load qmail-popup.o commands.o timeoutread.o timeoutwrite.o now.o logline.o \
+ case.a fd.a sig.a wait.a stralloc.a alloc.a substdio.a error.a str.a \
+ fs.a socket.lib
+ 	./load qmail-popup commands.o timeoutread.o timeoutwrite.o \
+-	now.o case.a fd.a sig.a wait.a stralloc.a alloc.a \
++	now.o logline.o case.a fd.a sig.a wait.a stralloc.a alloc.a \
+ 	substdio.a error.a str.a fs.a  `cat socket.lib`
+ 
+ qmail-popup.0: \
+@@ -1283,7 +1287,7 @@ qmail-popup.8
+ qmail-popup.o: \
+ compile qmail-popup.c commands.h fd.h sig.h stralloc.h gen_alloc.h \
+ substdio.h alloc.h wait.h str.h byte.h now.h datetime.h fmt.h exit.h \
+-readwrite.h timeoutread.h timeoutwrite.h
++readwrite.h timeoutread.h timeoutwrite.h logline.h
+ 	./compile qmail-popup.c
+ 
+ qmail-pw2u: \
+@@ -1519,12 +1523,12 @@ byte.h env.h exit.h wait.h fork.h fd.h f
+ 	./compile qmail-spp.c
+ 
+ qmail-smtpd: \
+-load qmail-smtpd.o rcpthosts.o commands.o timeoutread.o \
++load qmail-smtpd.o rcpthosts.o commands.o timeoutread.o logline.o \
+ timeoutwrite.o ip.o ipme.o ipalloc.o control.o constmap.o received.o \
+ date822fmt.o now.o qmail.o cdb.a fd.a wait.a datetime.a getln.a \
+ open.a sig.a case.a env.a stralloc.a alloc.a substdio.a error.a str.a \
+ fs.a auto_qmail.o str.a base64.o qmail-spp.o sslSocket.o socket.lib
+-	./load qmail-smtpd rcpthosts.o commands.o timeoutread.o \
++	./load qmail-smtpd rcpthosts.o commands.o timeoutread.o logline.o \
+ 	timeoutwrite.o ip.o ipme.o ipalloc.o control.o constmap.o \
+ 	received.o date822fmt.o now.o qmail.o cdb.a fd.a wait.a \
+ 	datetime.a getln.a open.a sig.a case.a qmail-spp.o env.a stralloc.a \
+@@ -1536,7 +1540,7 @@ qmail-smtpd.8
+ 	nroff -man qmail-smtpd.8 > qmail-smtpd.0
+ 
+ qmail-smtpd.o: \
+-compile qmail-smtpd.c sig.h readwrite.h stralloc.h gen_alloc.h \
++compile qmail-smtpd.c sig.h readwrite.h stralloc.h gen_alloc.h logline.h \
+ substdio.h alloc.h auto_qmail.h control.h received.h constmap.h \
+ error.h ipme.h ip.h ipalloc.h ip.h gen_alloc.h ip.h qmail.h \
+ substdio.h str.h fmt.h scan.h byte.h case.h env.h now.h datetime.h \
+--- netqmail-1.06/commands.c.logline	1998-06-15 12:53:16.000000000 +0200
++++ netqmail-1.06/commands.c	2008-06-28 11:46:50.000000000 +0200
+@@ -3,6 +3,7 @@
+ #include "stralloc.h"
+ #include "str.h"
+ #include "case.h"
++#include "logline.h"
+ 
+ static stralloc cmd = {0};
+ 
+@@ -27,6 +28,7 @@ struct commands *c;
+     if (cmd.len > 0) if (cmd.s[cmd.len - 1] == '\r') --cmd.len;
+ 
+     cmd.s[cmd.len] = 0;
++    logline(3, cmd.s);
+ 
+     i = str_chr(cmd.s,' ');
+     arg = cmd.s + i;
+--- netqmail-1.06/qmail-spp.c.logline	2008-06-28 12:21:52.000000000 +0200
++++ netqmail-1.06/qmail-spp.c	2008-06-28 12:52:30.000000000 +0200
+@@ -42,6 +42,7 @@
+ #include "fd.h"
+ #include "fmt.h"
+ #include "getln.h"
++#include "logline.h"
+ 
+ /* stuff needed from qmail-smtpd */
+ extern void flush();
+@@ -63,9 +64,21 @@ static char rcptcountstr[FMT_ULONG];
+ static unsigned long rcptcount;
+ static unsigned long rcptcountall;
+ static substdio ssdown;
++static substdio sserr;
+ static char downbuf[128];
++static char errbuf[1024];
+ 
+-static void err_spp(s1, s2) char *s1, *s2; { out("451 qmail-spp failure: "); out(s1); out(": "); out(s2); out(" (#4.3.0)\r\n"); }
++static void err_spp(s1, s2) char *s1, *s2; { 
++  stralloc msg = { 0 };
++  stralloc_copys(&msg, "451 qmail-spp failure: ");
++  stralloc_cats(&msg, s1);
++  stralloc_cats(&msg, ": ");
++  stralloc_cats(&msg, s2);
++  stralloc_cats(&msg, " (#4.3.0)\r\n");
++  stralloc_0(&msg);
++  out(msg.s); 
++  logline(0, msg.s);
++}
+ 
+ int spp_init()
+ {
+@@ -105,6 +118,7 @@ void sppout() { if (sppmsg.len) out(sppm
+ int spp(plugins, addrenv) stralloc *plugins; char *addrenv;
+ {
+   static int pipes[2];
++  static int errpipe[2];
+   static int i, pid, wstat, match, last;
+   static stralloc data = {0};
+   static char *(args[4]);
+@@ -122,19 +136,36 @@ int spp(plugins, addrenv) stralloc *plug
+ 
+     if (pipe(pipes) == -1)
+       { err_spp(plugins->s + i, "can't pipe()"); return 0; }
++    if (pipe(errpipe) == -1)
++      { err_spp(plugins->s + i, "can't pipe()"); return 0; }
+ 
+     switch (pid = vfork()) {
+       case -1:
+         err_spp(plugins->s + i, "vfork() failed");
+         return 0;
+       case 0:
+-        close(0); close(pipes[0]); fd_move(1, pipes[1]);
++        close(0);
++	close(pipes[0]);
++	close(errpipe[0]);
++	fd_move(1, pipes[1]);
++	fd_move(2, errpipe[1]);
+         execv(*args, args);
+         _exit(120);
+     }
+ 
+     close(pipes[1]);
++    close(errpipe[1]);
+     substdio_fdbuf(&ssdown, read, pipes[0], downbuf, sizeof(downbuf));
++    substdio_fdbuf(&sserr, read, errpipe[0], errbuf, sizeof(errbuf));
++    
++    do {
++      if (getln(&sserr, &data, &match, '\n') == -1) die_nomem();
++      if (data.len > 1) {
++        data.s[data.len - 1] = 0;
++	logline(0, data.s);
++      }
++    } while (match);
++    
+     do {
+       if (getln(&ssdown, &data, &match, '\n') == -1) die_nomem();
+       if (data.len > 1) {
+@@ -158,7 +189,7 @@ int spp(plugins, addrenv) stralloc *plug
+           case 'D': last = 1; match = 0; break;
+           case 'E':
+           case 'R': last = 1; match = 0;
+-          case 'P': out(data.s + 1); out("\r\n"); break;
++          case 'P': out(data.s + 1); out("\r\n"); logline(0, data.s + 1); break;
+           case 'L':
+             switch (data.s[1]) {
+               case 'M': errors_to = &error_mail; break;
+@@ -176,6 +207,7 @@ int spp(plugins, addrenv) stralloc *plug
+       }
+     } while (match);
+ 
++    close(errpipe[0]);
+     close(pipes[0]);
+     if (wait_pid(&wstat,pid) == -1) { err_spp(plugins->s + i, "wait_pid() failed"); return 0; }
+     if (wait_crashed(wstat)) { err_spp(plugins->s + i, "child crashed"); return 0; }
+@@ -200,6 +232,7 @@ int spp_errors(errors) stralloc *errors;
+   if (!errors->len) return 1;
+   if (!stralloc_0(errors)) die_nomem();
+   out(errors->s);
++  logline(0,errors->s);
+   return 0;
+ }
+ 

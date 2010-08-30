@@ -1,0 +1,7 @@
+# vim set syntax=sh
+
+menu "Development Tools"
+source "apps/development/cvstrac/Config.in"
+source "apps/development/svntrac/Config.in"
+source "apps/development/pkgconfig/Config.in"
+endmenu

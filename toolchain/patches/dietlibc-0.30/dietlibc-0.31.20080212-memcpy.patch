@@ -1,0 +1,11 @@
+--- dietlibc-0.30/lib/memcpy.c.memcpy	2008-04-01 22:37:45.000000000 +0200
++++ dietlibc-0.30/lib/memcpy.c	2008-04-01 22:38:15.000000000 +0200
+@@ -28,6 +28,8 @@
+ 		*c1++ = *c2++;
+ 	    if (n == (size_t) - 1)
+ 		return (res);
++	    dst = c1;
++	    src = c2;
+ 	}
+ 
+ 	lx1 = (unsigned long *) dst;

@@ -1,0 +1,30 @@
+--- busybox-1.8.2/util-linux/umount.c.umount	2008-07-17 14:15:55.000000000 +0200
++++ busybox-1.8.2/util-linux/umount.c	2008-07-17 14:19:00.000000000 +0200
+@@ -26,7 +26,7 @@ int umount_main(int argc, char **argv)
+ {
+ 	int doForce;
+ 	char path[2*PATH_MAX];
+-	struct mntent me;
++	struct mntent *me;
+ 	FILE *fp;
+ 	char *fstype = 0;
+ 	int status = EXIT_SUCCESS;
+@@ -62,14 +62,14 @@ int umount_main(int argc, char **argv)
+ 		if (opt & OPT_ALL)
+ 			bb_error_msg_and_die("cannot open %s", bb_path_mtab_file);
+ 	} else {
+-		while (getmntent_r(fp, &me, path, sizeof(path))) {
++		while ((me = getmntent(fp))) {
+ 			/* Match fstype if passed */
+-			if (fstype && match_fstype(&me, fstype))
++			if (fstype && match_fstype(me, fstype))
+ 				continue;
+ 			m = xmalloc(sizeof(struct mtab_list));
+ 			m->next = mtl;
+-			m->device = xstrdup(me.mnt_fsname);
+-			m->dir = xstrdup(me.mnt_dir);
++			m->device = xstrdup(me->mnt_fsname);
++			m->dir = xstrdup(me->mnt_dir);
+ 			mtl = m;
+ 		}
+ 		endmntent(fp);

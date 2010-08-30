@@ -1,0 +1,11 @@
+--- linux-2.6.28/arch/x86/boot/header.S.firmware	2007-02-22 09:50:32.000000000 +0100
++++ linux-2.6.28/arch/x86/boot/header.S	2007-02-22 10:25:11.000000000 +0100
+@@ -83,7 +83,7 @@
+ 	.ascii	"\n"
+ 	.ascii	"Remove disk and press any key to reboot . . .\r\n"
+ 	.byte	0
+-
++	.ascii	"LSN:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+ 
+ 	# Kernel attributes; used by setup
+ 

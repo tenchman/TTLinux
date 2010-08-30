@@ -1,0 +1,219 @@
+diff -up source/Makefile.in.sambagroups samba-3.0.24/source/Makefile.in
+--- source/Makefile.in.sambagroups	2007-02-04 19:59:28.000000000 +0100
++++ source/Makefile.in	2009-03-13 08:08:51.000000000 +0100
+@@ -736,7 +736,7 @@ WINBINDD_OBJ = \
+ 		$(AFS_OBJ) $(AFS_SETTOKEN_OBJ) \
+ 		$(LIBADS_SERVER_OBJ) $(SERVER_MUTEX_OBJ)
+ 
+-WBINFO_OBJ = nsswitch/wbinfo.o $(LIBSAMBA_OBJ) $(PARAM_OBJ) $(LIB_NONSMBD_OBJ) \
++WBINFO_OBJ = nsswitch/wbinfo.o nsswitch/sambagroups.o $(LIBSAMBA_OBJ) $(PARAM_OBJ) $(LIB_NONSMBD_OBJ) \
+ 		$(SECRETS_OBJ) $(POPT_LIB_OBJ) $(AFS_SETTOKEN_OBJ) $(RPC_PARSE_OBJ1) $(DOSERR_OBJ)
+ 
+ WINBIND_NSS_OBJ = $(WBCOMMON_OBJ) lib/replace1.o @WINBIND_NSS_EXTRA_OBJS@
+@@ -1377,6 +1377,7 @@ bin/wbinfo@EXEEXT@: $(WBINFO_OBJ) @BUILD
+ 	@echo Linking $@
+ 	@$(CC) $(FLAGS) @PIE_LDFLAGS@ -o $@ $(LDFLAGS) $(WBINFO_OBJ) $(DYNEXP) $(LIBS) @POPTLIBS@
+ 
++
+ bin/ntlm_auth@EXEEXT@: $(NTLM_AUTH_OBJ) $(PARAM_OBJ) $(LIB_NONSMBD_OBJ) \
+ 		@BUILD_POPT@ bin/.dummy
+ 	@echo Linking $@
+diff -up source/nsswitch/sambagroups.c.sambagroups samba-3.0.24/source/nsswitch/sambagroups.c
+--- source/nsswitch/sambagroups.c.sambagroups	2009-03-13 08:08:51.000000000 +0100
++++ source/nsswitch/sambagroups.c	2009-03-13 11:16:11.000000000 +0100
+@@ -0,0 +1,174 @@
++#include <stdlib.h>
++#include <fcntl.h>
++#include <unistd.h>
++#include <stdio.h>
++#include <errno.h>
++#include <ctype.h>
++#include <string.h>
++
++#include <sys/file.h>
++#include <sys/stat.h>
++
++#include "includes.h"
++#include "winbindd.h"
++
++#define READSIZ 1024
++
++#define writec(__fd, __chr) write(__fd, __chr, strlen(__chr))
++static int inputfd = 0;
++static int outputfd = 1;
++
++char domainsep = '+';
++
++static inline int hex2int(unsigned char c)
++{
++  if (c >= '0' && c <= '9')
++    return c - '0';
++  else if (c >= 'A' && c <= 'F')
++    return c - 'A' + 10;
++  else if (c >= 'a' && c <= 'f')
++    return c - 'a' + 10;
++  return -1;
++}
++
++static void urldecode(char *s)
++{
++  if (s) {
++    register const char *end = s + strlen(s);
++    char *tmp = s;
++    while (s < end) {
++      if (*s == '%') {
++	int a, b;
++	a = hex2int(s[1]);
++	b = hex2int(s[2]);
++	if (a >= 0 && b >= 0) {
++	  *tmp++ = (a << 4) + b;
++	  s += 3;
++	  continue;
++	}
++      }
++      *tmp++ = *s++;
++    }
++    *tmp = '\0';
++  }
++}
++
++int sambagroups_lookup(char * user, char *group)
++{
++  struct winbindd_request request;
++  struct winbindd_response response;
++  char *domain, *t;
++  int gid, i;
++
++  /* Send off request */
++  
++  ZERO_STRUCT(request);
++  ZERO_STRUCT(response);
++  
++  if (!user) {
++    writec(outputfd, "ERROR: user missing\n"); 
++    return -1;
++  }
++  if (!group) {
++    writec(outputfd, "ERROR: group missing\n"); 
++    return -1;
++  }
++ 
++  /* lookup group sid */
++  if ((t = strchr(user, domainsep))) {
++    domain = user;
++    *t = '\0';
++    fstrcpy(request.data.name.dom_name, domain);
++    *t = '+';
++  } 
++
++  fstrcpy(request.data.name.name, group);
++
++  
++  if (winbindd_request_response(WINBINDD_LOOKUPNAME, &request, &response) !=
++      NSS_STATUS_SUCCESS) {
++    writec(outputfd, "ERROR: cannot lookup group sid\n"); 
++    return -1;
++  }
++
++  ZERO_STRUCT(request);  
++  fstrcpy(request.data.sid, response.data.sid.sid);
++  ZERO_STRUCT(response);
++
++  if (winbindd_request_response(WINBINDD_SID_TO_GID, &request, &response) !=
++      NSS_STATUS_SUCCESS) {
++    writec(outputfd, "ERROR: cannot convert sid to gid\n"); 
++    return -1;
++  }
++
++  gid = (int)response.data.gid;
++
++  
++
++  ZERO_STRUCT(request);
++  ZERO_STRUCT(response);
++  
++  /* do we need domain+user? */
++  fstrcpy(request.data.username, user);
++  
++  if (NSS_STATUS_SUCCESS != winbindd_request_response(WINBINDD_GETGROUPS, &request, &response)) {
++    writec(outputfd, "ERROR: cannot lookup user groups\n");
++    return -1;
++  }
++  
++  for (i = 0; i < response.data.num_entries; i++)
++    if (gid == (int)((gid_t *)response.extra_data.data)[i]) {
++      SAFE_FREE(response.extra_data.data);
++      return 0;
++    }
++
++  
++  SAFE_FREE(response.extra_data.data);
++  return -1;
++}
++
++int sambagroups_listener() {
++  char buf[READSIZ];
++  char outbuf[READSIZ];
++  int rlen;
++  fd_set rfds;
++
++  while (1) {
++    FD_ZERO(&rfds);
++    FD_SET(inputfd, &rfds);
++    
++    if (-1 == select(inputfd + 1, &rfds, NULL, NULL, NULL))
++      continue;
++
++    if (0 < (rlen = read(inputfd, buf, READSIZ-1))) {
++      char *user = NULL;
++      char  *group = NULL;
++      char *tmp = NULL;
++
++      buf[rlen - 1] = '\0';
++      
++      user = buf;
++      if ((group = strchr(user, ' '))) {
++	*group = '\0';
++	group++;
++      }
++      
++      urldecode(user);
++      urldecode(group);
++
++      if (-1 == sambagroups_lookup(user, group))
++	writec(outputfd, "ERR\n");
++      else {
++	memset(outbuf, 0, sizeof(buf));
++	snprintf(outbuf, sizeof(buf) - 2, "OK log=\"%s\"\n", group);
++	writec(outputfd, outbuf);
++      }
++    } else {
++      /* read error or emtpy read */
++      exit(23);
++    }
++
++  }
++  
++}
++
+diff -up source/nsswitch/wbinfo.c.sambagroups samba-3.0.24/source/nsswitch/wbinfo.c
+--- source/nsswitch/wbinfo.c.sambagroups	2007-02-04 19:59:14.000000000 +0100
++++ source/nsswitch/wbinfo.c	2009-03-13 08:08:51.000000000 +0100
+@@ -1149,6 +1149,7 @@ int main(int argc, char **argv)
+ 			/* "user%password,DOM\\user%password,user@EXAMPLE.COM,EXAMPLE.COM\\user%password" }, */
+ #endif
+ 		{ "separator", 0, POPT_ARG_NONE, 0, OPT_SEPARATOR, "Get the active winbind separator", NULL },
++		{ "sambagroups", 'L', POPT_ARG_NONE, 0, 'L', "Listener for squid's group requests", NULL },
+ 		POPT_COMMON_VERSION
+ 		POPT_TABLEEND
+ 	};
+@@ -1375,6 +1376,9 @@ int main(int argc, char **argv)
+ 				goto done;
+ 			}
+ 			break;
++		case 'L':
++		  sambagroups_listener();
++		  break;
+ 		case 'p':
+ 			if (!wbinfo_ping()) {
+ 				d_fprintf(stderr, "could not ping winbindd!\n");

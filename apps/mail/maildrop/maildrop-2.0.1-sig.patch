@@ -1,0 +1,16 @@
+--- maildrop-2.0.1/maildrop/alarmsleep.C.sig	1998-04-17 01:53:22.000000000 +0200
++++ maildrop-2.0.1/maildrop/alarmsleep.C	2005-12-14 09:16:49.000000000 +0100
+@@ -5,10 +5,12 @@
+ 
+ AlarmSleep::AlarmSleep(unsigned nseconds) : flag(0)
+ {
++	sigset_t set;
+ 	Set(nseconds);
+ 	do
+ 	{
+-		sigpause(0);
++		sigemptyset(&set);
++		sigsuspend(&set);
+ 	} while (!flag);
+ 	Cancel();
+ }

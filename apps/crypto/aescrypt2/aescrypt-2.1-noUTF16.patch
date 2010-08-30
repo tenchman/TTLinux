@@ -1,0 +1,21 @@
+--- aescrypt-2.1/aescrypt.c.noutf16	2008-08-24 20:32:19.000000000 +0200
++++ aescrypt-2.1/aescrypt.c	2008-08-24 20:30:33.000000000 +0200
+@@ -788,6 +788,7 @@ int main(int argc, char *argv[])
+             case 'p':
+                 if (optarg != 0)
+                 {
++#ifndef NO_UTF16
+                     passlen = passwd_to_utf16(  optarg,
+                                                 strlen(optarg),
+                                                 MAX_PASSWD_LEN+1,
+@@ -797,6 +798,10 @@ int main(int argc, char *argv[])
+                         cleanup(outfile);
+                         return -1;
+                     }
++#else
++		    strncpy(pass, optarg, MAX_PASSWD_LEN + 1);
++		    passlen = strlen(optarg);
++#endif
+                 }
+                 break;
+             case 'o':

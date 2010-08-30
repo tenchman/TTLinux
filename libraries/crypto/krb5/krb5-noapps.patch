@@ -1,0 +1,11 @@
+diff -up src/Makefile.in.noapps src/Makefile.in
+--- src/Makefile.in.noapps	2007-09-18 05:38:17.000000000 +0200
++++ src/Makefile.in	2008-03-18 09:33:49.000000000 +0100
+@@ -7,7 +7,6 @@ mydir=.
+ SUBDIRS=util include lib @krb524@ kdc kadmin @ldap_plugin_dir@ slave clients \
+ 	plugins/kdb/db2 \
+ 	plugins/preauth/pkinit \
+-	appl tests \
+ 	config-files gen-manpages
+ BUILDTOP=$(REL)$(C)
+ LOCALINCLUDES = -I$(srcdir) 

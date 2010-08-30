@@ -1,0 +1,16 @@
+config CONFIG_CONNTRACKTOOLS
+  bool "conntrack-tools - A connection tracking userspace daemon and command line interface"
+  default y
+  select CONFIG_LIBNFNETLINK
+  select CONFIG_LIBNETFILTER_CONNTRACK
+  help
+    The conntrack-tools package contains two programs:
+	  
+      - conntrack:  the command line interface to interact with the connection
+	            tracking system.
+			       
+      - conntrackd: the connection tracking userspace daemon that can be used to
+		    deploy highly available GNU/Linux firewalls and collect
+		    statistics of the firewall use.
+
+      http://people.netfilter.org/pablo/conntrackd

@@ -1,0 +1,22 @@
+--- xynth-0.8.40/demo/mines/Makefile.make	2007-04-16 23:26:30.000000000 +0200
++++ xynth-0.8.40/demo/mines/Makefile	2007-04-16 23:24:25.000000000 +0200
+@@ -4,7 +4,7 @@
+ 
+ INCDIR  = ../../src/lib ../../src/widget
+ LIBDIR  = ../../src/widget ../../src/lib
+-LDFLAGS = -lwidget -lxynth
++LDFLAGS = -lwidget -lxynth -lstdc++
+ CC      = $(CXX)
+ 
+ OBJS = mines.o
+--- xynth-0.8.40/demo/widget/Makefile.make	2007-04-16 23:26:11.000000000 +0200
++++ xynth-0.8.40/demo/widget/Makefile	2007-04-16 23:25:59.000000000 +0200
+@@ -4,7 +4,7 @@
+ 
+ INCDIR  = ../../src/lib ../../src/widget
+ LIBDIR  = ../../src/widget ../../src/lib
+-LDFLAGS = -lwidget -lxynth
++LDFLAGS = -lwidget -lxynth -lstdc++
+ CC      = $(CXX)
+ 
+ OBJS = widget.o

@@ -1,0 +1,10 @@
+--- cvstrac-2.0.0/main.mk.install	2006-06-27 21:41:44.000000000 +0200
++++ cvstrac-2.0.0/main.mk	2006-06-27 21:42:19.000000000 +0200
+@@ -97,6 +97,7 @@
+ all:	$(APPNAME) index.html
+ 
+ install:	$(APPNAME)
++	mkdir -p $(INSTALLDIR)
+ 	mv $(APPNAME) $(INSTALLDIR)
+ 
+ translate:	$(SRCDIR)/translate.c

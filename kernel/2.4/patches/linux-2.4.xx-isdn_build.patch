@@ -1,0 +1,19 @@
+--- linux/fritz-isdn/src.drv/makefile.build	Wed Dec 10 11:39:57 2003
++++ linux/fritz-isdn/src.drv/makefile	Wed Dec 10 11:44:00 2003
+@@ -1,12 +1,13 @@
++KVER		= `uname -r`
+ SOURCES		= main.c driver.c tables.c queue.c lib.c tools.c 
+ OBJECTS		= $(patsubst %.c,%.o,$(SOURCES)) 
+ LIBRARY		= ../lib/$(CARD)-lib.o
+ 
+-CARD_PATH	= /lib/modules/`uname -r`/misc
+-CS_PATH		= /lib/modules/`uname -r`/pcmcia-external
++CARD_PATH	= $(BUILDROOT)/lib/modules/$(KVER)/misc
++CS_PATH		= $(BUILDROOT)/lib/modules/$(KVER)/pcmcia-external
+ 
+ # As propsed by /usr/include/linux/version.h...
+-KRNLINCL	= /lib/modules/`uname -r`/build/include
++KRNLINCL	= $(BUILDROOT)/lib/modules/$(KVER)/build/include
+ # KRNLINCL	= /usr/src/linux/include
+ 
+ DEFINES		= -DMODULE -D__KERNEL__ -DNDEBUG \

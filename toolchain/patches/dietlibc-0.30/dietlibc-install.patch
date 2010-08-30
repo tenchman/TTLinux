@@ -1,0 +1,51 @@
+--- dietlibc-0.30/Makefile.install	2009-09-01 22:33:58.000000000 +0200
++++ dietlibc-0.30/Makefile	2009-09-01 22:40:36.000000000 +0200
+@@ -84,6 +84,7 @@ endif
+ # ARCH=$(MYARCH)
+ 
+ OBJDIR=bin-$(ARCH)
++PICODIR=pic-$(ARCH)
+ ILIBDIR=$(LIBDIR)-$(ARCH)
+ 
+ HOME=$(shell pwd)
+@@ -97,7 +98,7 @@ WHAT=	$(OBJDIR) $(OBJDIR)/start.o $(OBJD
+ 
+ all: $(WHAT)
+ 
+-profiling: $(OBJDIR)/libgmon.a $(OBJDIR)/pstart.o
++profiling: $(OBJDIR)/libgmon.a $(OBJDIR)/pstart.o $(PICODIR)/pdstart.o
+ 
+ CFLAGS=-pipe -nostdinc
+ CROSS=
+@@ -148,7 +149,6 @@ PWD=$(shell pwd)
+ .SUFFIXES: .S .c
+ 
+ # added real dynamic dietlibc.so
+-PICODIR = pic-$(ARCH)
+ 
+ $(OBJDIR) $(PICODIR):
+ 	mkdir $@
+@@ -255,6 +255,9 @@ $(PICODIR)/%.o: %.c
+ $(PICODIR)/dstart.o: start.S
+ 	$(CROSS)$(CC) $(INC) $(CFLAGS) -fPIC -D__DYN_LIB -c $< -o $@
+ 
++$(PICODIR)/pdstart.o: start.S
++	$(CROSS)$(CC) $(INC) $(CFLAGS) -fPIC -D__DYN_LIB -DPROFILING -c $< -o $@
++
+ $(PICODIR)/dyn_so_start.o: dyn_start.c
+ 	$(CROSS)$(CC) $(INC) $(CFLAGS) -fPIC -D__DYN_LIB -D__DYN_LIB_SHARED -c $< -o $@
+ 	$(COMMENT) $(CROSS)strip -x -R .comment -R .note $@
+@@ -376,10 +379,12 @@ endif
+ 	-$(INSTALL) $(PICODIR)/libm.so $(DESTDIR)$(ILIBDIR)/libm.so
+ 	-$(INSTALL) $(PICODIR)/dyn_start.o $(DESTDIR)$(ILIBDIR)/dyn_dstart.o
+ 	-$(INSTALL) $(PICODIR)/dyn_stop.o  $(DESTDIR)$(ILIBDIR)/dyn_dstop.o
+-	-$(INSTALL) $(PICODIR)/dstart.o $(PICODIR)/dyn_so_start.o $(DESTDIR)$(ILIBDIR)
++	-$(INSTALL) $(PICODIR)/pdstart.o $(PICODIR)/dstart.o $(PICODIR)/dyn_so_start.o $(DESTDIR)$(ILIBDIR)
+ 	$(INSTALL) -m 644 diet.1 $(DESTDIR)$(MAN1DIR)/diet.1
+ 	if test -f $(PICODIR)/libc.so -a ! -f $(DESTDIR)/etc/diet.ld.conf; then echo "$(ILIBDIR)" > $(DESTDIR)/etc/diet.ld.conf; fi
+ 	for i in `find include -name \*.h`; do install -m 644 -D $$i $(DESTDIR)$(prefix)/$$i; done
++	for i in */syscalls.h; \
++	  do install -m 644 $$i $(DESTDIR)$(prefix)/include/asm/`dirname $$i`-syscalls.h; done
+ 
+ uninstall:
+ 	for i in start.o libm.a libpthread.a librpc.a liblatin1.a libcompat.a libcrypt.a libc.a; do rm -f $(DESTDIR)$(ILIBDIR)/$$i; done

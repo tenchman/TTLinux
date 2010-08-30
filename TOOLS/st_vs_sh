@@ -1,0 +1,53 @@
+ABSPATH="/bin /sbin /usr/bin /usr/sbin"
+SHARED="dist-shared"
+STATIC="dist"
+BASE=`pwd`
+
+echo_xlt () {
+  echo -en "\\033[1;32m"
+  echo -en "\\033[${1}G"
+  echo  -n "$2" 
+  echo -en "\\033[0;39m"
+}
+
+echox () {
+  echo -en "\\033[${1}G"
+  echo  -n "$2"
+}
+
+SHARED_SUM=0
+STATIC_SUM=0
+
+for DIR in $ABSPATH ; do
+  pushd $STATIC/$DIR > /dev/null
+  for FILE in * ; do
+    if [ -x "$FILE" -a ! -L "$FILE" ]; then
+
+      [ -x "$BASE/$SHARED/$DIR/$FILE" ] || continue
+
+      STATIC_SIZE=`fstat s "$BASE/$STATIC/$DIR/$FILE"`
+      SHARED_SIZE=`fstat s "$BASE/$SHARED/$DIR/$FILE"`
+
+      SHARED_SUM=$(($SHARED_SUM + $SHARED_SIZE))
+      STATIC_SUM=$(($STATIC_SUM + $STATIC_SIZE))
+
+      echox  0 "$DIR/$FILE"
+      
+      if [ $STATIC_SIZE -ge $SHARED_SIZE ]; then
+	echox 30 "$STATIC_SIZE"
+	echo_xlt 50 "$SHARED_SIZE"
+      else
+	echo_xlt 30 "$STATIC_SIZE"
+	echox 50 "$SHARED_SIZE"
+      fi
+      
+      echo
+    fi
+  done
+  popd > /dev/null
+  echo "-------------------------------------------------------------------------------------"
+done
+
+echox 30 "$STATIC_SUM"
+echox 50 "$SHARED_SUM"
+echo

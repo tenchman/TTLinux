@@ -1,0 +1,181 @@
+--- matrixssl-1-2-2/src/matrixInternal.h.client	2004-11-11 09:12:41.223235392 +0100
++++ matrixssl-1-2-2/src/matrixInternal.h	2004-11-11 09:30:38.585451440 +0100
+@@ -1,4 +1,4 @@
+-/*
++/* vi:set ts=4:
+  *	matrixInternal.h
+  *	Release $Name: MATRIXSSL_1_2_2_OPEN $
+  *
+@@ -56,11 +56,12 @@
+ #define	SSL_FLAGS_READ_SECURE	0x2
+ #define	SSL_FLAGS_WRITE_SECURE	0x4
+ #define SSL_FLAGS_PUBLIC_SECURE	0x8
+-#define SSL_FLAGS_RESUMED		0x10	
++#define SSL_FLAGS_RESUMED		0x10
+ #define SSL_FLAGS_CLOSED		0x20
+ #define SSL_FLAGS_NEED_ENCODE	0x40
+ #define SSL_FLAGS_ERROR			0x80
+-	
++#define SSL_FLAGS_NEED_CERT		0x100
++  
+ /*
+ 	matrixSslSetSessionOption defines
+ */
+--- matrixssl-1-2-2/src/sslEncode.c.client	2004-11-10 14:26:44.000000000 +0100
++++ matrixssl-1-2-2/src/sslEncode.c	2004-11-11 09:41:09.760498248 +0100
+@@ -1,4 +1,4 @@
+-/*
++/* vi:set ts=4:
+  *	sslEncode.c
+  *	Release $Name: MATRIXSSL_1_2_2_OPEN $
+  *
+@@ -148,6 +148,7 @@
+ */
+ #ifdef USE_SERVER_SIDE_SSL
+ 	case SSL_HS_CLIENT_KEY_EXCHANGE:
++		matrixStrDebugMsg("< send SSL_HS_CLIENT_KEY_EXCHANGE\n",NULL);
+ /*
+ 		Determine total length of certs
+ */
+@@ -182,6 +183,7 @@
+ 	send our finished message
+ */
+ 	case SSL_HS_DONE:
++		matrixStrDebugMsg("< send SSL_HS_DONE\n",NULL);
+ 		messageSize = 2 * ssl->recordHeadLen +
+ 			ssl->hshakeHeadLen +
+ 			1 + /* change cipher spec */
+@@ -202,6 +204,7 @@
+ 	handshake
+ */
+ 	case SSL_HS_FINISHED:
++		matrixStrDebugMsg("< send SSL_HS_FINISHED\n",NULL);
+ #ifdef USE_SERVER_SIDE_SSL
+ 		if (ssl->flags & SSL_FLAGS_SERVER) {
+ 			messageSize =
+@@ -241,7 +244,25 @@
+ 			if ((out->buf + out->size) - out->end < messageSize) {
+ 				return SSL_FULL;
+ 			}
++/*			
++			5.6.6 Client certificate
++			TODO -- GERNOT
++			This is the first message the client can send after receiving a
++			server hello done message.  This message is only sent if the server
++			requests a certificate.  If no suitable certificate is available,
++			the client should send a no_certificate alert instead.  This alert
++			is only a warning, however the server may respond with a fatal
++			handshake failure alert if client authentication is required.
++			Client certificates are sent using the Certificate defined in
++			Section 5.6.2.
++			
++			rc = writeCertificate(ssl, out, 0);
++*/
+ 			rc = SSL_SUCCESS;
++			if (ssl->flags & SSL_FLAGS_NEED_CERT) {
++				ssl->flags &= ~SSL_FLAGS_NEED_CERT;
++				rc = writeAlert(ssl, SSL_ALERT_LEVEL_WARNING,SSL_ALERT_NO_CERTIFICATE,out);
++			}
+ 			if (rc == SSL_SUCCESS) {
+ 				rc = writeClientKeyExchange(ssl, out);
+ 			}
+--- matrixssl-1-2-2/src/sslDecode.c.client	2004-11-10 15:01:33.000000000 +0100
++++ matrixssl-1-2-2/src/sslDecode.c	2004-11-11 09:54:31.261651552 +0100
+@@ -437,8 +437,10 @@
+ 		MatrixSSL enabled server the determination on whether to reuse the 
+ 		session is made on that side, so always send the current session
+ */
++		matrixStrDebugMsg(" -- matrixSslEncodeClientHello\n",NULL);
+ 		rc = matrixSslEncodeClientHello(ssl, out, ssl->cipher->id);
+ 	} else {
++		matrixStrDebugMsg(" -- sslEncodeResponse\n",NULL);
+ 		rc = sslEncodeResponse(ssl, out);
+ 	}
+ 	if (rc == SSL_SUCCESS) {
+@@ -506,6 +508,12 @@
+ 		return SSL_ERROR;
+ 	}
+ 	hsType = *c; c++;
++
++	if (hsType == SSL_HS_CERTIFICATE_REQUEST && ssl->hsState == SSL_HS_SERVER_HELLO_DONE)
++	{
++		ssl->hsState = hsType;
++	}
++	
+ /*
+ 	hsType is the received handshake type and ssl->hsState is the expected
+ 	handshake type.  If it doesn't match, or not a rehandshake, error. 
+@@ -594,6 +602,7 @@
+ 
+ #ifdef USE_SERVER_SIDE_SSL
+ 	case SSL_HS_CLIENT_HELLO:
++		matrixStrDebugMsg("> rcvd SSL_HS_CLIENT_HELLO\n",NULL);
+ /*
+ 		First two bytes are the highest supported major and minor SSL versions
+ 		We support only 3.0 (other options are 2.0 or 3.1)
+@@ -883,6 +892,7 @@
+ 		break;
+ 
+ 	case SSL_HS_CLIENT_KEY_EXCHANGE:
++		matrixStrDebugMsg("> rcvd SSL_HS_CLIENT_KEY_EXCHANGE\n",NULL);
+ /*
+ 		This message contains the premaster secret encrypted with the 
+ 		server's public key (from the Certificate).  The premaster
+@@ -948,6 +958,7 @@
+ #endif /* USE_SERVER_SIDE_SSL */
+ 
+ 	case SSL_HS_FINISHED:
++		matrixStrDebugMsg("> rcvd SSL_HS_FINISHED\n",NULL);
+ /*
+ 		Before the finished handshake message, we should have seen the
+ 		CHANGE_CIPHER_SPEC message come through in the record layer, which
+@@ -1005,6 +1016,7 @@
+ 
+ #ifdef USE_CLIENT_SIDE_SSL
+ 	case SSL_HS_HELLO_REQUEST:
++		matrixStrDebugMsg("> rcvd SSL_HS_HELLO_REQUEST\n",NULL);
+ /*	
+ 		No body message and the only one in record flight
+ */
+@@ -1024,6 +1036,7 @@
+ 		break;
+ 
+ 	case SSL_HS_SERVER_HELLO: 
++		matrixStrDebugMsg("> rcvd SSL_HS_SERVER_HELLO\n",NULL);
+ /*
+ 		First two bytes are the negotiated SSL version
+ 		We support only 3.0 (other options are 2.0 or 3.1)
+@@ -1141,8 +1154,9 @@
+ #endif /* USE_CLIENT_SIDE_SSL */
+ 
+ #ifdef USE_CLIENT_SIDE_SSL
+-	case SSL_HS_CERTIFICATE: 
++	case SSL_HS_CERTIFICATE:
+ 
++		matrixStrDebugMsg("> rcvd SSL_HS_CERTIFICATE\n",NULL);
+ 		if (end - c < 3) {
+ 			ssl->err = SSL_ALERT_ILLEGAL_PARAMETER;
+ 			matrixStrDebugMsg("Invalid Certificate message\n", NULL);
+@@ -1239,7 +1253,22 @@
+ 		}
+ 		break;
+ 
++	/* TODO GERNOT */
++	case SSL_HS_CERTIFICATE_REQUEST:
++		matrixStrDebugMsg("> rcvd SSL_HS_CERTIFICATE_REQUEST\n",NULL);
++		if (hsLen == 0) {
++			ssl->err = SSL_ALERT_ILLEGAL_PARAMETER;
++			matrixStrDebugMsg("Invalid Certificate request message\n", NULL);
++			return SSL_ERROR;
++		}
++
++		ssl->flags |= SSL_FLAGS_NEED_CERT;
++		ssl->hsState = SSL_HS_SERVER_HELLO_DONE;
++		c += hsLen;
++		break;
++
+ 	case SSL_HS_SERVER_HELLO_DONE: 
++		matrixStrDebugMsg("> rcvd SSL_HS_SERVER_HELLO_DONE\n",NULL);
+ 		if (hsLen != 0) {
+ 			ssl->err = SSL_ALERT_BAD_CERTIFICATE;
+ 			matrixStrDebugMsg("Can't validate certificate\n", NULL);

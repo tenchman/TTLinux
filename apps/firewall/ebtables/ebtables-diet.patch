@@ -1,0 +1,134 @@
+--- ebtables-v2.0.8-1/Makefile.diet	2007-05-28 18:42:08.000000000 +0200
++++ ebtables-v2.0.8-1/Makefile	2007-06-12 22:43:37.000000000 +0200
+@@ -16,7 +16,7 @@
+ DESTDIR:=
+ 
+ # include DESTDIR param
+-override LIBDIR:=$(DESTDIR)$(LIBDIR)/$(PROGNAME)
++override LIBDIR:=$(LIBDIR)/$(PROGNAME)
+ override MANDIR:=$(DESTDIR)$(MANDIR)
+ override BINDIR:=$(DESTDIR)$(BINDIR)
+ override ETCDIR:=$(DESTDIR)$(ETCDIR)
+@@ -94,7 +94,7 @@
+ 
+ .PHONY: libebtc
+ libebtc: $(OBJECTS2)
+-	$(LD) -shared -soname libebtc.so -o libebtc.so -lc $(OBJECTS2)
++	$(CC) -shared -Wl,-soname=libebtc.so -o libebtc.so -lc $(OBJECTS2)
+ 
+ ebtables: $(OBJECTS) ebtables-standalone.o libebtc
+ 	$(CC) $(CFLAGS) $(CFLAGS_SH_LIB) -o $@ ebtables-standalone.o -I$(KERNEL_INCLUDES) -L. -Lextensions -lebtc $(EXT_LIBSI) \
+@@ -162,6 +162,9 @@
+ tmp3:=$(shell printf $(PIPE) | sed 's/\//\\\//g')
+ .PHONY: scripts
+ scripts: ebtables-save ebtables.sysv ebtables-config
++	install -d $(BINDIR)
++	install -d $(INITDIR)
++	install -d $(SYSCONFIGDIR)
+ 	cat ebtables-save | sed 's/__EXEC_PATH__/$(tmp1)/g' > ebtables-save_
+ 	install -m 0755 -o root -g root ebtables-save_ $(BINDIR)/ebtables-save
+ 	cat ebtables.sysv | sed 's/__EXEC_PATH__/$(tmp1)/g' | sed 's/__SYSCONFIG__/$(tmp2)/g' > ebtables.sysv_
+@@ -188,9 +191,9 @@
+ 
+ .PHONY: install
+ install: $(MANDIR)/man8/ebtables.8 $(ETHERTYPESFILE) exec scripts
+-	mkdir -p $(LIBDIR)
+-	install -m 0755 extensions/*.so $(LIBDIR)
+-	install -m 0755 *.so $(LIBDIR)
++	mkdir -p $(DESTDIR)$(LIBDIR)
++	install -m 0755 extensions/*.so $(DESTDIR)$(LIBDIR)
++	install -m 0755 *.so $(DESTDIR)$(LIBDIR)
+ 
+ .PHONY: clean
+ clean:
+--- ebtables-v2.0.8-1/useful_functions.c.diet	2007-05-28 18:42:08.000000000 +0200
++++ ebtables-v2.0.8-1/useful_functions.c	2007-06-12 22:43:37.000000000 +0200
+@@ -44,6 +44,60 @@
+  * then always has the same length */
+ int ebt_printstyle_mac;
+ 
++#ifdef __dietlibc__
++#include <ctype.h>
++char *ether_ntoa (const struct ether_addr *addr)
++{
++  static char asc[18];
++  sprintf (asc, "%x:%x:%x:%x:%x:%x",
++	   addr->ether_addr_octet[0], addr->ether_addr_octet[1],
++	   addr->ether_addr_octet[2], addr->ether_addr_octet[3],
++	   addr->ether_addr_octet[4], addr->ether_addr_octet[5]);
++  return asc;
++}
++
++struct ether_addr *ether_aton(const char *asc)
++{
++  size_t cnt;
++  struct ether_addr ADDR;
++  struct ether_addr *addr = &ADDR;
++
++  for (cnt = 0; cnt < 6; ++cnt)
++    {
++      unsigned int number;
++      char ch;
++
++      ch = tolower (*asc++);
++      if ((ch < '0' || ch > '9') && (ch < 'a' || ch > 'f'))
++	return NULL;
++      number = isdigit (ch) ? (ch - '0') : (ch - 'a' + 10);
++
++      ch = tolower (*asc);
++      if ((cnt < 5 && ch != ':') || (cnt == 5 && ch != '\0' && !isspace (ch)))
++	{
++	  ++asc;
++	  if ((ch < '0' || ch > '9') && (ch < 'a' || ch > 'f'))
++	    return NULL;
++	  number <<= 4;
++	  number += isdigit (ch) ? (ch - '0') : (ch - 'a' + 10);
++
++	  ch = *asc;
++	  if (cnt < 5 && ch != ':')
++	    return NULL;
++	}
++
++      /* Store result.  */
++      addr->ether_addr_octet[cnt] = (unsigned char) number;
++
++      /* Skip ':'.  */
++      ++asc;
++    }
++
++  return addr;
++}
++
++#endif
++
+ void ebt_print_mac(const unsigned char *mac)
+ {
+ 	if (ebt_printstyle_mac == 2) {
+--- ebtables-v2.0.8-1/extensions/Makefile.diet	2007-05-28 18:42:08.000000000 +0200
++++ ebtables-v2.0.8-1/extensions/Makefile	2007-06-12 22:43:37.000000000 +0200
+@@ -11,13 +11,13 @@
+ EXT_LIBSI+=$(foreach T,$(EXT_TABLES), -lebtable_$(T))
+ 
+ extensions/ebt_%.so: extensions/ebt_%.o
+-	$(CC) -shared -o $@ -lc $< -nostartfiles
++	$(CC) -shared -o $@ $< -nostartfiles
+ 
+ extensions/libebt_%.so: extensions/ebt_%.so
+ 	mv $< $@
+ 
+ extensions/ebtable_%.so: extensions/ebtable_%.o
+-	$(CC) -shared -o $@ -lc $< -nostartfiles
++	$(CC) -shared -o $@ $< -nostartfiles
+ 
+ extensions/libebtable_%.so: extensions/ebtable_%.so
+ 	mv $< $@
+--- ebtables-v2.0.8-1/include/ebtables_u.h.diet	2007-05-28 18:42:08.000000000 +0200
++++ ebtables-v2.0.8-1/include/ebtables_u.h	2007-06-12 22:43:37.000000000 +0200
+@@ -23,6 +23,7 @@
+ 
+ #ifndef EBTABLES_U_H
+ #define EBTABLES_U_H
++#include <linux/types.h>
+ #include <netinet/in.h>
+ #include <linux/netfilter_bridge/ebtables.h>
+ 

@@ -1,0 +1,154 @@
+--- dietlibc-0.30/libcruft/sysconf_cpus.c.thumb	2004-03-26 15:52:46.000000000 +0100
++++ dietlibc-0.30/libcruft/sysconf_cpus.c	2008-03-27 23:25:15.000000000 +0100
+@@ -19,7 +19,7 @@
+ #ifdef SLASH_PROC_OK
+ int __sc_nr_cpus(void);
+ int __sc_nr_cpus() {
+-#if defined(__arm__)
++#if defined(__arm__) || defined(__thumb__)
+   return 1;
+ #else
+   int fd;
+--- dietlibc-0.30/syscalls.h.thumb	2005-03-15 09:51:22.000000000 +0100
++++ dietlibc-0.30/syscalls.h	2008-03-27 23:25:15.000000000 +0100
+@@ -20,7 +20,7 @@
+ #elif defined(__mips__)
+ #include "mips/syscalls.h"
+ 
+-#elif defined(__arm__)
++#elif defined(__arm__) || defined(__thumb__)
+ #include "arm/syscalls.h"
+ 
+ #elif defined(__s390__)
+--- dietlibc-0.30/include/endian.h.thumb	2005-10-04 19:47:03.000000000 +0200
++++ dietlibc-0.30/include/endian.h	2008-03-27 23:25:15.000000000 +0100
+@@ -17,7 +17,7 @@
+ #define __FLOAT_WORD_ORDER	__BYTE_ORDER
+ #endif
+ 
+-#if (defined(__mips__) && !defined(__MIPSEB)) || (defined(__arm__) && !defined(__ARMEB__)) || ((defined(__powerpc__) || defined(__sparc__)) && defined(__LITTLE_ENDIAN__))
++#if (defined(__mips__) && !defined(__MIPSEB)) || ((defined(__arm__) || defined(__thumb__)) && !defined(__ARMEB__)) || ((defined(__powerpc__) || defined(__sparc__)) && defined(__LITTLE_ENDIAN__))
+ #define __BYTE_ORDER		__LITTLE_ENDIAN
+ #define __FLOAT_WORD_ORDER	__BYTE_ORDER
+ #endif
+--- dietlibc-0.30/include/setjmp.h.thumb	2005-09-21 09:33:08.000000000 +0200
++++ dietlibc-0.30/include/setjmp.h	2008-03-27 23:25:15.000000000 +0100
+@@ -163,7 +163,7 @@
+ #endif
+ #endif
+ 
+-#ifdef __arm__
++#if defined(__arm__) || defined(__thumb__)
+ #define __JMP_BUF_SP            8
+ #ifndef __ASSEMBLER__
+ typedef int __jmp_buf[24];
+--- dietlibc-0.30/include/asm/sigcontext.h.thumb	2008-03-27 23:40:54.000000000 +0100
++++ dietlibc-0.30/include/asm/sigcontext.h	2008-03-27 23:41:28.000000000 +0100
+@@ -29,7 +29,7 @@
+ #include <asm/alpha-sigcontext.h>
+ #endif
+ 
+-#ifdef __arm__
++#if defined(__arm__) || defined(__thumb__)
+ #include <asm/arm-sigcontext.h>
+ #endif
+ 
+--- dietlibc-0.30/include/signal.h.thumb	2005-09-21 09:33:08.000000000 +0200
++++ dietlibc-0.30/include/signal.h	2008-03-27 23:25:15.000000000 +0100
+@@ -33,7 +33,7 @@
+ #define SIGTERM		15
+ #define SIGUNUSED	31
+ #if defined(__i386__) || defined(__x86_64__) || defined(__powerpc__) || defined(__arm__) \
+-	|| defined(__s390__) || defined(__ia64__) || defined(__powerpc64__)
++	|| defined(__s390__) || defined(__ia64__) || defined(__powerpc64__) || defined(__thumb__)
+ #define SIGBUS		 7
+ #define SIGUSR1		10
+ #define SIGUSR2		12
+--- dietlibc-0.30/include/sys/ptrace.h.thumb	2005-09-21 09:33:08.000000000 +0200
++++ dietlibc-0.30/include/sys/ptrace.h	2008-03-27 23:25:15.000000000 +0100
+@@ -378,7 +378,7 @@
+ 	/* Used to give failing instruction back to user for ieee exceptions */
+ };
+ 
+-#elif defined(__arm__)
++#elif defined(__arm__) || defined(__thumb__)
+ 
+ /* this assumes armv */
+ #define USR26_MODE	0x00
+--- dietlibc-0.30/include/sys/types.h.thumb	2005-09-21 09:33:08.000000000 +0200
++++ dietlibc-0.30/include/sys/types.h	2008-03-27 23:25:15.000000000 +0100
+@@ -49,7 +49,7 @@
+     typedef uint32_t mode_t;		/* Used for some file attributes. */
+     typedef uint32_t nlink_t;		/* Used for link counts. */
+     typedef uint32_t uid_t;		/* Used for user IDs. */
+-#elif defined(__arm__) || defined(__i386__) || defined(__sparc__) || defined(__s390__) /* make sure __s390x__ hits before __s390__ */
++#elif defined(__arm__) || defined(__thumb__) || defined(__i386__) || defined(__sparc__) || defined(__s390__) /* make sure __s390x__ hits before __s390__ */
+     typedef uint16_t dev_t;
+     typedef uint16_t gid_t;
+     typedef uint16_t mode_t;
+--- dietlibc-0.30/include/sys/ioctl.h.thumb	2006-06-18 20:32:35.000000000 +0200
++++ dietlibc-0.30/include/sys/ioctl.h	2008-03-27 23:25:15.000000000 +0100
+@@ -9,7 +9,7 @@
+ #include <sys/i386-ioctl.h>
+ #elif defined(__alpha__)
+ #include <sys/alpha-ioctl.h>
+-#elif defined(__arm__)
++#elif defined(__arm__) || defined(__thumb__)
+ #include <sys/arm-ioctl.h>
+ #elif defined(__sparc__)
+ #include <sys/sparc-ioctl.h>
+--- dietlibc-0.30/include/sys/shm.h.thumb	2005-09-21 09:33:08.000000000 +0200
++++ dietlibc-0.30/include/sys/shm.h	2008-03-27 23:25:15.000000000 +0100
+@@ -60,7 +60,7 @@
+   unsigned long swap_successes;
+ };
+ 
+-#if defined(__i386__) || defined(__mips__) || defined(__arm__) || defined(__powerpc__) || defined (__powerpc64__) || defined(__s390__) || defined(__hppa__) || defined(__x86_64__) || defined(__ia64__)
++#if defined(__i386__) || defined(__mips__) || defined(__arm__) || defined(__thumb__) || defined(__powerpc__) || defined (__powerpc64__) || defined(__s390__) || defined(__hppa__) || defined(__x86_64__) || defined(__ia64__)
+ #define PAGE_SIZE 4096UL
+ #define PAGE_SHIFT 12
+ #elif defined(__alpha__) || defined(__sparc__)
+--- dietlibc-0.30/include/sys/ucontext.h.thumb	2005-03-07 10:07:40.000000000 +0100
++++ dietlibc-0.30/include/sys/ucontext.h	2008-03-27 23:25:15.000000000 +0100
+@@ -10,7 +10,7 @@
+ typedef struct sigcontext mcontext_t;
+ #endif
+ 
+-#if defined(__i386__) || defined(__arm__) || defined(__mips__) || defined(__mips64__) || defined(__powerpc__) || defined(__powerpc64__) || defined(__hppa__)
++#if defined(__i386__) || defined(__arm__) || defined(__thumb__) || defined(__mips__) || defined(__mips64__) || defined(__powerpc__) || defined(__powerpc64__) || defined(__hppa__)
+ struct ucontext {
+   unsigned long		uc_flags;
+   struct ucontext	*uc_link;
+--- dietlibc-0.30/include/sys/stat.h.thumb	2005-09-21 09:33:08.000000000 +0200
++++ dietlibc-0.30/include/sys/stat.h	2008-03-27 23:25:15.000000000 +0100
+@@ -318,7 +318,7 @@
+ 	unsigned long int __unused4;
+ 	unsigned long int __unused5;
+ };
+-#elif defined(__arm__)
++#elif defined(__arm__) || defined(__thumb__)
+ struct stat {
+ 	uint16_t	st_dev;
+ 	uint16_t	__pad1;
+--- dietlibc-0.30/include/sys/mman.h.thumb	2005-04-25 09:22:24.000000000 +0200
++++ dietlibc-0.30/include/sys/mman.h	2008-03-27 23:25:15.000000000 +0100
+@@ -95,7 +95,7 @@
+ #define MADV_WILLNEED	0x3		/* pre-fault pages */
+ #define MADV_DONTNEED	0x4		/* discard these pages */
+ #define MADV_FREE	0x5		/* (Solaris) contents can be freed */
+-#elif defined (__arm__)
++#elif defined (__arm__) || defined (__thumb__)
+ #define MAP_FIXED	0x10		/* Interpret addr exactly */
+ #define MAP_ANONYMOUS	0x20		/* don't use a file */
+ #define MAP_GROWSDOWN	0x0100		/* stack-like segment */
+--- dietlibc-0.30/include/fcntl.h.thumb	2005-10-04 19:47:03.000000000 +0200
++++ dietlibc-0.30/include/fcntl.h	2008-03-27 23:25:15.000000000 +0100
+@@ -437,7 +437,7 @@
+   pid_t  l_pid;
+ };
+ 
+-#elif defined (__arm__)
++#elif defined (__arm__) || defined (__thumb__)
+ 
+ /* open/fcntl - O_SYNC is only implemented on blocks devices and on files
+    located on an ext2 file system */

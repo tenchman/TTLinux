@@ -1,0 +1,10 @@
+--- dietlibc-0.30/libdl/_dl_main.c.armstack	2008-07-04 14:36:41.000000000 +0200
++++ dietlibc-0.30/libdl/_dl_main.c	2008-07-10 11:37:26.000000000 +0200
+@@ -318,6 +318,7 @@ asm(".text \n"
+ "	mov	fp, #0			@ start new stack frame \n"
+ "	ldr	a1, [sp], #4		@ argc \n"
+ "	mov	a2, sp			@ argv \n"
++"       mov     sp, r4                  @ restore stack pointer \n" 
+ "	add	a3, a2, a1, lsl #2	@ envp \n"
+ "	add	a3, a3, #4 \n"
+ /* PIC code startup */

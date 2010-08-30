@@ -1,0 +1,67 @@
+--- dietlibc-0.30/libcruft/inet_pton.c.alignment	2002-07-03 01:05:47.000000000 +0200
++++ dietlibc-0.30/libcruft/inet_pton.c	2008-07-23 15:43:46.000000000 +0200
+@@ -3,7 +3,6 @@
+ #include <arpa/inet.h>
+ #include <errno.h>
+ #include <string.h>
+-#include "dietfeatures.h"
+ 
+ static unsigned int scan_ip6(const char *s,char ip[16])
+ {
+@@ -14,6 +13,7 @@ static unsigned int scan_ip6(const char 
+   char suffix[16];
+   unsigned int prefixlen=0;
+   unsigned int suffixlen=0;
++  struct in_addr inaddr;
+ 
+   for (i=0; i<16; i++) ip[i]=0;
+ 
+@@ -36,9 +36,11 @@ static unsigned int scan_ip6(const char 
+     if (!i) return 0;
+     if (prefixlen==12 && s[i]=='.') {
+       /* the last 4 bytes may be written as IPv4 address */
+-      if (inet_aton(s,(struct in_addr*)(ip+12)))
++      /* use &inaddr and memcpy() to avoid alignment traps on arme(X) */
++      if (inet_aton(s,&inaddr)) {
++	memcpy(ip+12, &inaddr, sizeof(struct in_addr));
+ 	return i+len;
+-      else
++      } else
+ 	return 0;
+     }
+     ip[prefixlen++] = (u >> 8);
+@@ -59,7 +61,7 @@ static unsigned int scan_ip6(const char 
+       break;
+     {
+       char *tmp;
+-      u=strtol(s,&tmp,16);
++      u=strtoul(s,&tmp,16);
+       i=tmp-s;
+     }
+     if (!i) {
+@@ -67,8 +69,10 @@ static unsigned int scan_ip6(const char 
+       break;
+     }
+     if (suffixlen+prefixlen<=12 && s[i]=='.') {
+-      if (inet_aton(s,(struct in_addr*)(suffix+suffixlen))) {
+-	suffixlen+=4;
++      /* use &inaddr and memcpy() to avoid alignment traps at least on arme(X) */
++      if (inet_aton(s,&inaddr)) {
++	memcpy(suffix+suffixlen, &inaddr, sizeof(struct in_addr));
++	suffixlen+=sizeof(struct in_addr);
+ 	len+=strlen(s);
+ 	break;
+       } else
+--- dietlibc-0.30/libcruft/inet_ntop.c.alignment	2004-01-15 19:44:59.000000000 +0100
++++ dietlibc-0.30/libcruft/inet_ntop.c	2008-07-23 15:47:05.000000000 +0200
+@@ -28,7 +28,9 @@ static unsigned int fmt_ip6(char *s,cons
+   len = 0; compressing = 0; compressed = 0;
+   for (j=0; j<16; j+=2) {
+     if (j==12 && !memcmp(ip,V4mappedprefix,12)) {
+-      inet_ntoa_r(*(struct in_addr*)(ip+12),s);
++      struct in_addr in;
++      memcpy(&in, ip+12, 4);
++      inet_ntoa_r(in,s);
+       temp=strlen(s);
+       return len+temp;
+     }

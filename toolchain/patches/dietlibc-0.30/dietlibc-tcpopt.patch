@@ -1,0 +1,26 @@
+diff -up dietlibc-0.30/include/netinet/tcp.h.tcpopt dietlibc-0.30/include/netinet/tcp.h
+--- dietlibc-0.30/include/netinet/tcp.h.tcpopt	2009-01-06 13:19:13.000000000 +0100
++++ dietlibc-0.30/include/netinet/tcp.h	2009-01-06 13:20:16.000000000 +0100
+@@ -39,6 +39,22 @@ enum {
+   TCP_MAX_STATES /* Leave at the end! */
+ };
+ 
++# define TCPOPT_EOL		0
++# define TCPOPT_NOP		1
++# define TCPOPT_MAXSEG		2
++# define TCPOLEN_MAXSEG		4
++# define TCPOPT_WINDOW		3
++# define TCPOLEN_WINDOW		3
++# define TCPOPT_SACK_PERMITTED	4		/* Experimental */
++# define TCPOLEN_SACK_PERMITTED	2
++# define TCPOPT_SACK		5		/* Experimental */
++# define TCPOPT_TIMESTAMP	8
++# define TCPOLEN_TIMESTAMP	10
++# define TCPOLEN_TSTAMP_APPA	(TCPOLEN_TIMESTAMP+2) /* appendix A */
++
++# define TCPOPT_TSTAMP_HDR	\
++    (TCPOPT_NOP<<24|TCPOPT_NOP<<16|TCPOPT_TIMESTAMP<<8|TCPOLEN_TIMESTAMP)
++
+ #define TCP_STATE_MASK 0xF
+ #define TCP_ACTION_FIN (1 << 7)
+ 

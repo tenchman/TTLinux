@@ -1,0 +1,60 @@
+diff -up openswan2-2.4.12/programs/pluto/connections.c.bug0000771 openswan2-2.4.12/programs/pluto/connections.c
+--- openswan2-2.4.12/programs/pluto/connections.c.bug0000771	2008-02-20 16:19:06.000000000 +0100
++++ openswan2-2.4.12/programs/pluto/connections.c	2008-02-20 16:19:07.000000000 +0100
+@@ -880,14 +880,12 @@ unshare_connection_strings(struct connec
+     if (c->spd.that.ca.ptr != NULL)
+ 	clonetochunk(c->spd.that.ca, c->spd.that.ca.ptr, c->spd.that.ca.len, "ca string");
+ 
+-    /* increment references to algo's, if any */
+-    if(c->alg_info_ike) {
+-	alg_info_addref(IKETOINFO(c->alg_info_ike));
+-    }
++    c->alg_esp = clone_str(c->alg_esp, "esp string (ucs)");
++    c->alg_ike = clone_str(c->alg_ike, "ike string (ucs)");
+ 
+-    if(c->alg_info_esp) {
+-	alg_info_addref(ESPTOINFO(c->alg_info_esp));
+-    }
++    /* increment references to algo's */
++    alg_info_addref(IKETOINFO(c->alg_info_ike));
++    alg_info_addref(ESPTOINFO(c->alg_info_esp));
+ 
+ }
+ 
+@@ -1311,7 +1309,7 @@ add_connection(const struct whack_messag
+ 		       , ugh? ugh : "Unknown");
+ 		return;
+ 	    }
+-	    c->alg_ike = clone_str(wm->ike, "ike string");
++	    c->alg_ike = wm->ike;
+ 	}
+ #endif
+ 	c->sa_ike_life_seconds = wm->sa_ike_life_seconds;
+@@ -1413,12 +1411,6 @@ add_connection(const struct whack_messag
+ #endif
+ 
+ 	unshare_connection_strings(c);
+-#ifdef KERNEL_ALG
+-	alg_info_addref((struct alg_info *)c->alg_info_esp);
+-#endif
+-#ifdef IKE_ALG
+-	alg_info_addref((struct alg_info *)c->alg_info_ike);
+-#endif
+ 
+ 	(void)orient(c);
+ 	connect_to_host_pair(c);
+@@ -1570,14 +1562,6 @@ instantiate(struct connection *c, const 
+     unshare_ietfAttrList(&d->spd.this.groups);
+     unshare_ietfAttrList(&d->spd.that.groups);
+ 
+-
+-#ifdef KERNEL_ALG
+-    alg_info_addref((struct alg_info *)d->alg_info_esp);
+-#endif
+-#ifdef IKE_ALG
+-    alg_info_addref((struct alg_info *)d->alg_info_ike);
+-#endif
+-
+     d->kind = CK_INSTANCE;
+ 
+     passert(oriented(*d));

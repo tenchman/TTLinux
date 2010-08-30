@@ -1,0 +1,230 @@
+--- mini_httpd-1.19/Makefile.xattr	2006-02-28 23:21:41.000000000 +0100
++++ mini_httpd-1.19/Makefile	2006-03-01 23:55:15.000000000 +0100
+@@ -1,5 +1,8 @@
+ # Makefile for mini_httpd
+ 
++XATTR = y
++DIET  = y
++
+ # CONFIGURE: If you are using a SystemV-based operating system, such as
+ # Solaris, you will need to uncomment this definition.
+ #SYSV_LIBS =    -lnsl -lsocket
+@@ -7,7 +10,10 @@
+ # CONFIGURE: Some systems don't need -lcrypt, and indeed they get an
+ # error if you try to link with it.  If you get an error about libcrypt
+ # not found, try commenting out this definition.
++
++ifneq ($(DIET),y)
+ CRYPT_LIB =    -lcrypt
++endif
+ 
+ # CONFIGURE: If you want to compile in support for https, uncomment these
+ # definitions.  You will need to have already built OpenSSL, available at
+@@ -26,7 +32,7 @@
+ 
+ BINDIR =	/usr/local/sbin
+ MANDIR =	/usr/local/man
+-CC =		gcc
++CC =		i386-dietlibc-linux-gcc
+ CDEFS =		${SSL_DEFS} ${SSL_INC}
+ CFLAGS =	-O ${CDEFS}
+ #CFLAGS =	-g ${CDEFS}
+@@ -34,6 +40,11 @@
+ #LDFLAGS =	-g
+ LDLIBS =	${SSL_LIBS} ${SYSV_LIBS} ${CRYPT_LIB}
+ 
++ifeq ($(XATTR),y)
++CFLAGS += -DUSE_XATTR
++# LDLIBS += -lattr
++endif
++
+ all:		mini_httpd htpasswd
+ 
+ mini_httpd:	mini_httpd.o match.o tdate_parse.o $(SSL_OBJS)
+--- mini_httpd-1.19/mini_httpd.c.xattr	2006-01-26 21:02:48.000000000 +0100
++++ mini_httpd-1.19/mini_httpd.c	2006-03-01 23:52:29.000000000 +0100
+@@ -291,7 +291,10 @@
+ static int really_check_referer( void );
+ static char* get_method_str( int m );
+ static void init_mime( void );
+-static const char* figure_mime( char* name, char* me, size_t me_size );
++static char* figure_mime( char* name, char** encodings);
++#ifdef USE_XATTR 
++static char* figure_xmime( int fd, const char *file, char** encodings);
++#endif
+ static void handle_sigterm( int sig );
+ static void handle_sighup( int sig );
+ static void handle_sigchld( int sig );
+@@ -327,9 +330,9 @@
+     usockaddr host_addr6;
+     int gotv4, gotv6;
+     fd_set lfdset;
+-    int maxfd;
++    int maxfd, r;
+     usockaddr usa;
+-    int sz, r;
++    size_t sz;
+     char* cp;
+ 
+     /* Parse args. */
+@@ -1497,14 +1500,12 @@
+ 	}
+     }
+ 
+-
+ static void
+ do_file( void )
+     {
+     char buf[10000];
+-    char mime_encodings[500];
+-    const char* mime_type;
+-    char fixed_mime_type[500];
++    char* mime_encodings = NULL;;
++    char* mime_type = NULL;
+     char* cp;
+     int fd;
+ 
+@@ -1548,20 +1549,31 @@
+ 	    ntoa( &client_addr ), path );
+ 	send_error( 403, "Forbidden", "", "File is protected." );
+ 	}
+-    mime_type = figure_mime( file, mime_encodings, sizeof(mime_encodings) );
+-    (void) snprintf(
+-	fixed_mime_type, sizeof(fixed_mime_type), mime_type, charset );
++
++    /* reset buf */
++    buf[0] = '\0';
++
++#ifdef USE_XATTR 
++    mime_type = figure_xmime( fd, file, &mime_encodings );
++#endif
++
++    if (mime_type == NULL)
++	mime_type = figure_mime( file, &mime_encodings );
++
++    snprintf( buf, sizeof(buf), mime_type, charset );
++
+     if ( if_modified_since != (time_t) -1 &&
+ 	 if_modified_since >= sb.st_mtime )
+ 	{
+ 	add_headers(
+-	    304, "Not Modified", "", mime_encodings, fixed_mime_type,
++	    304, "Not Modified", "", mime_encodings, buf,
+ 	    (off_t) -1, sb.st_mtime );
+ 	send_response();
+ 	return;
+ 	}
++
+     add_headers(
+-	200, "Ok", "", mime_encodings, fixed_mime_type, sb.st_size,
++	200, "Ok", "", mime_encodings, buf, sb.st_size,
+ 	sb.st_mtime );
+     send_response();
+     if ( method == METHOD_HEAD )
+@@ -2391,7 +2403,7 @@
+     else
+ 	{
+ 	usockaddr usa;
+-	int sz = sizeof(usa);
++	size_t sz = sizeof(usa);
+ 	if ( getsockname( conn_fd, &usa.sa, &sz ) < 0 )
+ 	    req_hostname = "UNKNOWN_HOST";
+ 	else
+@@ -3025,23 +3037,84 @@
+ 	}
+     }
+ 
++#ifdef USE_XATTR 
++static char* x_fgetxattr(int fd, const char *attr)
++{
++#define x_bufsize 500
++  char statbuf[x_bufsize];
++  char *buf = statbuf;
++  size_t size = x_bufsize;
++  ssize_t len;
++
++again:
++  /* From the fgetxattr manual page:
++   *
++   * ---
++   * The interface is designed to allow guessing of initial buffer sizes, and
++   * to enlarge buffers when the return value indicates that the buffer
++   * provided was too small.
++   * ---
++   *
++   * Anyway, we try to prevent a double syscall.
++   */
++  
++  if ((len = fgetxattr(fd, attr, buf, size))==-1) {
++    if (errno != ERANGE)
++      return NULL;
++    size = len;
++    buf = e_malloc(size);
++    goto again; /* Holy shit, still a double syscall! */
++  }
++  if (buf == statbuf)
++    return e_strdup(buf);
++  else
++    return buf;
++}
++
++static char *figure_xmime(int fd, const char *file, char** encodings)
++{
++  char *mt, *me, *cs;
++
++  if ((mt = x_fgetxattr(fd, "user.mime_type"))) {
++    if ((me = x_fgetxattr(fd, "user.mime_encoding")))
++      *encodings = me;
++
++    if ((cs = x_fgetxattr(fd, "user.charset"))) {
++      int  size = strlen(mt) + strlen(cs) + sizeof("; charset=");
++      char *nmt = e_malloc(size);
++      snprintf(nmt, size, "%s; charset=%s", mt, cs);
++      /* for the real correct people */
++      /*
++	free(mt);
++	free(cs);
++      */
++      mt = nmt;
++    }
++  } else
++    fprintf(stderr, "DBG:: figure_xmime: no xattr for %s\n", file);
++
++  return mt;
++}
++#endif
+ 
+ /* Figure out MIME encodings and type based on the filename.  Multiple
+ ** encodings are separated by commas, and are listed in the order in
+ ** which they were applied to the file.
+ */
+-static const char*
+-figure_mime( char* name, char* me, size_t me_size )
++static char*
++figure_mime( char* name, char** encodings)
+     {
+     char* prev_dot;
+     char* dot;
+     char* ext;
++    size_t me_size = 500;
++    char me[500];
+     int me_indexes[100], n_me_indexes;
+     size_t ext_len, me_len;
+     int i, top, bot, mid;
+     int r;
+-    const char* default_type = "text/plain; charset=%s";
+-    const char* type;
++    char* default_type = "text/plain; charset=%s";
++    char* type;
+ 
+     /* Peel off encoding extensions until there aren't any more. */
+     n_me_indexes = 0;
+@@ -3123,6 +3196,8 @@
+ 	    }
+ 	}
+ 
++    if (me_len)
++	*encodings = e_strdup(me);
+     return type;
+     }
+ 

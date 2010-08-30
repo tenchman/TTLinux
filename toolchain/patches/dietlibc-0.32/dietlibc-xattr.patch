@@ -1,0 +1,15 @@
+--- dietlibc-cvs/include/attr/xattr.h.xattr	2006-03-09 22:20:16.000000000 +0100
++++ dietlibc-cvs/include/attr/xattr.h	2006-03-09 22:21:25.000000000 +0100
+@@ -4,6 +4,12 @@
+ #include <sys/cdefs.h>
+ #include <sys/types.h>
+ 
++
++#ifndef ENOATTR
++# include <errno.h> 
++# define ENOATTR ENODATA        /* No such attribute */
++#endif
++
+ enum { XATTR_CREATE=1, XATTR_REPLACE=2 };
+ #define XATTR_CREATE XATTR_CREATE
+ #define XATTR_REPLACE XATTR_REPLACE

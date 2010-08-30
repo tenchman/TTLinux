@@ -1,0 +1,26 @@
+--- matrixssl-1-0/src/matrixConfig.h.config	2004-03-30 02:43:34.000000000 +0200
++++ matrixssl-1-0/src/matrixConfig.h	2004-04-19 21:48:15.057389128 +0200
+@@ -75,7 +75,7 @@
+ 	different threads.  The library will still be single threaded,
+ 	but will serialize access to the session cache with a mutex.
+ */
+-#define USE_MULTITHREADING
++// #define USE_MULTITHREADING
+ 
+ /******************************************************************************/
+ /*
+@@ -130,9 +130,13 @@
+ #else
+ #define matrixStrDebugMsg(x, y)
+ #define matrixIntDebugMsg(x, y)
++#ifdef NDEBUG
++#define sslAssert(C)
++#else
+ #define sslAssert(C)  if (C) ; else \
+ 	{fprintf(stderr, "%s:%d sslAssert(%s)\n",__FILE__, __LINE__, #C); }
+-#endif
++#endif /* NDEBUG */
++#endif /* DEBUG */
+ 
+ #ifdef __cplusplus
+ }

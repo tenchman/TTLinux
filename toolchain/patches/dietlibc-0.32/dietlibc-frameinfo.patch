@@ -1,0 +1,59 @@
+--- dietlibc-0.32/dyn_start.c.frameinfo	2008-04-14 17:35:36.000000000 +0200
++++ dietlibc-0.32/dyn_start.c	2009-06-10 21:54:33.000000000 +0200
+@@ -4,13 +4,14 @@
+ #include <sys/cdefs.h>
+ #include <stdlib.h>
+ 
++#ifdef USE_EH_FRAME_REGISTRY
+ struct object {
+   void *detail[7]; /* see gcc sources unwind-dw2-fde.h */
+ };
+ 
+ extern void __register_frame_info (const void *, struct object *) __attribute__((weak));
+ extern void __deregister_frame_info (const void *) __attribute__((weak));
+-
++#endif
+ 
+ typedef void(*structor)(void);
+ 
+@@ -24,6 +25,7 @@ __attribute__((aligned(sizeof(structor))
+ __attribute_used
+ static structor __DTOR_LIST__[1]={((structor)-1)};
+ 
++#ifdef USE_EH_FRAME_REGISTRY
+ /* see gcc-3.4/gcc/crtstuff.c */
+ #if !defined(EH_FRAME_SECTION_CONST)
+ #if defined(__s390__) || defined(__x86_64__)
+@@ -38,7 +40,7 @@ __attribute__((section(".eh_frame")))
+ __attribute__((aligned(sizeof(structor))))
+ __attribute_used
+ EH_FRAME_SECTION_CONST char __EH_FRAME_BEGIN__[] = { };
+-
++#endif
+ 
+ static void __do_global_dtors_aux(void)
+ {
+@@ -50,8 +52,10 @@ void _fini(void) __attribute__((section(
+ __attribute__((section(".fini"))) void _fini(void)
+ {
+   __do_global_dtors_aux();
++#ifdef USE_EH_FRAME_REGISTRY
+   if (__deregister_frame_info)
+     __deregister_frame_info(__EH_FRAME_BEGIN__);
++#endif
+ }
+ 
+ #ifdef WANT_STACKGAP
+@@ -77,10 +81,12 @@ int _dyn_start(int argc, char **argv, ch
+   _init();
+   atexit(_fini);
+ 
++#ifdef USE_EH_FRAME_REGISTRY
+   if (__register_frame_info) {
+     static struct object ob;
+     __register_frame_info(__EH_FRAME_BEGIN__, &ob);
+   }
++#endif
+ 
+ #ifdef WANT_STACKGAP
+   return stackgap(argc, argv, envp);

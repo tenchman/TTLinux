@@ -1,0 +1,15 @@
+--- curl-7.10.3/lib/urldata.h.engine	2003-09-16 16:10:08.000000000 +0200
++++ curl-7.10.3/lib/urldata.h	2003-09-16 16:08:04.000000000 +0200
+@@ -114,9 +114,9 @@
+ };
+ #endif
+ 
+-#ifndef HAVE_OPENSSL_ENGINE_H
+-typedef void ENGINE;
+-#endif
++// #ifndef HAVE_OPENSSL_ENGINE_H
++// typedef void ENGINE;
++// #endif
+ /* struct for data related to SSL and SSL connections */
+ struct ssl_connect_data {
+   bool use;              /* use ssl encrypted communications TRUE/FALSE */

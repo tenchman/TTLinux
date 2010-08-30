@@ -1,0 +1,360 @@
+--- strace-4.5.19/time.c.diet	2009-04-14 14:51:00.000000000 +0200
++++ strace-4.5.19/time.c	2009-12-28 22:39:34.000000000 +0100
+@@ -34,7 +34,11 @@
+ #ifdef LINUX
+ #include <linux/version.h>
+ #include <sys/timex.h>
++#ifdef __dietlibc__
++#include <sys/ioctl.h>
++#else
+ #include <linux/ioctl.h>
++#endif
+ #include <linux/rtc.h>
+ 
+ #ifndef UTIME_NOW
+--- strace-4.5.19/signal.c.diet	2009-10-12 21:54:21.000000000 +0200
++++ strace-4.5.19/signal.c	2009-12-28 22:39:34.000000000 +0100
+@@ -446,7 +446,7 @@ print_sigset(struct tcb *tcp, long addr,
+ #define SI_TKILL	-6	/* Sent by tkill */
+ #endif
+ 
+-#if __GLIBC_MINOR__ < 1
++#if __GLIBC_MINOR__ < 1 && !defined(__dietlibc__)
+ /* Type for data associated with a signal.  */
+ typedef union sigval
+ {
+@@ -1030,7 +1030,7 @@ struct tcb *tcp;
+ 		sigset_t sigm;
+ 		long_to_sigset(tcp->u_arg[0], &sigm);
+ 		printsigmask(&sigm, 0);
+-#ifndef USE_PROCFS
++#if !defined(USE_PROCFS) && !defined(__dietlibc__)
+ 		if ((tcp->u_arg[0] & sigmask(SIGTRAP))) {
+ 			/* Mark attempt to block SIGTRAP */
+ 			tcp->flags |= TCB_SIGTRAPPED;
+@@ -1226,7 +1226,11 @@ sys_sigreturn(struct tcb *tcp)
+ {
+ #if defined(ARM)
+ 	struct pt_regs regs;
++#ifdef __dietlibc__
++	struct sigcontext sc;
++#else
+ 	struct sigcontext_struct sc;
++#endif
+ 
+ 	if (entering(tcp)) {
+ 		tcp->u_arg[0] = 0;
+@@ -1271,8 +1275,11 @@ sys_sigreturn(struct tcb *tcp)
+ 	return 0;
+ #elif defined(I386)
+ 	long esp;
++#ifdef __dietlibc__
++	struct sigcontext sc;
++#else
+ 	struct sigcontext_struct sc;
+-
++#endif
+ 	if (entering(tcp)) {
+ 		tcp->u_arg[0] = 0;
+ 		if (upeek(tcp, 4*UESP, &esp) < 0)
+--- strace-4.5.19/file.c.diet	2009-10-21 15:44:04.000000000 +0200
++++ strace-4.5.19/file.c	2009-12-28 22:39:34.000000000 +0100
+@@ -32,20 +32,27 @@
+ 
+ #include "defs.h"
+ 
+-#include <dirent.h>
++#undef HAVE_STRUCT___OLD_KERNEL_STAT
+ 
+-#ifdef LINUX
+-struct kernel_dirent {
+-	unsigned long   d_ino;
+-	unsigned long   d_off;
+-	unsigned short  d_reclen;
+-	char            d_name[1];
+-};
++#include <dirent.h>
++#include <linux/fadvise.h>
++#if defined(LINUX)
++#if defined(__dietlibc__)
++#define kernel_dirent dirent
++#include <dirent.h>
+ #else
+-# define kernel_dirent dirent
++#define dirent kernel_dirent
++#define dirent64 kernel_dirent64
++#include <linux/types.h>
++#include <linux/dirent.h>
++#undef dirent
++#undef dirent64
++#endif
++#else
++#define kernel_dirent dirent
+ #endif
+ 
+-#ifdef LINUX
++#if defined(LINUX) && !defined(__dietlibc__)
+ #  ifdef LINUXSPARC
+ struct stat {
+ 	unsigned short	st_dev;
+@@ -2798,7 +2805,7 @@ sys_fremovexattr(struct tcb *tcp)
+ 	return 0;
+ }
+ 
+-
++#include <linux/fadvise.h>
+ static const struct xlat advise[] = {
+   { POSIX_FADV_NORMAL,		"POSIX_FADV_NORMAL"	},
+   { POSIX_FADV_RANDOM,		"POSIX_FADV_RANDOM"	},
+--- strace-4.5.19/mem.c.diet	2009-01-23 17:10:22.000000000 +0100
++++ strace-4.5.19/mem.c	2009-12-28 22:39:34.000000000 +0100
+@@ -34,7 +34,7 @@
+ 
+ #include "defs.h"
+ 
+-#ifdef LINUX
++#if defined(LINUX) && !defined(__dietlibc__)
+ #include <asm/mman.h>
+ #endif
+ #include <sys/mman.h>
+--- strace-4.5.19/syscall.c.diet	2009-10-12 21:54:21.000000000 +0200
++++ strace-4.5.19/syscall.c	2009-12-28 22:39:34.000000000 +0100
+@@ -41,6 +41,7 @@
+ #include <sys/user.h>
+ #include <sys/syscall.h>
+ #include <sys/param.h>
++#include <sys/ptrace.h>
+ 
+ #ifdef HAVE_SYS_REG_H
+ #include <sys/reg.h>
+@@ -1022,6 +1023,15 @@ get_scno(struct tcb *tcp)
+ 		/*
+ 		 * Note: we only deal with only 32-bit CPUs here.
+ 		 */
++
++		if (!(tcp->flags & TCB_INSYSCALL) &&
++		    (tcp->flags & TCB_WAITEXECVE)) {
++			/* caught a fake syscall from the execve's exit */
++			tcp->flags &= ~TCB_WAITEXECVE;
++			return 0;
++		}
++ 
++
+ 		if (regs.ARM_cpsr & 0x20) {
+ 			/*
+ 			 * Get the Thumb-mode system call number
+--- strace-4.5.19/resource.c.diet	2009-04-14 14:51:00.000000000 +0200
++++ strace-4.5.19/resource.c	2009-12-28 22:39:34.000000000 +0100
+@@ -35,7 +35,11 @@
+ #include <sys/resource.h>
+ #ifdef LINUX
+ #include <sys/times.h>
++#ifdef __dietlibc__
++#include <sys/sysinfo.h>
++#else
+ #include <linux/kernel.h>
++#endif
+ #endif /* LINUX */
+ #if defined(SVR4) || defined(FREEBSD)
+ #include <sys/times.h>
+--- strace-4.5.19/io.c.diet	2008-05-20 03:11:56.000000000 +0200
++++ strace-4.5.19/io.c	2009-12-28 22:39:34.000000000 +0100
+@@ -275,6 +275,7 @@ struct tcb *tcp;
+ #define PREAD_OFFSET_ARG 3
+ #endif
+ 
++#ifndef HAVE_LONG_LONG_OFF_T
+ int
+ sys_pread(tcp)
+ struct tcb *tcp;
+@@ -306,7 +307,7 @@ struct tcb *tcp;
+ 	}
+ 	return 0;
+ }
+-
++#endif
+ int
+ sys_sendfile(tcp)
+ struct tcb *tcp;
+--- strace-4.5.19/term.c.diet	2008-07-22 02:21:43.000000000 +0200
++++ strace-4.5.19/term.c	2009-12-28 22:39:34.000000000 +0100
+@@ -29,7 +29,7 @@
+ 
+ #include "defs.h"
+ 
+-#ifdef LINUX
++#if defined(LINUX) && !defined(__dietlibc__)
+ /*
+  * The C library's definition of struct termios might differ from
+  * the kernel one, and we need to use the kernel layout.
+--- strace-4.5.19/system.c.diet	2009-06-01 11:59:11.000000000 +0200
++++ strace-4.5.19/system.c	2009-12-28 22:39:34.000000000 +0100
+@@ -82,7 +82,7 @@
+ #include <asm/sysmips.h>
+ #endif
+ 
+-#include <linux/sysctl.h>
++#include <sys/sysctl.h>
+ 
+ static const struct xlat mount_flags[] = {
+ 	{ MS_MGC_VAL,	"MS_MGC_VAL"	},
+@@ -206,7 +206,7 @@ struct tcb *tcp;
+ 	return 0;
+ }
+ 
+-#include <linux/reboot.h>
++#include <sys/reboot.h>
+ static const struct xlat bootflags1[] = {
+ 	{ LINUX_REBOOT_MAGIC1,	"LINUX_REBOOT_MAGIC1"	},
+ 	{ 0,			NULL			},
+--- strace-4.5.19/process.c.diet	2009-10-12 21:54:21.000000000 +0200
++++ strace-4.5.19/process.c	2009-12-28 22:41:05.000000000 +0100
+@@ -46,7 +46,6 @@
+ #include <sys/resource.h>
+ #include <sys/utsname.h>
+ #include <sys/user.h>
+-#include <sys/syscall.h>
+ #include <signal.h>
+ #ifdef SUNOS4
+ #include <machine/reg.h>
+@@ -67,7 +66,6 @@
+ #endif
+ 
+ #ifdef HAVE_LINUX_PTRACE_H
+-#undef PTRACE_SYSCALL
+ # ifdef HAVE_STRUCT_IA64_FPREG
+ #  define ia64_fpreg XXX_ia64_fpreg
+ # endif
+@@ -107,7 +105,13 @@
+ 
+ #ifdef LINUX
+ #include <sched.h>
++#ifdef __dietlibc__
++typedef unsigned short	__kernel_gid_t;
++typedef unsigned short	__kernel_uid_t;
++typedef unsigned int	__kernel_gid32_t;
++#else
+ #include <asm/posix_types.h>
++#endif
+ #undef GETGROUPS_T
+ #define GETGROUPS_T __kernel_gid_t
+ #undef GETGROUPS32_T
+@@ -3612,7 +3616,7 @@ sys_sched_setscheduler(struct tcb *tcp)
+ 		if (umove(tcp, tcp->u_arg[2], &p) < 0)
+ 			tprintf(", %#lx", tcp->u_arg[2]);
+ 		else
+-			tprintf(", { %d }", p.__sched_priority);
++			tprintf(", { %d }", p.sched_priority);
+ 	}
+ 	return 0;
+ }
+@@ -3627,7 +3631,7 @@ sys_sched_getparam(struct tcb *tcp)
+ 		if (umove(tcp, tcp->u_arg[1], &p) < 0)
+ 			tprintf("%#lx", tcp->u_arg[1]);
+ 		else
+-			tprintf("{ %d }", p.__sched_priority);
++			tprintf("{ %d }", p.sched_priority);
+ 	}
+ 	return 0;
+ }
+@@ -3640,7 +3644,7 @@ sys_sched_setparam(struct tcb *tcp)
+ 		if (umove(tcp, tcp->u_arg[1], &p) < 0)
+ 			tprintf("%d, %#lx", (int) tcp->u_arg[0], tcp->u_arg[1]);
+ 		else
+-			tprintf("%d, { %d }", (int) tcp->u_arg[0], p.__sched_priority);
++			tprintf("%d, { %d }", (int) tcp->u_arg[0], p.sched_priority);
+ 	}
+ 	return 0;
+ }
+--- strace-4.5.19/ioctl.c.diet	2007-06-30 13:37:09.000000000 +0200
++++ strace-4.5.19/ioctl.c	2009-12-28 22:39:34.000000000 +0100
+@@ -44,8 +44,12 @@ const struct ioctlent ioctlent0[] = {
+ };
+ 
+ #ifdef LINUX
++#ifdef __dietlibc__
++#include <sys/ioctl.h>
++#else
+ #include <asm/ioctl.h>
+ #endif
++#endif
+ 
+ const int nioctlents0 = sizeof ioctlent0 / sizeof ioctlent0[0];
+ 
+--- strace-4.5.19/linux/ipx.h.diet	2009-12-28 22:39:34.000000000 +0100
++++ strace-4.5.19/linux/ipx.h	2009-12-28 22:39:34.000000000 +0100
+@@ -0,0 +1,74 @@
++#ifndef _IPX_H_
++#define _IPX_H_
++#include <linux/sockios.h>
++#include <sys/socket.h>
++#define IPX_NODE_LEN	6
++#define IPX_MTU		576
++
++struct sockaddr_ipx {
++	sa_family_t	sipx_family;
++	__be16		sipx_port;
++	__be32		sipx_network;
++	unsigned char 	sipx_node[IPX_NODE_LEN];
++	__u8		sipx_type;
++	unsigned char	sipx_zero;	/* 16 byte fill */
++};
++
++/*
++ * So we can fit the extra info for SIOCSIFADDR into the address nicely
++ */
++#define sipx_special	sipx_port
++#define sipx_action	sipx_zero
++#define IPX_DLTITF	0
++#define IPX_CRTITF	1
++
++struct ipx_route_definition {
++	__be32        ipx_network;
++	__be32        ipx_router_network;
++	unsigned char ipx_router_node[IPX_NODE_LEN];
++};
++
++struct ipx_interface_definition {
++	__be32        ipx_network;
++	unsigned char ipx_device[16];
++	unsigned char ipx_dlink_type;
++#define IPX_FRAME_NONE		0
++#define IPX_FRAME_SNAP		1
++#define IPX_FRAME_8022		2
++#define IPX_FRAME_ETHERII	3
++#define IPX_FRAME_8023		4
++#define IPX_FRAME_TR_8022       5 /* obsolete */
++	unsigned char ipx_special;
++#define IPX_SPECIAL_NONE	0
++#define IPX_PRIMARY		1
++#define IPX_INTERNAL		2
++	unsigned char ipx_node[IPX_NODE_LEN];
++};
++	
++struct ipx_config_data {
++	unsigned char	ipxcfg_auto_select_primary;
++	unsigned char	ipxcfg_auto_create_interfaces;
++};
++
++/*
++ * OLD Route Definition for backward compatibility.
++ */
++
++struct ipx_route_def {
++	__be32		ipx_network;
++	__be32		ipx_router_network;
++#define IPX_ROUTE_NO_ROUTER	0
++	unsigned char	ipx_router_node[IPX_NODE_LEN];
++	unsigned char	ipx_device[16];
++	unsigned short	ipx_flags;
++#define IPX_RT_SNAP		8
++#define IPX_RT_8022		4
++#define IPX_RT_BLUEBOOK		2
++#define IPX_RT_ROUTED		1
++};
++
++#define SIOCAIPXITFCRT		(SIOCPROTOPRIVATE)
++#define SIOCAIPXPRISLT		(SIOCPROTOPRIVATE + 1)
++#define SIOCIPXCFGDATA		(SIOCPROTOPRIVATE + 2)
++#define SIOCIPXNCPCONN		(SIOCPROTOPRIVATE + 3)
++#endif /* _IPX_H_ */

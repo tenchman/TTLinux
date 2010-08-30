@@ -1,0 +1,12 @@
+--- linux/include/linux/netfilter_ipv4/ip_tables.h.warn	Thu Apr 14 12:17:02 2005
++++ linux/include/linux/netfilter_ipv4/ip_tables.h	Thu Apr 14 12:17:26 2005
+@@ -336,8 +336,8 @@
+ /*
+  *	Main firewall chains definitions and global var's definitions.
+  */
+-static DECLARE_MUTEX(ipt_mutex);
+ #ifdef __KERNEL__
++static DECLARE_MUTEX(ipt_mutex);
+ 
+ #include <linux/init.h>
+ extern void ipt_init(void) __init;

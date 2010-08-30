@@ -1,0 +1,21 @@
+--- linux-2.6.28/kernel/signal.c.symb	2009-02-09 14:05:32.000000000 +0100
++++ linux-2.6.28/kernel/signal.c	2009-02-09 14:06:02.000000000 +0100
+@@ -1079,6 +1079,7 @@ kill_proc_info(int sig, struct siginfo *
+ 	rcu_read_unlock();
+ 	return error;
+ }
++EXPORT_SYMBOL(kill_proc_info);
+ 
+ /* like kill_pid_info(), but doesn't use uid/euid of "current" */
+ int kill_pid_info_as_uid(int sig, struct siginfo *info, struct pid *pid,
+--- linux-2.6.28/security/security.c.symb	2009-02-09 14:05:53.000000000 +0100
++++ linux-2.6.28/security/security.c	2009-02-09 14:06:02.000000000 +0100
+@@ -124,6 +124,8 @@ int register_security(struct security_op
+ 
+ 	return 0;
+ }
++EXPORT_SYMBOL(register_security);
++EXPORT_SYMBOL(security_ops);
+ 
+ /* Security operations */
+ 

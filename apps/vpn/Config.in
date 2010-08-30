@@ -1,0 +1,9 @@
+menu "Virtual private network"
+  source "apps/vpn/openvpn-1.x/Config.in"
+  source "apps/vpn/openvpn-2.0/Config.in"
+  source "apps/vpn/openvpn-2.1/Config.in"
+  source "apps/vpn/openswan/Config.in"
+  source "apps/vpn/openswan-3.x/Config.in"
+  source "apps/vpn/strongswan-2.x/Config.in"
+  source "apps/vpn/ipsec-tools/Config.in"
+endmenu

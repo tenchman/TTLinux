@@ -1,0 +1,25 @@
+diff -up src/plugins/preauth/pkinit/pkinit_crypto_openssl.c.dentry src/plugins/preauth/pkinit/pkinit_crypto_openssl.c
+--- src/plugins/preauth/pkinit/pkinit_crypto_openssl.c.dentry	2009-04-09 13:57:29.000000000 +0200
++++ src/plugins/preauth/pkinit/pkinit_crypto_openssl.c	2009-04-09 13:57:43.000000000 +0200
+@@ -3922,10 +3922,6 @@ pkinit_get_certs_dir(krb5_context contex
+      */
+     while ((i < MAX_CREDS_ALLOWED) &&  (dentry = readdir(d)) != NULL) {
+ 	/* Ignore subdirectories and anything starting with a dot */
+-#ifdef DT_DIR
+-	if (dentry->d_type == DT_DIR)
+-	    continue;
+-#endif
+ 	if (dentry->d_name[0] == '.')
+ 	    continue;
+ 	len = strlen(dentry->d_name);
+@@ -4892,10 +4888,6 @@ load_cas_and_crls_dir(krb5_context conte
+ 	    goto cleanup;
+ 	}
+ 	/* Ignore subdirectories and anything starting with a dot */
+-#ifdef DT_DIR
+-	if (dentry->d_type == DT_DIR)
+-	    continue;
+-#endif
+ 	if (dentry->d_name[0] == '.')
+ 	    continue;
+ 	snprintf(filename, sizeof(filename), "%s/%s", dirname, dentry->d_name);

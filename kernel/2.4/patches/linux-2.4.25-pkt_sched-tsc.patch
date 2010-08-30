@@ -1,0 +1,11 @@
+--- linux-2.4.25/include/net/pkt_sched.h.tsc	2004-03-04 14:47:58.763729496 +0100
++++ linux-2.4.25/include/net/pkt_sched.h	2004-03-04 14:48:20.391441584 +0100
+@@ -5,7 +5,7 @@
+ #define PSCHED_JIFFIES 		2
+ #define PSCHED_CPU 		3
+ 
+-#define PSCHED_CLOCK_SOURCE	PSCHED_JIFFIES
++#define PSCHED_CLOCK_SOURCE	PSCHED_CPU
+ 
+ #include <linux/config.h>
+ #include <linux/types.h>

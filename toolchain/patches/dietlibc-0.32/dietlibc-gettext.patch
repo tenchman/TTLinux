@@ -1,0 +1,508 @@
+--- dietlibc-0.32/libcruft/dcngettext.c.gettext	2009-06-10 21:56:38.000000000 +0200
++++ dietlibc-0.32/libcruft/dcngettext.c	2009-06-10 21:56:38.000000000 +0200
+@@ -0,0 +1,295 @@
++/* dcngettext -- Copyright (C) 2007 Gernot Tenchio <gernot@tenchio.de>
++ * 
++ * the hashstring function was taken from the GNU gettext package
++ *
++ * see:
++ * http://www.gnu.org/software/gettext/manual/html_mono/gettext.html#SEC136
++**/
++#include <libintl.h>
++#include "dietfeatures.h"
++
++#undef dcngettext
++#ifndef WANT_FULL_GETTEXT
++char* dcngettext (const char *domainname, const char* msgid,
++    const char* msgid_plural, unsigned long int n, int category) {
++  return (char*)(n==1?msgid:msgid_plural);
++}
++#else
++
++#include <limits.h>
++#include <locale.h>
++#include <errno.h>
++#include <alloca.h>
++#include <string.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <unistd.h>
++#include <stdlib.h>
++#include <stdio.h>
++#include <fcntl.h>
++#include "gettext.h"
++#include "dietwarning.h"
++
++#define HASHWORDBITS 32
++#define SWAP(x) x=__swap(x)
++static int32_t __swap(int32_t x) {
++       return ((((x) & 0xff000000) >> 24) | (((x) & 0x00ff0000) >>  8) |
++		(((x) & 0x0000ff00) <<  8) | (((x) & 0x000000ff) << 24));
++}
++struct loaded_domain {
++  struct mo_file_header *buf;
++  char *name;
++  int decided;
++  struct loaded_domain *next;
++};
++
++/* let autoconf think we are GNU gettext */
++int _nl_msg_cat_cntr = 0;
++int *_nl_domain_bindings;
++static struct loaded_domain *textdomains = NULL;
++
++/* taken from gettext/intl/hash-string.c */
++static unsigned long int hashstring(const char *str_param)
++{
++  unsigned long int hval = 0, g;
++  const char *str = str_param;
++  while (*str != '\0') {
++    hval <<= 4;
++    hval += (unsigned char) *str++;
++    g = hval & ((unsigned long int) 0xf << (HASHWORDBITS - 4));
++    if (g != 0) {
++      hval ^= g >> (HASHWORDBITS - 8);
++      hval ^= g;
++    }
++  }
++  return hval;
++}
++
++/**
++ * load a message catalog from
++ *     dir/loc/LC_MESSAGES/dom.mo
++ *
++ * where
++ *    dir: is the dirextory as returned from bindtextdomain(dom, NULL)
++ *    loc: is the locale as returned from setlocale(LC_MESSAGES, NULL)
++ *    dom: is the textdomain as supplied as argument to catalog_open()
++ *
++ * catalog_open() tries to find the catalog in different directories.
++ * If the locale is for example "de_DE.UTF-8" or "de_DE@UTF-8" it tries:
++ *    dir/de_DE[.@]UTF-8/LC_MESSAGES/dom.mo
++ *    dir/de_DE/LC_MESSAGES/dom.mo
++ *    dir/de/LC_MESSAGES/dom.mo
++ *
++ * If the byteorder of catalog differs from the byteorder currently used,
++ * all relevant fields are swapped. You should therefore allways use catalogs
++ * sufficient for your plattform. (GNU gettext uses another approach, it
++ * swaps the fields on every gettext call)
++**/
++static int catalog_open(struct loaded_domain *d, const char* dom)
++{
++  char *dir = bindtextdomain(dom, NULL);
++  char *loc = setlocale(LC_MESSAGES, NULL);
++  char *buf = NULL;
++  int fd = -1, olderrno;
++  struct stat st;
++
++  if (dir && loc) {
++    size_t ldir = strlen(dir);
++    size_t ldom = strlen(dom);
++    size_t lloc = strlen(loc);
++    size_t total = ldir + ldom + lloc + sizeof("LC_MESSAGES///.mo ");
++    char *path, *tmp, locale[lloc+1];
++    ssize_t len;
++    struct mo_file_header *mo;
++    
++    d->decided = -1;
++
++    /* length of "dir/locale/LC_MESSAGES/domain".mo */
++    if (total > PATH_MAX) {
++      errno = ENAMETOOLONG;
++      return -1;
++    }
++
++    strncpy(locale, loc, lloc + 1);
++    path = alloca(total);
++    strncpy(path, dir, ldir);
++    path[ldir++]='/';
++    
++    while (1) {
++      strncpy(path + ldir, locale, lloc);
++      strncpy(path + ldir + lloc, "/LC_MESSAGES/", 13);
++      strncpy(path + ldir + lloc + 13, dom, ldom);
++      strncpy(path + ldir + lloc + ldom + 13, ".mo", 4); /* copy with trailing '\0' */
++
++      if ((fd = open(path, O_RDONLY)) == -1) {
++
++	if (errno != ENOENT)
++	  return -1;
++
++	if ((tmp = strchr(locale, '@')) ||
++	    (tmp = strchr(locale, '.')) ||
++	    (tmp = strchr(locale, '_'))) {
++	  *tmp = '\0';
++	  lloc = tmp - locale;
++	} else
++	  break;
++      } else
++	break;
++    }
++
++    /* not found */
++    if (fd == -1)
++      return -1;
++
++    if (fstat(fd, &st) == -1)
++      goto err;
++
++    /* is mmap()ing the file better? */
++    if ((tmp = buf = malloc(st.st_size)) == NULL)
++      goto err;
++
++    while ((len = read(fd, tmp, st.st_size)) > 0) {
++      if (len == -1)
++	goto err;
++      tmp += len;
++      if ((st.st_size -= len) <= 0)
++	break;
++    }
++    close(fd);
++    d->decided = 1;
++    mo = (struct mo_file_header *)buf;
++
++    /* we swap the bytes (if needed) here, because hopefully the .mo file
++     * is allready in the right byteorder for our platform and we can
++     * therefore skip this step in most cases. */
++
++    if (mo->magic == _MAGIC_SWAPPED) {
++      SWAP(mo->nstrings);
++      SWAP(mo->orig_tab_offset);
++      SWAP(mo->trans_tab_offset);
++      SWAP(mo->hash_tab_size);
++      SWAP(mo->hash_tab_offset);
++      if (mo->nstrings) {
++	struct string_desc *otab = (struct string_desc *)(buf + mo->orig_tab_offset);
++	struct string_desc *ttab = (struct string_desc *)(buf + mo->trans_tab_offset);
++	uint32_t idx, n, *htab = (uint32_t *)(buf + mo->hash_tab_offset);
++	for (idx = 0; idx < mo->nstrings; idx++) {
++	  SWAP(htab[idx]);
++	  if ((n = htab[idx]) == 0)
++	    continue;
++	  n--;
++	  SWAP(otab[n].length);
++	  SWAP(otab[n].offset);
++	  SWAP(ttab[n].length);
++	  SWAP(ttab[n].offset);
++	}
++      }
++    } else if (mo->magic != _MAGIC) {
++      free(buf);
++      return -1;
++    }
++    d->buf = (struct mo_file_header *)buf;
++    return 0;
++  }
++err:
++  olderrno = errno;
++  if (buf)
++    free(buf);
++  if (fd != -1)
++    close(fd);
++  errno = olderrno;
++  return -1;
++}
++
++/* try to find an allready loaded domain. Allocate a new loaded_domain()
++ * struct if not so. */
++static struct loaded_domain *finddomain(const char *domainname)
++{
++  struct loaded_domain *d = textdomains;
++  
++  while (d) {
++    if (strcmp(d->name, domainname)==0)
++      break;
++    d = d->next;
++  }
++  
++  /* domain not found, allocate a new struct and prepend it to
++   * the loaded domainlist */
++  if (!d && (d = malloc(sizeof(struct loaded_domain)))) {
++    if (!(d->name = strdup(domainname))) {
++      free(d);
++      return NULL;
++    }
++    d->decided = 0;
++    d->buf = NULL;
++    d->next = textdomains;
++    textdomains = d;
++  }
++
++  return d;
++}
++
++char* dcngettext (const char *domainname, const char* msgid,
++    const char* msgid_plural, unsigned long int n, int category)
++{
++  int32_t act = -1;
++  char *result = NULL;
++  char *domain = domainname?(char*)domainname:textdomain(NULL);
++  struct loaded_domain *d;
++  const char *translated=n==1?msgid:msgid_plural;
++  
++  if (!translated || !*translated)
++    return (char*)translated;
++  
++  if (category != LC_MESSAGES || !domain || !(d = finddomain(domain)))
++    return (char*)translated;
++  
++  if (!d->decided) {
++    if (catalog_open(d, domain) == -1)
++      return (char*)translated;
++  }
++
++  if (d->buf) {
++    char *data = (char *)d->buf;
++    struct string_desc *otab = (struct string_desc *)(data + d->buf->orig_tab_offset);
++    struct string_desc *ttab = (struct string_desc *)(data + d->buf->trans_tab_offset);
++    uint32_t *htab = (uint32_t *)(data + d->buf->hash_tab_offset);
++    uint32_t len = strlen(msgid);
++    uint32_t val = hashstring(msgid);
++    uint32_t idx = val % d->buf->hash_tab_size;
++    uint32_t inc = 1 + (val % (d->buf->hash_tab_size - 2));
++
++    while(1) {
++      uint32_t n = htab[idx];
++
++      if (n == 0)
++	return (char*)translated;
++      n--;
++      
++      /* no support for system tables so far */ 
++      if (n < d->buf->nstrings) {
++	if (otab[n].length >= len && strcmp(msgid, data + otab[n].offset) == 0) {
++	  act = n;
++	  break;
++	}
++      }
++      if (idx >= d->buf->hash_tab_size - inc)
++	idx -= d->buf->hash_tab_size - inc;
++      else
++	idx += inc;
++    }
++
++    if (act != -1 && act < (int32_t)d->buf->nstrings) {
++      translated = data + ttab[act].offset;
++      if (n != 1) {
++	char *tmp = strchr(translated, '\0');
++	if (tmp)
++	  translated = tmp + 1;
++      }
++    }
++  }
++  return (char*)translated;
++}
++
++link_warning("dcgettext","the gettext function is bloated and leaks memory.")
++#endif
+--- dietlibc-0.32/libcruft/bindtextdomain.c.gettext	2003-11-14 16:16:51.000000000 +0100
++++ dietlibc-0.32/libcruft/bindtextdomain.c	2009-06-10 21:56:38.000000000 +0200
+@@ -2,10 +2,13 @@
+ #include <string.h>
+ #include <stdlib.h>
+ 
++static const char* def="/usr/share/locale";
+ static char* dir;
+ 
+ char* bindtextdomain(const char* domainname,const char* dirname) {
+-  if (dir) free(dir);
+-  if (!(dir=strdup(dirname))) return 0;
+-  return dir;
++  if (dirname) {
++    if (dir) free(dir);
++    if (!(dir=strdup(dirname))) return 0;
++  }
++  return dir?dir:def;
+ }
+--- dietlibc-0.32/libcruft/gettext.c.gettext	2003-11-04 19:26:52.000000000 +0100
++++ dietlibc-0.32/libcruft/gettext.c	2009-06-10 21:56:38.000000000 +0200
+@@ -1,4 +1,9 @@
+ #include <libintl.h>
++#include "dietfeatures.h"
+ 
+ #undef gettext
++#ifndef WANT_FULL_GETTEXT
+ char* gettext(const char* msg) { return (char*)msg; }
++#else
++char* gettext(const char* msg) { return dcngettext(0, msg, NULL, 1, LC_MESSAGES); }
++#endif
+--- dietlibc-0.32/libcruft/dgettext.c.gettext	2003-11-04 19:26:52.000000000 +0100
++++ dietlibc-0.32/libcruft/dgettext.c	2009-06-10 21:56:38.000000000 +0200
+@@ -1,4 +1,11 @@
+ #include <libintl.h>
++#include "dietfeatures.h"
+ 
+ #undef dgettext
+-char* dgettext(const char* domainname, const char* x) { return (char*)x; }
++char* dgettext(const char* domainname, const char* x) {
++#ifndef WANT_FULL_GETTEXT
++  return (char*)x;
++#else
++  return dcngettext(domainname, x, NULL, 1, LC_MESSAGES);
++#endif
++}
+--- dietlibc-0.32/libcruft/textdomain.c.gettext	2003-11-14 15:52:16.000000000 +0100
++++ dietlibc-0.32/libcruft/textdomain.c	2009-06-10 21:56:38.000000000 +0200
+@@ -5,7 +5,9 @@
+ static char* dom;
+ 
+ char* textdomain(const char* domainname) {
+-  if (dom) free(dom);
+-  if (!(dom=strdup(domainname))) return 0;
++  if (domainname) {
++    if (dom) free(dom);
++    if (!(dom=strdup(domainname))) return 0;
++  }
+   return dom;
+ }
+--- dietlibc-0.32/libcruft/dcgettext.c.gettext	2003-11-04 19:26:52.000000000 +0100
++++ dietlibc-0.32/libcruft/dcgettext.c	2009-06-10 21:56:38.000000000 +0200
+@@ -1,5 +1,11 @@
+ #include <libintl.h>
++#include "dietfeatures.h"
+ 
++#undef dcgettext
+ char* dcgettext(const char *domainname, const char *msgid, int category) {
++#ifndef WANT_FULL_GETTEXT
+   return (char*)msgid;
++#else
++  return dcngettext(domainname, msgid, NULL, 1, category);
++#endif
+ }
+--- dietlibc-0.32/libcruft/gettext.h.gettext	2009-06-10 21:56:38.000000000 +0200
++++ dietlibc-0.32/libcruft/gettext.h	2009-06-10 21:56:38.000000000 +0200
+@@ -0,0 +1,27 @@
++#ifndef _GETTEXT_H
++#define _GETTEXT_H 1
++
++#include <inttypes.h>
++
++/* The magic number of the GNU message catalog format.  */
++#define _MAGIC 0x950412de
++#define _MAGIC_SWAPPED 0xde120495
++
++struct mo_file_header
++{
++  uint32_t magic;
++  uint32_t revision;
++  uint32_t nstrings;
++  uint32_t orig_tab_offset;
++  uint32_t trans_tab_offset;
++  uint32_t hash_tab_size;
++  uint32_t hash_tab_offset;
++};
++
++struct string_desc
++{
++  uint32_t length;
++  uint32_t offset;
++};
++
++#endif	/* gettext.h  */
+--- dietlibc-0.32/libcruft/dngettext.c.gettext	2005-09-26 12:52:22.000000000 +0200
++++ dietlibc-0.32/libcruft/dngettext.c	2009-06-10 21:56:38.000000000 +0200
+@@ -1,7 +1,12 @@
+ #include <libintl.h>
++#include "dietfeatures.h"
+ 
+ #undef dngettext
+ char* dngettext (const char* domainname,const char* msgid, const char* msgid_plural, unsigned long int n) {
++#ifndef WANT_FULL_GETTEXT
+   (void)domainname;
+   return (char*)(n==1?msgid:msgid_plural);
++#else
++  return dcngettext(domainname, msgid, msgid_plural, n, LC_MESSAGES);
++#endif
+ }
+--- dietlibc-0.32/libcruft/setlocale.c.gettext	2009-04-21 21:51:12.000000000 +0200
++++ dietlibc-0.32/libcruft/setlocale.c	2009-06-10 21:56:38.000000000 +0200
+@@ -2,7 +2,9 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include "dietlocale.h"
++#include "dietfeatures.h"
+ 
++#ifndef WANT_FULL_GETTEXT
+ char *setlocale (int category, const char *locale) {
+   lc_ctype=CT_8BIT;
+   if (locale && (category==LC_ALL || category==LC_CTYPE)) {
+@@ -20,3 +22,43 @@ char *setlocale (int category, const cha
+   }
+   return "C";
+ }
++#else
++static char *locale_names[13];
++
++static char *__setlocale(int category, const char *locale)
++{
++  if (locale_names[category])
++    free(locale_names[category]);
++  return locale_names[category] = strdup(locale);
++} 
++
++char *setlocale (int category, const char *locale)
++{
++  if ((unsigned int)category > LC_IDENTIFICATION)
++    return 0;
++  
++  if (locale) {
++    char *x = (char *)locale;
++    
++    if (!*x) {
++      x = getenv("LC_ALL");
++      if (!x)
++	x = getenv("LANG");
++      if (!x)
++	x="C";
++    }
++
++    if (category==LC_ALL) {
++      int cat;
++      for (cat = 0; cat <= LC_IDENTIFICATION; cat++)
++	if (!__setlocale(cat, x))
++	  return 0;
++    } else if (!__setlocale(category, x))
++      return 0;
++    
++    if (strstr(x,".UTF-8") || strstr(x,".UTF8")) lc_ctype=CT_UTF8;
++  }
++  return locale_names[category]?locale_names[category]:"C";
++
++}
++#endif
+--- dietlibc-0.32/libcruft/ngettext.c.gettext	2005-09-26 12:52:22.000000000 +0200
++++ dietlibc-0.32/libcruft/ngettext.c	2009-06-10 21:56:38.000000000 +0200
+@@ -1,6 +1,11 @@
+ #include <libintl.h>
++#include "dietfeatures.h"
+ 
+ #undef ngettext
+ char* ngettext (const char* msgid, const char* msgid_plural, unsigned long int n) {
++#ifndef WANT_FULL_GETTEXT
+   return (char*)(n==1?msgid:msgid_plural);
++#else
++  return dcngettext(0, msgid, msgid_plural, n, LC_MESSAGES);
++#endif
+ }
+--- dietlibc-0.32/include/libintl.h.gettext	2005-09-26 12:52:22.000000000 +0200
++++ dietlibc-0.32/include/libintl.h	2009-06-10 21:56:38.000000000 +0200
+@@ -7,6 +7,9 @@
+ 
+ __BEGIN_DECLS
+ 
++#define __GNU_GETTEXT_SUPPORTED_REVISION(major) \
++  ((major) == 0 ? 1 : -1)
++
+ char* gettext(const char* msgid) __THROW;
+ char* dgettext(const char* domainname, const char* msgid) __THROW;
+ char* dcgettext(const char *domainname, const char *msgid, int category) __THROW;
+@@ -25,7 +28,7 @@ char* bind_textdomain_codeset(const char
+ #define dgettext(domainname,msgid) dcgettext(domainname,msgid,LC_MESSAGES)
+ 
+ #define ngettext(msgid1,msgid2,n) dngettext(0,msgid1,msgid2,n)
+-#define dngettext(dn,msgid1,msgid2,n) dngettext(dn,msgid1,msgid2,n,LC_MESSAGES)
++#define dngettext(dn,msgid1,msgid2,n) dcngettext(dn,msgid1,msgid2,n,LC_MESSAGES)
+ 
+ 
+ __END_DECLS

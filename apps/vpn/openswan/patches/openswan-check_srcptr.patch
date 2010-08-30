@@ -1,0 +1,24 @@
+diff -up openswan2-2.4.12/linux/net/ipsec/addrtot.c.check_srcptr openswan2-2.4.12/linux/net/ipsec/addrtot.c
+--- openswan2-2.4.12/linux/net/ipsec/addrtot.c.check_srcptr	2009-07-27 16:44:18.000000000 +0200
++++ openswan2-2.4.12/linux/net/ipsec/addrtot.c	2009-07-27 16:45:40.000000000 +0200
+@@ -72,13 +72,17 @@ char *dst;			/* need not be valid if dst
+ size_t dstlen;
+ {
+ 	const unsigned char *b;
+-	size_t n;
++	size_t n = 0;
+ 	char buf[1+ADDRTOT_BUF+1];	/* :address: */
+ 	char *p;
+-	int t = addrtypeof(src);
++	int t;
+ #	define	TF(t, f)	(((t)<<8) | (f))
+ 
+-	n = addrbytesptr(src, &b);
++	if (src) {
++	  t = addrtypeof(src);
++	  n = addrbytesptr(src, &b);
++	}
++
+ 	if (n == 0) {
+ 	bad:
+ 	  dst[0]='\0';

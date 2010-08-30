@@ -1,0 +1,21 @@
+--- openpam-20030715/include/security/openpam.h.orig	2003-09-05 14:35:17.000000000 +0200
++++ openpam-20030715/include/security/openpam.h	2003-09-05 14:35:30.000000000 +0200
+@@ -41,6 +41,7 @@
+  * Annoying but necessary header pollution
+  */
+ #include <stdarg.h>
++#include <unistd.h>
+ 
+ #ifdef __cplusplus
+ extern "C" {
+--- openpam-20030715/lib/openpam_dynamic.c.orig	2003-09-05 14:38:46.000000000 +0200
++++ openpam-20030715/lib/openpam_dynamic.c	2003-09-05 14:39:08.000000000 +0200
+@@ -82,7 +82,7 @@
+ 		goto buf_err;
+ 	module->dlh = dlh;
+ 	for (i = 0; i < PAM_NUM_PRIMITIVES; ++i) {
+-		module->func[i] = (pam_func_t)dlsym(dlh, _pam_sm_func_name[i]);
++		module->func[i] = (pam_func_t)dlsym(dlh, (char *)_pam_sm_func_name[i]);
+ 		if (module->func[i] == NULL)
+ 			openpam_log(PAM_LOG_DEBUG, "%s: %s(): %s",
+ 			    path, _pam_sm_func_name[i], dlerror());

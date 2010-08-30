@@ -1,0 +1,92 @@
+--- dropbear-0.52/svr-authpasswd.c.onetime	2008-11-11 15:09:03.000000000 +0100
++++ dropbear-0.52/svr-authpasswd.c	2008-12-15 21:01:21.000000000 +0100
+@@ -32,6 +32,47 @@
+ 
+ #ifdef ENABLE_SVR_PASSWORD_AUTH
+ 
++/* stolen from minit */
++int openreadclose(char *fn, char **buf, unsigned long *len) {
++  int fd=open(fn,O_RDONLY);
++  if (fd<0) return -1;
++  if (!*buf) {
++    *len=lseek(fd,0,SEEK_END);
++    lseek(fd,0,SEEK_SET);
++    *buf=(char*)malloc(*len+1);
++    if (!*buf) {
++      close(fd);
++      return -1;
++    }
++  }
++  *len=read(fd,*buf,*len);
++  if (*len != (unsigned long)-1)
++    (*buf)[*len]=0;
++  return close(fd);
++}
++
++/* check for onetime password file */
++void svr_onetime_password() {
++	int pwfd, len;
++	char onetimefile[100] = "/etc/dropbear/";
++	char * pw = NULL;
++
++	strcat(onetimefile, ses.authstate.username);
++	strcat(onetimefile, ".pw");
++
++	/* reset login password per default */
++	if(ses.authstate.pw_passwd) {
++		/* free(ses.authstate.pw_passwd); this cannot work because its not allocated separately */
++		ses.authstate.pw_passwd = "";
++	}
++
++	if((openreadclose(onetimefile, &pw, &len) != -1) && pw) {
++		if (pw[len-1]=='\n')
++		  pw[len-1]=0;
++		ses.authstate.pw_passwd = pw;
++	}
++}
++
+ /* Process a password auth request, sending success or failure messages as
+  * appropriate */
+ void svr_auth_password() {
+@@ -46,6 +87,7 @@ void svr_auth_password() {
+ 
+ 	unsigned int changepw;
+ 
++ 	svr_onetime_password();
+ 	passwdcrypt = ses.authstate.pw_passwd;
+ #ifdef HAVE_SHADOW_H
+ 	/* get the shadow password if possible */
+--- dropbear-0.52/common-session.c.onetime	2008-11-11 15:09:02.000000000 +0100
++++ dropbear-0.52/common-session.c	2008-12-15 20:59:39.000000000 +0100
+@@ -224,6 +224,22 @@ void session_loop(void(*loophandler)()) 
+ 	/* Not reached */
+ }
+ 
++void onetime_cleanup() {
++  struct stat st;
++  char onetimefile[100] = "/etc/dropbear/.keep";
++
++  if (ses.authstate.authdone) {
++    if (stat("/etc/dropbear/.keep", &st) != -1)
++      return;
++
++    strcpy(onetimefile, "/etc/dropbear/");
++    strcat(onetimefile, ses.authstate.pw_name);
++    strcat(onetimefile, ".pw");
++
++    truncate(onetimefile, 0);
++  }
++}
++
+ /* clean up a session on exit */
+ void common_session_cleanup() {
+ 	
+@@ -239,6 +255,8 @@ void common_session_cleanup() {
+ 	m_burn(ses.keys, sizeof(struct key_context));
+ 	m_free(ses.keys);
+ 
++	onetime_cleanup();
++
+ 	chancleanup();
+ 
+ 	TRACE(("leave session_cleanup"))

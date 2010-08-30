@@ -1,0 +1,75 @@
+diff -up iproute2-2.6.29-1/ip/xfrm_policy.c.xfrm_deleteall iproute2-2.6.29-1/ip/xfrm_policy.c
+--- iproute2-2.6.29-1/ip/xfrm_policy.c.xfrm_deleteall	2009-07-21 09:03:55.000000000 +0200
++++ iproute2-2.6.29-1/ip/xfrm_policy.c	2009-07-21 09:14:23.000000000 +0200
+@@ -659,9 +659,12 @@ static int xfrm_policy_keep(const struct
+ 	if (!xfrm_policy_filter_match(xpinfo, ptype))
+ 		return 0;
+ 
+-	if (xb->offset > xb->size) {
+-		fprintf(stderr, "Policy buffer overflow\n");
+-		return -1;
++	if (xb->offset + NLMSG_LENGTH(sizeof(*xpid)) > xb->size) {
++		/* 
++		 * signalize an error condition to rtnl_dump_filter() but
++		 * let xfrm_policy_list_or_deleteall() continue.
++		 */
++		return -2;
+ 	}
+ 
+ 	new_n = (struct nlmsghdr *)(xb->buf + xb->offset);
+@@ -750,7 +753,7 @@ static int xfrm_policy_list_or_deleteall
+ 	}
+ 
+ 	if (rtnl_open_byproto(&rth, 0, NETLINK_XFRM) < 0)
+-		exit(1);
++		return -1;
+ 
+ 	if (deleteall) {
+ 		struct xfrm_buffer xb;
+@@ -770,12 +773,12 @@ static int xfrm_policy_list_or_deleteall
+ 
+ 			if (rtnl_wilddump_request(&rth, preferred_family, XFRM_MSG_GETPOLICY) < 0) {
+ 				perror("Cannot send dump request");
+-				exit(1);
++				return -1;
+ 			}
+ 
+-			if (rtnl_dump_filter(&rth, xfrm_policy_keep, &xb, NULL, NULL) < 0) {
++			if (rtnl_dump_filter(&rth, xfrm_policy_keep, &xb, NULL, NULL) == -1) {
+ 				fprintf(stderr, "Delete-all terminated\n");
+-				exit(1);
++				return -1;
+ 			}
+ 			if (xb.nlmsg_count == 0) {
+ 				if (show_stats > 1)
+@@ -785,7 +788,7 @@ static int xfrm_policy_list_or_deleteall
+ 
+ 			if (rtnl_send_check(&rth, xb.buf, xb.offset) < 0) {
+ 				perror("Failed to send delete-all request");
+-				exit(1);
++				return -1;
+ 			}
+ 			if (show_stats > 1)
+ 				fprintf(stderr, "Delete-all nlmsg count = %d\n", xb.nlmsg_count);
+@@ -796,18 +799,17 @@ static int xfrm_policy_list_or_deleteall
+ 	} else {
+ 		if (rtnl_wilddump_request(&rth, preferred_family, XFRM_MSG_GETPOLICY) < 0) {
+ 			perror("Cannot send dump request");
+-			exit(1);
++			return -1;
+ 		}
+ 
+ 		if (rtnl_dump_filter(&rth, xfrm_policy_print, stdout, NULL, NULL) < 0) {
+ 			fprintf(stderr, "Dump terminated\n");
+-			exit(1);
++			return -1;
+ 		}
+ 	}
+ 
+ 	rtnl_close(&rth);
+-
+-	exit(0);
++	return 0;
+ }
+ 
+ int print_spdinfo( struct nlmsghdr *n, void *arg)

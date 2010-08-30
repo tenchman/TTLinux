@@ -1,0 +1,31 @@
+--- qmail-1.03/cdb_seek.c.errno	2004-03-23 20:53:06.000000000 +0100
++++ qmail-1.03/cdb_seek.c	2004-03-23 20:53:30.000000000 +0100
+@@ -1,6 +1,5 @@
+ #include <sys/types.h>
+ #include <errno.h>
+-extern int errno;
+ #include "cdb.h"
+ 
+ #ifndef SEEK_SET
+--- qmail-1.03/dns.c.errno	2004-03-23 20:53:49.000000000 +0100
++++ qmail-1.03/dns.c	2004-03-23 20:54:03.000000000 +0100
+@@ -7,8 +7,6 @@
+ #include <errno.h>
+ extern int res_query();
+ extern int res_search();
+-extern int errno;
+-extern int h_errno;
+ #include "ip.h"
+ #include "ipalloc.h"
+ #include "fmt.h"
+--- qmail-1.03/error.h.errno	2004-03-23 20:54:22.000000000 +0100
++++ qmail-1.03/error.h	2004-03-23 20:54:47.000000000 +0100
+@@ -1,7 +1,7 @@
+ #ifndef ERROR_H
+ #define ERROR_H
+ 
+-extern int errno;
++#include <errno.h>
+ 
+ extern int error_intr;
+ extern int error_nomem;

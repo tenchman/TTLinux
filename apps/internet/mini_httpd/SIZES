@@ -1,0 +1,5 @@
+USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+openssl  11807  0.2  0.1   1264   760 pts/0    S+   21:59   0:00 apps/internet/mini_httpd/mini_httpd
+matrix   12118  0.2  0.0    508   360 pts/0    S+   22:02   0:00 apps/internet/mini_httpd/mini_httpd
+polar	  4142  0.0  0.0    440   164 ?        Ss   20:20   0:00 apps/internet/mini_httpd/mini_httpd
+

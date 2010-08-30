@@ -1,0 +1,31 @@
+--- strace-4.5.16/strace.c.tgkill	2007-08-03 12:02:00.000000000 +0200
++++ strace-4.5.16/strace.c	2008-07-08 21:51:06.000000000 +0200
+@@ -47,17 +47,21 @@
+ #include <dirent.h>
+ 
+ #ifdef LINUX
+-# include <asm/unistd.h>
+-# if defined __NR_tgkill
+-#  define my_tgkill(pid, tid, sig) syscall (__NR_tgkill, (pid), (tid), (sig))
+-# elif defined __NR_tkill
+-#  define my_tgkill(pid, tid, sig) syscall (__NR_tkill, (tid), (sig))
++# ifdef __dietlibc__
++#  define my_tgkill(pid, tid, sig) tgkill((pid), (tid), (sig))
+ # else
++#  include <asm/unistd.h>
++#  if defined __NR_tgkill
++#   define my_tgkill(pid, tid, sig) syscall (__NR_tgkill, (pid), (tid), (sig))
++#  elif defined __NR_tkill
++#   define my_tgkill(pid, tid, sig) syscall (__NR_tkill, (tid), (sig))
++#  else
+    /* kill() may choose arbitrarily the target task of the process group
+       while we later wait on a that specific TID.  PID process waits become
+       TID task specific waits for a process under ptrace(2).  */
+-#  warning "Neither tkill(2) nor tgkill(2) available, risk of strace hangs!"
+-#  define my_tgkill(pid, tid, sig) kill ((tid), (sig))
++#   warning "Neither tkill(2) nor tgkill(2) available, risk of strace hangs!"
++#   define my_tgkill(pid, tid, sig) kill ((tid), (sig))
++#  endif
+ # endif
+ #endif
+ 

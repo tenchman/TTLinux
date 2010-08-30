@@ -1,0 +1,98 @@
+--- tcc-0.9.20/Makefile.diet	2003-10-05 12:23:48.000000000 +0200
++++ tcc-0.9.20/Makefile	2004-09-01 22:26:17.227859688 +0200
+@@ -4,15 +4,15 @@
+ include config.mak
+ 
+ CFLAGS=-O2 -g -Wall
+-LIBS=-ldl
++LIBS=-ldl -lm
+ CFLAGS_P=$(CFLAGS) -pg -static -DCONFIG_TCC_STATIC
+ LIBS_P=
+ 
+ CFLAGS+=-mpreferred-stack-boundary=2
+ ifeq ($(GCC_MAJOR),2)
+-CFLAGS+=-m386 -malign-functions=0
++CFLAGS+=-malign-functions=0
+ else
+-CFLAGS+=-march=i386 -falign-functions=0
++CFLAGS+=-falign-functions=0
+ endif
+ 
+ DISAS=objdump -d
+@@ -21,7 +21,7 @@
+ # run local version of tcc with local libraries and includes
+ TCC=./tcc -B. -I.
+ 
+-all: tcc libtcc1.a bcheck.o tcc-doc.html tcc.1 libtcc.a libtcc_test
++all: tcc libtcc1.a bcheck.o tcc.1 libtcc.a libtcc_test
+ 
+ Makefile: config.mak
+ 
+@@ -167,7 +167,7 @@
+ 	$(AR) rcs $@ $^
+ 
+ libtcc_test: libtcc_test.c libtcc.a 
+-	$(CC) $(CFLAGS) -I. -o $@ $< -L. -ltcc -ldl
++	$(CC) $(CFLAGS) -I. -o $@ $< -L. -ltcc $(LIBS)
+ 
+ libtest: libtcc_test
+ 	./libtcc_test
+--- tcc-0.9.20/stddef.h.diet	2003-10-05 12:23:48.000000000 +0200
++++ tcc-0.9.20/stddef.h	2004-09-01 22:24:40.902503368 +0200
+@@ -7,12 +7,14 @@
+ typedef __PTRDIFF_TYPE__ ptrdiff_t;
+ #define offsetof(type, field) ((size_t) &((type *)0)->field)
+ 
++#ifndef __dietlibc__
+ /* need to do that because of glibc 2.1 bug (should have a way to test
+    presence of 'long long' without __GNUC__, or TCC should define
+    __GNUC__ ? */
+ #ifndef __int8_t_defined
+ #define __int8_t_defined
+ typedef	char int8_t;
++#endif
+ typedef	short int int16_t;
+ typedef	int int32_t;
+ typedef long long int int64_t;
+--- tcc-0.9.20/bcheck.c.diet	2003-10-05 12:23:48.000000000 +0200
++++ tcc-0.9.20/bcheck.c	2004-09-01 22:24:40.882506408 +0200
+@@ -36,8 +36,8 @@
+ 
+ #define HAVE_MEMALIGN
+ 
+-#ifdef __FreeBSD__
+-#warning Bound checking not fully supported on FreeBSD
++#if defined(__FreeBSD__) || defined(__dietlibc__)
++#warning Bound checking not fully supported on FreeBSD and dietlibc
+ #undef CONFIG_TCC_MALLOC_HOOKS
+ #undef HAVE_MEMALIGN
+ #endif
+@@ -782,7 +782,7 @@
+ {
+     void *ptr;
+     size = size * nmemb;
+-    ptr = __bound_malloc(size);
++    ptr = __bound_malloc(size, NULL);
+     if (!ptr)
+         return NULL;
+     memset(ptr, 0, size);
+--- tcc-0.9.20/tcc.c.diet	2004-09-01 22:24:40.842512488 +0200
++++ tcc-0.9.20/tcc.c	2004-09-01 22:24:40.949496224 +0200
+@@ -8994,6 +8994,8 @@
+     if (level == 0) {
+ #ifdef __FreeBSD__
+         *paddr = uc->uc_mcontext.mc_eip;
++#elif __dietlibc__
++		*paddr = uc->uc_mcontext.eip;
+ #else
+         *paddr = uc->uc_mcontext.gregs[REG_EIP];
+ #endif
+@@ -9001,6 +9003,8 @@
+     } else {
+ #ifdef __FreeBSD__
+         fp = uc->uc_mcontext.mc_ebp;
++#elif __dietlibc__
++		fp = uc->uc_mcontext.ebp;
+ #else
+         fp = uc->uc_mcontext.gregs[REG_EBP];
+ #endif

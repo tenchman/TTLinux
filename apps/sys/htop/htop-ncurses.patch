@@ -1,0 +1,22 @@
+--- htop-0.8.2/RichString.h.ncurses	2009-06-02 22:51:07.000000000 +0200
++++ htop-0.8.2/RichString.h	2009-06-02 22:51:26.000000000 +0200
+@@ -15,7 +15,7 @@
+ 
+ #include "debug.h"
+ #include <assert.h>
+-#ifdef HAVE_LIBNCURSESW
++#ifndef HAVE_LIBNCURSESW
+ #include <curses.h>
+ #else
+ #include <ncursesw/curses.h>
+--- htop-0.8.2/RichString.c.ncurses	2009-06-02 22:51:12.000000000 +0200
++++ htop-0.8.2/RichString.c	2009-06-02 22:51:39.000000000 +0200
+@@ -12,7 +12,7 @@
+ 
+ #include "debug.h"
+ #include <assert.h>
+-#ifdef HAVE_LIBNCURSESW
++#ifndef HAVE_LIBNCURSESW
+ #include <curses.h>
+ #else
+ #include <ncursesw/curses.h>

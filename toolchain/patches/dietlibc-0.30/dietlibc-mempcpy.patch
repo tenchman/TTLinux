@@ -1,0 +1,23 @@
+--- dietlibc-0.30/libugly/mempcpy.c.mempcpy	2007-01-28 22:14:12.000000000 +0100
++++ dietlibc-0.30/libugly/mempcpy.c	2007-01-28 22:11:40.000000000 +0100
+@@ -0,0 +1,7 @@
++#include <string.h>
++
++void* mempcpy(void *dest, const void *src, size_t n)
++{
++  return (char *) memcpy (dest, src, n) + n;
++}
++
+--- dietlibc-0.30/include/string.h.mempcpy	2005-09-26 14:22:20.000000000 +0200
++++ dietlibc-0.30/include/string.h	2007-01-28 22:06:39.000000000 +0100
+@@ -17,6 +17,10 @@
+ int memcmp(const void *s1, const void *s2, size_t n) __THROW __pure;
+ void* memcpy(void *dest, const void *src, size_t n) __THROW;
+ 
++#ifdef _GNU_SOURCE
++void* mempcpy(void *dest, const void *src, size_t n) __THROW;
++#endif
++
+ char *strncpy(char *dest, const char *src, size_t n) __THROW;
+ int strncmp(const char *s1, const char *s2, size_t n) __THROW __pure;
+ char *strncat(char *dest, const char *src, size_t n) __THROW;

@@ -1,0 +1,20 @@
+--- matrixssl-1-7-1c-open/src/pki/rsaPki.c.serial	2005-10-06 23:54:33.000000000 +0200
++++ matrixssl-1-7-1c-open/src/pki/rsaPki.c	2005-10-06 23:55:58.000000000 +0200
+@@ -46,6 +46,7 @@
+ */
+ #ifdef USE_RSA
+ 
++#define ATTRIB_SERIAL_NUMBER	5
+ #define ATTRIB_COUNTRY_NAME		6
+ #define ATTRIB_LOCALITY			7
+ #define ATTRIB_ORGANIZATION		10
+@@ -559,6 +560,9 @@
+ 				}
+ 				attribs->commonName = stringOut;
+ 				break;
++ 			case ATTRIB_SERIAL_NUMBER:
++ 				psFree(stringOut);
++ 				break;
+ /*
+ 			Not a MUST support
+ */

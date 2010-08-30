@@ -1,0 +1,18 @@
+# vim:set syntax=kconfig:
+config CONFIG_GREYLISTING
+  bool "greylisting-spp - reject incoming email, unless delivery was tried before."
+  default n
+  select CONFIG_UCSPI_TCP
+  select CONFIG_UCSPI_TCP_TCPRULES
+  depends on CONFIG_QMAIL
+
+config CONFIG_GREYLISTING_SQLITE
+  bool "use Sqlite3 as database backend"
+  default n
+  select CONFIG_SQLITE_3
+  depends on CONFIG_GREYLISTING
+
+config CONFIG_GREYLISTING_STATIC
+  bool "build a statically linked executable"
+  default y
+  depends on CONFIG_GREYLISTING

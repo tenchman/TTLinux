@@ -1,0 +1,19 @@
+#!/bin/sh
+CROSSARCH=armeb
+DESTDIR=/tmp/kernel
+KVER="2.6.26.2"
+LVER="-4"
+FULLVER="${KVER}${LVER}"
+
+rm -rf ${DESTDIR}
+mkdir -p ${DESTDIR}/boot
+
+export IXP400_DIR=${BASE}
+export ROOTDIR="/opt/projects/ttlinux/nextgen/kernel/work_in_progress/linux-2.6.26.2/"
+export PATH="$PATH:/opt/diet/bin"
+make ARCH=arm LOCALVERSION=${LVER} CROSS_COMPILE=${CROSSARCH}-tt-linux-dietlibc- HOSTCC=gcc oldconfig bzImage modules V=1
+make ARCH=arm LOCALVERSION=${LVER} CROSS_COMPILE=${CROSSARCH}-tt-linux-dietlibc- INSTALL_MOD_PATH=${DESTDIR} HOSTCC=gcc modules_install
+depmod -ae -F System.map -b ${DESTDIR} ${FULLVER}
+cp arch/arm/boot/zImage ${DESTDIR}/boot/vmlinuz-${FULLVER}
+cp System.map ${DESTDIR}/boot/System.map-${FULLVER}
+cd ${DESTDIR} && tar -cjf kernel-${FULLVER}.${CROSSARCH}.tar.bz2 boot lib

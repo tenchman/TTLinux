@@ -1,0 +1,55 @@
+--- module-init-tools-3.1/testing.h.diet	2005-05-09 23:00:01.948441432 +0200
++++ module-init-tools-3.1/testing.h	2005-05-09 23:00:42.788232840 +0200
+@@ -11,7 +11,7 @@
+ #include <errno.h>
+ #include <stdarg.h>
+ #include <sys/utsname.h>
+-#include <asm/unistd.h>
++#include <unistd.h>
+ #include <sys/types.h>
+ #include <dirent.h>
+ 
+--- module-init-tools-3.1/modprobe.c.diet	2005-05-09 22:59:42.690369104 +0200
++++ module-init-tools-3.1/modprobe.c	2005-05-09 23:00:42.738240440 +0200
+@@ -35,7 +35,7 @@
+ #include <elf.h>
+ #include <getopt.h>
+ #include <fnmatch.h>
+-#include <asm/unistd.h>
++#include <unistd.h>
+ #include <sys/wait.h>
+ #include <syslog.h>
+ 
+--- module-init-tools-3.1/rmmod.c.diet	2005-05-09 22:59:51.010104312 +0200
++++ module-init-tools-3.1/rmmod.c	2005-05-09 23:00:42.759237248 +0200
+@@ -22,7 +22,7 @@
+ #include <unistd.h>
+ #include <errno.h>
+ #include <fcntl.h>
+-#include <asm/unistd.h>
++#include <unistd.h>
+ #include <stdarg.h>
+ #include <getopt.h>
+ #include <syslog.h>
+--- module-init-tools-3.1/lsmod.c.diet	2005-05-09 22:59:36.256347224 +0200
++++ module-init-tools-3.1/lsmod.c	2005-05-09 23:00:42.686248344 +0200
+@@ -25,7 +25,7 @@
+ #include <sys/stat.h>
+ #include <errno.h>
+ #include <ctype.h>
+-#include <asm/unistd.h>
++#include <unistd.h>
+ 
+ #include "backwards_compat.c"
+ 
+--- module-init-tools-3.1/insmod.c.diet	2005-05-09 22:59:29.309403320 +0200
++++ module-init-tools-3.1/insmod.c	2005-05-09 23:00:42.669250928 +0200
+@@ -26,7 +26,7 @@
+ #include <sys/stat.h>
+ #include <unistd.h>
+ #include <errno.h>
+-#include <asm/unistd.h>
++#include <unistd.h>
+ 
+ #include "backwards_compat.c"
+ 

@@ -1,0 +1,20 @@
+diff -up cvstrac-2.0.1/main.mk.install cvstrac-2.0.1/main.mk
+--- cvstrac-2.0.1/main.mk.install	2006-04-22 18:40:08.000000000 +0200
++++ cvstrac-2.0.1/main.mk	2009-07-14 21:09:29.000000000 +0200
+@@ -97,6 +97,7 @@ APPNAME = cvstrac$(E)
+ all:	$(APPNAME) index.html
+ 
+ install:	$(APPNAME)
++	mkdir -p $(INSTALLDIR)
+ 	mv $(APPNAME) $(INSTALLDIR)
+ 
+ translate:	$(SRCDIR)/translate.c
+@@ -115,7 +116,7 @@ maketestdb:	$(SRCDIR)/maketestdb.c
+ 	$(BCC) -o maketestdb $(SRCDIR)/maketestdb.c $(LIBSQLITE)
+ 
+ $(APPNAME):	headers $(OBJ)
+-	$(TCC) -o $(APPNAME) $(OBJ) $(LIBSQLITE)
++	$(TCC) $(LDFLAGS) -o $(APPNAME) $(OBJ) $(LIBSQLITE)
+ 
+ index.html:	$(SRCDIR)/webpage.html $(SRCDIR)/VERSION
+ 	sed -f $(SRCDIR)/VERSION $(SRCDIR)/webpage.html >index.html

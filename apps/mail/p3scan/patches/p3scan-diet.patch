@@ -1,0 +1,254 @@
+diff -up p3scan-2.3.2/Makefile-noripmime.diet p3scan-2.3.2/Makefile-noripmime
+--- p3scan-2.3.2/Makefile-noripmime.diet	2005-12-12 16:00:00.000000000 +0100
++++ p3scan-2.3.2/Makefile-noripmime	2009-10-12 15:45:50.000000000 +0200
+@@ -36,22 +36,22 @@ DISTNAME="p3scan-2.3.2"
+ 
+ # User options
+ LOGOPT="LOG_PID|LOG_CONS"
+-LOGFAC="LOG_DAEMON"
++LOGFAC="LOG_MAIL"
+ LOGSET=-DLOGOPT=${LOGOPT} -DLOGFAC=${LOGFAC}
+ LANG=en
+ CC=gcc
+ SYSINS=install
+ #CFLAGS=-Wall -O3 -march=i686 ${LOGSET}
+-CFLAGS=-Wall -O2 $(LOGSET)
++CFLAGS=-Wall -O2 $(LOGSET) -I/opt/diet/include -static -UDEMIME
+ 
+ #ifdef DEMIME :)
+ #LDFLAGS=-L. -lripmime -lpcre -lssl -lcrypto #-static
+ #else
+-LDFLAGS=-L. -lpcre -lssl -lcrypto
++LDFLAGS+=-L. -lpcre -lssl -lcrypto
+ #endif :)
+ 
+-PREFIX=/usr
+-DESTDIR=
++PREFIX=/opt/diet
++DESTDIR="$$dc_destdir"
+ #MANDIR=$(PREFIX)/share/man/man8
+ MANDIR=$(PREFIX)/man/man8
+ piddir=/var/run/$(PROGS)
+@@ -59,7 +59,7 @@ datadir=/var/spool/$(PROGS)
+ notify=/var/spool/$(PROGS)/notify
+ userdir=/etc/$(PROGS)
+ docdir=/usr/doc/$(DISTNAME)
+-user=mail:mail
++user=root:root
+ # End user options
+ 
+ OBJECTS=getlinep3.o getline_ssl.o parsefile.o p3scan.o \
+@@ -89,14 +89,8 @@ dep depend .dep:
+ 	mv .tmp.dep .dep
+ 
+ install: p3scan
+-	$(SYSINS) -v -m 550 --strip p3scan $(PREFIX)/sbin/
++	$(SYSINS) -v -m 550 --strip p3scan $(DESTDIR)$(PREFIX)/sbin/
+ 	@if [ -f $(DESTDIR)/etc/sysconfig/init ] ; then $(SYSINS) -v -m 755 p3scan-init.d $(DESTDIR)/etc/init.d/p3scan; fi
+-	@if [ -f $(DESTDIR)/etc/rc.d/rc.p3scan ] ; then \
+-	   echo "rc.p3scan already exists, copying to $(DESTDIR)/etc/rc.d/rc.p3scan.new" ; \
+-	   $(SYSINS) -v -m 660 rc.p3scan $(DESTDIR)/etc/rc.d/rc.p3scan.new ; \
+-	else \
+-	   $(SYSINS) -v -m 755 rc.p3scan $(DESTDIR)/etc/rc.d ; \
+-	fi
+ 	@if test -d $(DESTDIR)$(piddir); then echo "$(DESTDIR)$(piddir) exists, not creating."; else mkdir -p $(DESTDIR)$(piddir); fi
+ 	@if test -d $(DESTDIR)$(userdir); then echo "$(DESTDIR)$(userdir) exits, not creating."; \
+ 	else mkdir -p $(DESTDIR)$(userdir); chown $(user) $(DESTDIR)$(userdir); fi
+@@ -116,8 +110,6 @@ install: p3scan
+ 	@chown $(user) $(DESTDIR)$(piddir)
+ 	@chown -R $(user) $(DESTDIR)$(datadir)
+ 	@chmod -R 700 $(DESTDIR)$(datadir)
+-	$(SYSINS) -v -m 644 p3scan.8.gz $(DESTDIR)$(MANDIR)
+-	$(SYSINS) -v -m 644 p3scan_readme.8.gz $(DESTDIR)$(MANDIR)
+ 	@if test -d $(DESTDIR)$(docdir); then echo "$(DESTDIR)$(docdir) exists, not creating."; else mkdir -p $(DESTDIR)$(docdir); fi
+ 	$(SYSINS) -v -m 644 AUTHORS $(DESTDIR)$(docdir)
+ 	$(SYSINS) -v -m 644 CHANGELOG $(DESTDIR)$(docdir)
+diff -up p3scan-2.3.2/p3scan.c.diet p3scan-2.3.2/p3scan.c
+--- p3scan-2.3.2/p3scan.c.diet	2005-12-12 16:00:00.000000000 +0100
++++ p3scan-2.3.2/p3scan.c	2009-10-12 15:43:55.000000000 +0200
+@@ -68,7 +68,11 @@ TODO: Wanted: no iptables support
+ #include <libgen.h>
+ #include <errno.h>
+ #include <dirent.h>
+-#include <sys/statvfs.h>
++#ifndef __dietlibc__
++ #include <sys/statvfs.h>
++#else
++ #include <sys/vfs.h>
++#endif
+ #include <assert.h>
+ #include <sys/select.h>
+ 
+@@ -699,7 +703,11 @@ int scan_mailfile(struct proxycontext *p
+ #define COPYMSG "/var/spool/p3scan/copymsg "
+    FILE * scanner;
+    static char  line[4096*16];
++#ifdef __dietlibc__
++   struct statfs fs;
++#else
+    struct statvfs fs;
++#endif
+    int htmlfd=0;
+ 
+    ret=checktimeout(p);
+@@ -720,7 +728,11 @@ int scan_mailfile(struct proxycontext *p
+    what the user determines is enough room in p3scan.conf
+    This was already done... but it is also dynamic so check again.
+    */
++#ifdef __dietlibc__
++   if ( statfs( config->virusdir, &fs ) == SCANNER_RET_ERR){
++#else
+    if ( statvfs( config->virusdir, &fs ) == SCANNER_RET_ERR){
++#endif
+       p->errmsg=1;
+       context_uninit(p);
+       config->emergency="Unable to get available space!";
+@@ -2325,6 +2337,7 @@ void usage(char * progname){
+    "  -v, --version           Prints version information\n"
+    "  -x, --demime            eXtract all MIME-Parts before scanning\n"
+    "  -X, --xmail=FILE        Xtra notification rcpt mail pgm. Default: " XMAIL "\n"
++   "  -Z, --nodaemoniZe       dont fork to background\n"
+    "  -z, --spamcheck=FILE    Specify path to Spam Checking program executable\n"
+    "                          Default /usr/bin/spamc (Mail::SpamAssassin)\n"
+    "\n"
+@@ -2386,6 +2399,7 @@ void parseoptions(int argc, char **argv)
+    { "user",         required_argument,   NULL, 'u' },
+    { "useurl",       no_argument,         NULL, 'U' },
+    { "version",      no_argument,         NULL, 'v' },
++   { "nodaemoniZe",  no_argument,         NULL, 'Z' },
+ #ifdef DEMIME
+    { "demime",       no_argument,         NULL, 'x' },
+ #endif
+@@ -2394,9 +2408,9 @@ void parseoptions(int argc, char **argv)
+    { NULL,           no_argument,         NULL, 0 }
+    };
+ #ifdef DEMIME
+-   char getoptparam[] = "hvf:a:Ab:Bc:C:de:F:g:G:i:I:jJkK:l:L:m:M:n:N:o:O:p:P:qr:R:s:S:t:T:u:UxX:z:";
++   char getoptparam[] = "hvf:a:Ab:Bc:C:de:F:g:G:i:I:jJkK:l:L:m:M:n:N:o:O:p:P:qr:R:s:S:t:T:u:UxX:z:Z:";
+ #else
+-   char getoptparam[] = "hvf:a:Ab:Bc:C:de:F:g:G:i:I:jJkK:l:L:m:M:n:N:o:O:p:P:qr:R:s:S:t:T:u:UX:z:";
++   char getoptparam[] = "hvf:a:Ab:Bc:C:de:F:g:G:i:I:jJkK:l:L:m:M:n:N:o:O:p:P:qr:R:s:S:t:T:u:UX:z:Z:";
+ #endif
+    void switchoption(char opt, char * arg, char * optstr, char * where, int state){
+       char *next_tok;
+@@ -2436,6 +2450,9 @@ void parseoptions(int argc, char **argv)
+          case 'd': /* debug */
+             config->debug=1;
+             break;
++         case 'Z': /* no daemon */
++            config->nodaemon=1;
++            break;
+          case 'e': /* Extra notification */
+             config->extra=arg;
+             break;
+@@ -2887,7 +2904,11 @@ int main(int argc, char ** argv){
+    int ret=0;
+    FILE * chowncmd;
+    unsigned long kbfree;
++#ifdef __dietlibc__
++   struct statfs fs;
++#else
+    struct statvfs fs;
++#endif
+ 
+    w_memory_init();                  // We need to initialize our memory allocation routines
+ 
+@@ -2907,7 +2928,7 @@ int main(int argc, char ** argv){
+    }
+    if (listen(sockfd, 5)) do_log(LOG_EMERG, "ERR: Can't listen on socket");
+    do_log(LOG_NOTICE, "Listen now on %s:%i", inet_ntoa(config->addr.sin_addr), ntohs(config->addr.sin_port));
+-   if (!config->debug){
++   if (!config->debug && !config->nodaemon){
+       /* daemonize */
+       if ((pid = fork())<0) return(-1);
+       else if(pid != 0) exit(0);
+@@ -3036,7 +3057,11 @@ int main(int argc, char ** argv){
+       }else{
+          /* child */
+          config->child=1;
++#ifdef __dietlibc__
++         if ( statfs( config->virusdir, &fs ) == SCANNER_RET_ERR){
++#else
+          if ( statvfs( config->virusdir, &fs ) == SCANNER_RET_ERR){
++#endif
+             config->emergency="Unable to get available space!";
+             do_log(LOG_EMERG, "ERR: Unable to get available space!");
+             return SCANNER_RET_CRIT; // Should never reach here, but keep it clean. :)
+diff -up p3scan-2.3.2/p3scan.h.diet p3scan-2.3.2/p3scan.h
+--- p3scan-2.3.2/p3scan.h.diet	2005-12-12 16:00:00.000000000 +0100
++++ p3scan-2.3.2/p3scan.h	2009-10-12 15:43:55.000000000 +0200
+@@ -44,7 +44,7 @@
+ #define PROGNAME              "P3Scan"
+ #define VERSION               "2.3.2"
+ #define MAX_PSEUDO_ARGV       50
+-#define MESSAGE_NOVIRINFO     "<no virusinfo could be examined>"
++#define MESSAGE_NOVIRINFO     "<Propably SPAM>"
+ #define FILEDEL               "The infected message has been deleted."
+ #define SVRCMD                "NOOP"
+ #define PERIOD                "."
+@@ -142,7 +142,7 @@
+ /* undef this to not use the ripmime library
+    You also need to change the symlink for Makefile to the proper
+    Makefile. Either Makefile-ripmime or Makefile-noripmime */
+-#define DEMIME
++//#define DEMIME
+ /* print TIME with debug output */
+ #define DTIME
+ // Logging options defaults
+@@ -277,6 +277,7 @@ typedef struct configuration_t {
+    int         useurl;
+    char *      emergcon;
+    char *      emergency;
++   int         nodaemon;
+ } configuration_t;
+ 
+ extern void do_log(int level, const char *fmt,...);
+diff -up p3scan-2.3.2/scanner_bash.c.diet p3scan-2.3.2/scanner_bash.c
+--- p3scan-2.3.2/scanner_bash.c.diet	2005-12-12 16:05:01.000000000 +0100
++++ p3scan-2.3.2/scanner_bash.c	2009-10-12 15:43:55.000000000 +0200
+@@ -40,8 +40,11 @@
+ #include <sys/stat.h>
+ #include <errno.h>
+ #include <malloc.h>
+-#include <pcre.h>
+-
++#ifdef __dietlibc__
++ #include <pcre/pcre.h>
++#else
++ #include <pcre.h>
++#endif
+ #include "p3scan.h"
+ #include "parsefile.h"
+ 
+diff -up p3scan-2.3.2/scanner_basic.c.diet p3scan-2.3.2/scanner_basic.c
+--- p3scan-2.3.2/scanner_basic.c.diet	2005-12-12 16:05:01.000000000 +0100
++++ p3scan-2.3.2/scanner_basic.c	2009-10-12 15:43:55.000000000 +0200
+@@ -40,7 +40,11 @@
+ #include <sys/stat.h>
+ #include <errno.h>
+ #include <malloc.h>
+-#include <pcre.h>
++#ifdef __dietlibc__
++ #include <pcre/pcre.h>
++#else
++ #include <pcre.h>
++#endif
+ 
+ #include "p3scan.h"
+ 
+diff -up p3scan-2.3.2/scanner_clamd.c.diet p3scan-2.3.2/scanner_clamd.c
+--- p3scan-2.3.2/scanner_clamd.c.diet	2005-12-12 16:05:01.000000000 +0100
++++ p3scan-2.3.2/scanner_clamd.c	2009-10-12 15:43:55.000000000 +0200
+@@ -49,7 +49,11 @@
+ #include <errno.h>
+ #include <sysexits.h>
+ #include <stdlib.h>
+-#include <pcre.h>
++#ifdef __dietlibc__
++ #include <pcre/pcre.h>
++#else
++ #include <pcre.h>
++#endif
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ 

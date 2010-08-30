@@ -1,0 +1,13 @@
+--- libtomcrypt-1.16/src/headers/tomcrypt_pk.h.wchar	2007-03-23 22:44:14.000000000 +0100
++++ libtomcrypt-1.16/src/headers/tomcrypt_pk.h	2007-03-23 22:44:39.000000000 +0100
+@@ -499,8 +499,10 @@
+ #if (defined(SIZE_MAX) || __STDC_VERSION__ >= 199901L || defined(WCHAR_MAX) || defined(_WCHAR_T) || defined(_WCHAR_T_DEFINED)) && !defined(LTC_NO_WCHAR)
+ #include <wchar.h>
+ #else
++#ifndef __dietlibc__
+ typedef ulong32 wchar_t;
+ #endif
++#endif
+ 
+ int der_encode_utf8_string(const wchar_t *in,  unsigned long inlen,
+                            unsigned char *out, unsigned long *outlen);

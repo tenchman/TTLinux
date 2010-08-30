@@ -1,0 +1,54 @@
+--- dietlibc-0.30/include/sys/syslog.h.syslog	2003-08-19 18:58:18.000000000 +0200
++++ dietlibc-0.30/include/sys/syslog.h	2006-11-04 14:26:16.000000000 +0100
+@@ -92,6 +92,7 @@
+ 
+ void vsyslog (int priority, const char *format, va_list arg_ptr) __THROW;
+ 
++#ifdef SYSLOG_NAMES
+ /* yuck yuck yuck, only needed for syslogd. */
+ typedef struct _code {
+   const char *const c_name;
+@@ -100,6 +101,7 @@
+ 
+ extern CODE prioritynames[];
+ extern CODE facilitynames[];
++#endif
+ 
+ __END_DECLS
+ 
+--- dietlibc-0.30/libugly/facilitynames.c.syslog	2001-03-16 21:09:19.000000000 +0100
++++ dietlibc-0.30/libugly/facilitynames.c	2006-11-04 14:26:19.000000000 +0100
+@@ -1,3 +1,4 @@
++#define SYSLOG_NAMES 1
+ #include <sys/syslog.h>
+ 
+ #ifndef INTERNAL_MARK
+--- dietlibc-0.30/libugly/prioritynames.c.syslog	2001-03-16 21:09:19.000000000 +0100
++++ dietlibc-0.30/libugly/prioritynames.c	2006-11-04 14:26:19.000000000 +0100
+@@ -1,3 +1,4 @@
++#define SYSLOG_NAMES 1
+ #include <sys/syslog.h>
+ 
+ #ifndef INTERNAL_NOPRI
+--- dietlibc-0.30/libugly/logging.c.syslog	2006-11-07 14:24:12.000000000 +0100
++++ dietlibc-0.30/libugly/logging.c	2006-11-07 14:23:08.000000000 +0100
+@@ -144,16 +144,9 @@
+   else
+     headerlen = snprintf(buffer, 130, "<%d>%s %s: ", priority, time_buf, LogTag);
+ 
+-  if (!LogTag[0]) {
+-    if ((LogStat & LOG_PID) != LOG_PID)
+-      headerlen = snprintf(buffer, 130, "<%d>%s (unknown)[%ld]: ", priority, time_buf, (long) pid);
+-    strcat(buffer+headerlen, "syslog without openlog w/ ident, please check code!");
+-    buflen = 41;
+-  }
+-  else {
+-    errno=saved_errno;
+-    buflen = vsnprintf(buffer+headerlen, BUF_SIZE - headerlen, format, arg_ptr);
+-  }
++  errno=saved_errno;
++  buflen = vsnprintf(buffer+headerlen, BUF_SIZE - headerlen, format, arg_ptr);
++
+   if (LogStat & LOG_PERROR) {
+     __libc_write(1, buffer+headerlen, buflen);
+     if (buffer[headerlen+buflen] != '\n') __libc_write(1,"\n", 1);

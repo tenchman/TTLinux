@@ -1,0 +1,13 @@
+--- libevent-1.4.13-stable/configure.in.fd_mask	2009-11-18 05:08:06.000000000 +0100
++++ libevent-1.4.13-stable/configure.in	2009-11-30 23:59:56.000000000 +0100
+@@ -313,9 +313,7 @@ AC_CHECK_TYPES([fd_mask], , ,
+ [#ifdef HAVE_SYS_TYPES_H
+ #include <sys/types.h>
+ #endif
+-#ifdef HAVE_SELECT_H
+-#include <select.h>
+-#endif])
++#include <sys/select.h>])
+ 
+ AC_CHECK_SIZEOF(long long)
+ AC_CHECK_SIZEOF(int)

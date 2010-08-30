@@ -1,0 +1,6 @@
+# vim:set syntax=kconfig:
+config CONFIG_SAUCER
+  bool "Saucer - Spam and useless content eater"
+  default y
+  select CONFIG_PCRE
+  select CONFIG_LIBSPF

@@ -1,0 +1,3749 @@
+diff -up squid-3.1.0.16/configure.in.dyncert squid-3.1.0.16/configure.in
+--- squid-3.1.0.16/configure.in.dyncert	2010-02-01 22:23:16.000000000 +0100
++++ squid-3.1.0.16/configure.in	2010-02-03 13:50:59.000000000 +0100
+@@ -1129,6 +1129,7 @@ if test x$USE_HTCP = xtrue; then
+ fi
+ AM_CONDITIONAL(ENABLE_HTCP, [test x$USE_HTCP = xtrue])
+ 
++
+ dnl SSL is not enabled by default.
+ AM_CONDITIONAL(ENABLE_SSL, false)
+ 
+@@ -1152,6 +1153,9 @@ AC_ARG_ENABLE(ssl,
+   fi
+ ])
+ 
++dnl SSL_DYNCERT is not enabled by default.
++AM_CONDITIONAL(ENABLE_SSL_DYNCERT, false)
++
+ dnl User may specify OpenSSL is needed from a non-standard location
+ AC_ARG_WITH(openssl,
+   AS_HELP_STRING([--with-openssl{=PATH}],[Compile with the OpenSSL libraries. The path to
+@@ -1172,6 +1176,31 @@ AC_ARG_WITH(openssl,
+     USE_OPENSSL=1
+   esac
+ ])
++
++dnl Default is to use OpenSSL when available
++AC_ARG_ENABLE(ssl_dyncert,
++  AC_HELP_STRING([--enable-ssl-dyncert],[Enable ssl gatewaying mitm support using
++					 OpenSSL. This Option implicitly enables
++					 --with-openssl and --enable-ssl]),
++[ if test "$enableval" != "no"; then
++    AC_MSG_NOTICE([SSL proxy mitm enabled])
++    AC_DEFINE(USE_SSL_DYNCERT,1,[Define this to include code for SSL DYNCERT.])
++    AM_CONDITIONAL(ENABLE_SSL_DYNCERT, true)
++    AC_DEFINE(USE_SSL,1,[Define this to include code for SSL encryption.])
++    AM_CONDITIONAL(ENABLE_SSL, true)
++    case "$host_os" in
++    mingw|mingw32)
++        dnl Native Windows port of OpenSSL needs -lgdi32
++        SSLLIB='-lssleay32 -leay32 -lgdi32'
++        ;;
++    *)
++        SSLLIB='-lssl -lcrypto'
++        ;;
++    esac
++    USE_OPENSSL=1
++  fi
++])
++
+ if test -n "$USE_OPENSSL"; then
+   AC_MSG_NOTICE([Using OpenSSL MD5 implementation])
+   AC_DEFINE(USE_OPENSSL,1,[Define this to make use of the OpenSSL libraries for MD5 calculation rather than Squid's own MD5 implementation or if building with SSL encryption (USE_SSL)])
+@@ -2200,6 +2229,8 @@ AC_CHECK_HEADERS( \
+ 	openssl/err.h \
+ 	openssl/md5.h \
+ 	openssl/ssl.h \
++	openssl/x509v3.h \
++	openssl/pem.h \
+ 	netinet/tcp.h \
+ 	openssl/engine.h \
+ 	ostream \
+diff -up squid-3.1.0.16/src/cache_cf.cc.dyncert squid-3.1.0.16/src/cache_cf.cc
+--- squid-3.1.0.16/src/cache_cf.cc.dyncert	2010-02-01 22:22:37.000000000 +0100
++++ squid-3.1.0.16/src/cache_cf.cc	2010-02-03 13:50:59.000000000 +0100
+@@ -720,6 +720,7 @@ configDoConfigure(void)
+             debugs(3, 1, "Initializing http_port " << s->http.s << " SSL context");
+ 
+             s->sslContext = sslCreateServerContext(s->cert, s->key, s->version, s->cipher, s->options, s->sslflags, s->clientca, s->cafile, s->capath, s->crlfile, s->dhfile, s->sslcontext);
++
+         }
+     }
+ 
+@@ -3128,6 +3129,11 @@ parse_http_port_option(http_port_list * 
+         s->sslcontext = xstrdup(token + 11);
+     } else if (strcmp(token, "sslBump") == 0) {
+         s->sslBump = 1; // accelerated when bumped, otherwise not
++#if USE_SSL_DYNCERT
++    } else if (strncmp(token, "serialfile=", 11) == 0) { // IMPLTJ serialfile as new parameter
++        safe_free(s->serialNumberFile);
++        s->serialNumberFile = xstrdup(token + 8);
++#endif
+ #endif
+     } else {
+         self_destruct();
+@@ -3259,6 +3265,8 @@ dump_generic_http_port(StoreEntry * e, c
+ 
+     if (s->sslBump)
+         storeAppendPrintf(e, " sslBump");
++
++    // TODO_TJ dump some information
+ #endif
+ }
+ 
+diff -up squid-3.1.0.16/src/cf.data.pre.dyncert squid-3.1.0.16/src/cf.data.pre
+--- squid-3.1.0.16/src/cf.data.pre.dyncert	2010-02-01 22:22:37.000000000 +0100
++++ squid-3.1.0.16/src/cf.data.pre	2010-02-03 13:50:59.000000000 +0100
+@@ -423,6 +423,7 @@ DOC_START
+ 	  %USER_CERTCHAIN SSL User certificate chain in PEM format
+ 	  %USER_CERT_xx	SSL User certificate subject attribute xx
+ 	  %USER_CA_xx	SSL User certificate issuer attribute xx
++	  %SERVER_CERT_EXT_xx	SSL Server certificate extension attribute xx
+ 
+ 	  %>{Header}	HTTP request header "Header"
+ 	  %>{Hdr:member}
+@@ -1626,6 +1627,78 @@ DOC_START
+ 	option to allow it to query interactively for the passphrase.
+ DOC_END
+ 
++
++COMMENT_START
++ SSL DYNCERT OPTIONS
++ -----------------------------------------------------------------------------
++COMMENT_END
++
++NAME: sslcertcache_size
++IFDEF: USE_SSL_DYNCERT
++COMMENT: (number of entries)
++TYPE: int
++DEFAULT: 1024
++LOC: Config.sslcertcache.size
++DOC_START
++	Maximum number of SSL certificate cache entries.
++DOC_END
++
++NAME: sslcertcache_entry_maxlifetime
++IFDEF: USE_SSL_DYNCERT
++COMMENT: time-units
++TYPE: time_t
++DEFAULT: 1 week
++LOC: Config.sslcertcache.entryMaxLifetime
++DOC_START
++	Maximum lifetime of SSL certificate cache entries.
++DOC_END
++
++NAME: sslcertcache_entry_minlifetime
++IFDEF: USE_SSL_DYNCERT
++COMMENT: time-units
++TYPE: time_t
++DEFAULT: 1 day
++LOC: Config.sslcertcache.entryMinLifetime
++DOC_START
++	Minimum lifetime of SSL certificate cache entries.
++DOC_END
++
++NAME: sslcertcache_max_certs
++IFDEF: USE_SSL_DYNCERT
++COMMENT: (maximum number of certificates in memory)
++TYPE: int
++DEFAULT: 128
++LOC: Config.sslcertcache.maxCertificatesInMemory
++DOC_START
++	Maximum number of certificates to keep in memory.
++DOC_END
++
++NAME: sslcertcache_cert_dir
++IFDEF: USE_SSL_DYNCERT
++COMMENT: (certificate cache directory)
++TYPE: string
++DEFAULT: none
++DEFAULT_IF_NONE: @DEFAULT_CERTCACHE_DIR@
++LOC: Config.sslcertcache.certificateDirectory
++DOC_START
++	TODO.
++	Default:
++		sslcertcache_cert_dir @DEFAULT_CERTCACHE_DIR@
++DOC_END
++
++NAME: ssl_serial_dir
++IFDEF: USE_SSL_DYNCERT
++COMMENT: (certificate cache directory)
++TYPE: string
++DEFAULT: none
++DEFAULT_IF_NONE: @DEFAULT_SWAP_DIR@
++LOC: Config.ssl_client.ssl_serial_dir
++DOC_START
++	TODO.
++	Default:
++		ssl_serial_dir @DEFAULT_SWAP_DIR@
++DOC_END
++
+ COMMENT_START
+  OPTIONS WHICH AFFECT THE NEIGHBOR SELECTION ALGORITHM
+  -----------------------------------------------------------------------------
+diff -up squid-3.1.0.16/src/cf_gen_defines.dyncert squid-3.1.0.16/src/cf_gen_defines
+--- squid-3.1.0.16/src/cf_gen_defines.dyncert	2010-02-01 22:22:37.000000000 +0100
++++ squid-3.1.0.16/src/cf_gen_defines	2010-02-03 13:50:59.000000000 +0100
+@@ -25,6 +25,7 @@ BEGIN {
+ 	define["USE_REFERER_LOG"]="--enable-referer-log"
+ 	define["USE_SQUID_ESI"]="--enable-esi"
+ 	define["USE_SSL"]="--enable-ssl"
++	define["USE_SSL_DYNCERT"]="--enable-ssl-dyncert"
+ 	define["USE_UNLINKD"]="--enable-unlinkd"
+ 	define["USE_USERAGENT_LOG"]="--enable-useragent-log"
+ 	define["USE_WCCP"]="--enable-wccp"
+diff -up squid-3.1.0.16/src/client_side.cc.dyncert squid-3.1.0.16/src/client_side.cc
+--- squid-3.1.0.16/src/client_side.cc.dyncert	2010-02-01 22:22:37.000000000 +0100
++++ squid-3.1.0.16/src/client_side.cc	2010-02-03 13:50:59.000000000 +0100
+@@ -105,6 +105,7 @@
+ #include "SquidTime.h"
+ #include "ChunkedCodingParser.h"
+ #include "rfc1738.h"
++#include "errorpage.h"
+ 
+ #if LINGERING_CLOSE
+ #define comm_close comm_lingering_close
+@@ -3132,16 +3133,15 @@ clientNegotiateSSL(int fd, void *data)
+ 
+                 debugs(83, hard ? 1 : 2, "clientNegotiateSSL: Error negotiating SSL connection on FD " <<
+                        fd << ": " << strerror(errno) << " (" << errno << ")");
+-
+                 comm_close(fd);
+ 
+                 return;
+             }
+ 
+         case SSL_ERROR_ZERO_RETURN:
+-            debugs(83, 1, "clientNegotiateSSL: Error negotiating SSL connection on FD " << fd << ": Closed by client");
+-            comm_close(fd);
+-            return;
++        	debugs(83, 1, "clientNegotiateSSL: Error negotiating SSL connection on FD " << fd << ": Closed by client");
++        	comm_close(fd);
++        	return;
+ 
+         default:
+             debugs(83, 1, "clientNegotiateSSL: Error negotiating SSL connection on FD " <<
+@@ -3289,6 +3289,16 @@ ConnStateData::switchToHttps()
+ 
+     //HTTPMSGLOCK(currentobject->http->request);
+     assert(areAllContextsForThisConnection());
++#if USE_SSL_DYNCERT
++    // IMPLTJ backup url over free    // maybe check nrequests to get # contexts
++    char *host = NULL;
++    if (NULL != getCurrentContext().getRaw() && NULL != getCurrentContext().getRaw()->http && NULL != getCurrentContext().getRaw()->http->request) {
++    	debugs(33, 5, "ConnStateData::switchToHttps: using host '" << getCurrentContext().getRaw()->http->request->GetHost() << "' for certificate");
++    	host = xstrdup(getCurrentContext().getRaw()->http->request->GetHost());
++    } else {
++    	debugs(33, 1, "ConnStateData::switchToHttps: critical... no context found");
++    }
++#endif /* USE_SSL_DYNCERT */
+     freeAllContexts();
+     //currentobject->connIsFinished();
+ 
+@@ -3300,9 +3310,57 @@ ConnStateData::switchToHttps()
+     detail.peer = peer;
+ 
+     SSL_CTX *sslContext = port->sslContext;
++    /* IMPLTJ better duplicate sslContext from port because ssl_verify_cb
++     * retrieves context via SSL_get_SSL_CTX() and this is only the pointer
++     * to the context from creation time */
++
+     SSL *ssl = NULL;
+-    if (!(ssl = httpsCreate(fd, &detail, sslContext)))
+-        return false;
++    if (!(ssl = httpsCreate(fd, &detail, sslContext))) {
++#if USE_SSL_DYNCERT
++    	xfree(host);
++#endif /* USE_SSL_DYNCERT */
++    	return false;
++    }
++
++#if USE_SSL_DYNCERT // IMPLTJ first implementation... let squid decide about validity of foreign cert
++    if (NULL != host) {
++
++    	// create new key-cert pair
++
++    	X509 *cert = NULL;
++    	X509_REQ *csr;
++    	EVP_PKEY *cKey;
++		X509_NAME *name = X509_NAME_new();
++
++		X509_NAME_add_entry_by_txt(name, SN_commonName, MBSTRING_ASC,
++				(unsigned char*) host, -1, -1, 0);
++
++		// TODO_TJ check return values
++		sslCreateCSR(&csr, &cKey, name);
++		sslCreateCertFromCSR(&cert, csr, name, port->caPKey, X509_get_issuer_name(port->caCert), port->certSerialNumber);
++
++		// append new created cert and key to ssl
++		SSL_use_certificate(ssl, cert);
++		SSL_use_PrivateKey(ssl, cKey);
++
++	    if (!SSL_check_private_key(ssl)) {
++			int ssl_error = ERR_get_error();
++			debugs(33, 0, "switchToHttps: SSL private key '" << "' does not match public key '" << "': " << ERR_error_string(ssl_error, NULL) );
++		}
++
++		// cleanup
++		X509_free(cert);
++		EVP_PKEY_free(cKey);
++		X509_REQ_free(csr);
++		X509_NAME_free(name);
++
++		if (!SSL_check_private_key(ssl)) {
++			int ssl_error = ERR_get_error();
++			debugs(33, 0, "switchToHttps: SSL private key '" << "' does not match public key '" << "': " << ERR_error_string(ssl_error, NULL) );
++		}
++    }
++    xfree(host);
++#endif /* USE_SSL_DYNCERT */
+ 
+     // commSetTimeout() was called for this request before we switched.
+ 
+@@ -3315,6 +3373,159 @@ ConnStateData::switchToHttps()
+     return true;
+ }
+ 
++#if USE_SSL_DYNCERT
++
++// called when comm_write has completed
++static void
++SslBumpEstablish(int, char *, size_t, comm_err_t errflag, int, void *data)
++{
++	ConnStateData *r = static_cast<ConnStateData*>(data);
++    debugs(85, 5, HERE << "responded to CONNECT: " << r << " ? " << errflag);
++
++    assert(r && cbdataReferenceValid(r));
++    r->sslBumpEstablish(errflag);
++}
++
++void
++ConnStateData::sslBumpEstablish(comm_err_t errflag)
++{
++    // Bail out quickly on COMM_ERR_CLOSING - close handlers will tidy up
++    if (errflag == COMM_ERR_CLOSING)
++        return;
++
++    if (errflag) {
++        startClosing("CONNECT response failure in SslBump");
++        return;
++    }
++
++    assert(areAllContextsForThisConnection());
++
++    freeAllContexts();
++
++	// fake a ConnectionDetail object; XXX: make ConnState a ConnectionDetail?
++    ConnectionDetail detail;
++    detail.me = me;
++    detail.peer = peer;
++
++    SSL *ssl = NULL;
++	if (!(ssl = httpsCreate(fd, &detail, fd_table[fd].sslContext))) {
++		return;
++	}
++
++    // got everything... now negotiate!
++
++    clientNegotiateSSL(fd, this);
++}
++
++/** negotiate an SSL connection */
++static void
++switchToHttps2Wrapper(sslcert_store *store, const char *error_message, void *data)
++{
++	ConnStateData *conn = (ConnStateData *) data;
++    conn->switchToHttps2(store, error_message);
++}
++
++void
++ConnStateData::switchToHttps2(sslcert_store *store, const char *error_message)
++{
++	assert(switchedToHttps_ == true);
++
++	if (NULL == store || NULL == store->cert) {
++		debugs(33, 2, "ConnStateData::switchToHttps: no certificate set");
++		// comm_reset_close(fd);
++
++		ErrorState *err;
++		if (0 == strcmp("issl error: certificate verify failed", error_message)) { // TODO_TJ errno instead of errmsg!
++			err = errorCon(ERR_SECURE_CONNECT_FAIL, HTTP_SERVICE_UNAVAILABLE, getCurrentContext()->http->request);
++			getCurrentContext()->http->al.http.code = HTTP_SERVICE_UNAVAILABLE;
++		} else {
++			err = errorCon(ERR_CONNECT_FAIL, HTTP_NOT_FOUND, getCurrentContext()->http->request);
++			getCurrentContext()->http->al.http.code = HTTP_NOT_FOUND;
++		}
++		errorSend(fd, err);
++		// comm_close(fd);
++		return;
++	}
++
++	fd_table[fd].sslContext = createSSL_CTX(port->version, port->options, port->sslflags, port->sslcontext, store->cert, store->key);
++
++	// check if context exists
++	if (NULL == fd_table[fd].sslContext) {
++		debugs(33, 2, "ConnStateData::switchToHttps: no ssl context set!");
++
++		ErrorState *err = errorCon(ERR_CONNECT_FAIL, HTTP_NOT_FOUND, getCurrentContext()->http->request);
++		getCurrentContext()->http->al.http.code = HTTP_NOT_FOUND;
++		errorSend(fd, err);
++		// comm_close(fd);
++	    return;
++	}
++
++    // send an HTTP 200 response to kick client SSL negotiation
++    debugs(33, 7, HERE << "Confirming CONNECT tunnel on FD " << fd);
++
++    // TODO: Unify with tunnel.cc and add a Server(?) header
++    static const char *const conn_established =
++        "HTTP/1.0 200 Connection established\r\n\r\n";
++    comm_write(fd, conn_established, strlen(conn_established),
++               &SslBumpEstablish, this, NULL);
++
++	return;
++}
++
++bool
++ConnStateData::startSwitchToHttpsDynCert()
++{
++	// TODO_TJ this should actualy start before sslbump start so that the right error message can be returned
++    assert(!switchedToHttps_);
++
++    //HTTPMSGLOCK(currentobject->http->request);
++    assert(areAllContextsForThisConnection());
++
++    // IMPLTJ backup url over free    // maybe check nrequests to get # contexts
++    char *host = NULL;
++    if (NULL != getCurrentContext().getRaw() && NULL != getCurrentContext().getRaw()->http && NULL != getCurrentContext().getRaw()->http->request) {
++    	debugs(33, 5, "ConnStateData::startSwitchToHttpsDynCert: using host '" << getCurrentContext().getRaw()->http->request->GetHost() << "' for certificate");
++    	if(NULL != getCurrentContext().getRaw()->http->request->GetHost() ) {
++    		host = xstrdup(getCurrentContext().getRaw()->http->request->GetHost());
++    	}
++    } else {
++    	debugs(33, 0, "ConnStateData::startSwitchToHttpsDynCert: no host found");
++
++		ErrorState *err = errorCon(ERR_CONNECT_FAIL, HTTP_NOT_FOUND, getCurrentContext()->http->request);
++		getCurrentContext()->http->al.http.code = HTTP_NOT_FOUND;
++		errorSend(fd, err);
++    	return false;
++    }
++
++    // commSetTimeout() was called for this request before we switched.
++
++    // Disable the client read handler until peer selection is complete
++    commSetSelect(fd, COMM_SELECT_READ, NULL, NULL, 0);
++
++    switchedToHttps_ = true;
++
++    // lookup cert in cert cache
++    sslcertcache_getCert(host, port, switchToHttps2Wrapper, this);
++
++    /* //TODO_TJ dont know what to do with this, yet.
++#if LINUX_TPROXY2
++    if (!fs->_peer && request->flags.spoof_client_ip) {
++        // try to set the outgoing address using TPROXY v2
++        // if it fails we abort any further TPROXY actions on this connection
++        if (IpInterceptor.SetTproxy2OutgoingAddr(int fd, const IpAddress &src) == -1) {
++            request->flags.spoof_client_ip = 0;
++        }
++    }
++#endif
++*/
++
++    xfree(host);
++
++    return true;
++}
++
++#endif /* USE_SSL_DYNCERT */
++
+ #endif /* USE_SSL */
+ 
+ 
+diff -up squid-3.1.0.16/src/client_side.h.dyncert squid-3.1.0.16/src/client_side.h
+--- squid-3.1.0.16/src/client_side.h.dyncert	2010-02-01 22:22:37.000000000 +0100
++++ squid-3.1.0.16/src/client_side.h	2010-02-03 13:50:59.000000000 +0100
+@@ -261,6 +261,13 @@ public:
+ #if USE_SSL
+     bool switchToHttps();
+     bool switchedToHttps() const { return switchedToHttps_; }
++#ifdef USE_SSL_DYNCERT
++    // IMPLTJ next headers
++    bool startSwitchToHttpsDynCert();
++    void switchToHttps2(sslcert_store *store, const char *error_message);
++    void initiateSSL2FetchServerCert(int sslConnFD, const DnsLookupDetails &dns, comm_err_t status, int xerrno);
++    void sslBumpEstablish(comm_err_t errflag);
++#endif /* USE_SSL_DYNCERT */
+ #else
+     bool switchedToHttps() const { return false; }
+ #endif
+diff -up squid-3.1.0.16/src/client_side_request.cc.dyncert squid-3.1.0.16/src/client_side_request.cc
+--- squid-3.1.0.16/src/client_side_request.cc.dyncert	2010-02-01 22:22:37.000000000 +0100
++++ squid-3.1.0.16/src/client_side_request.cc	2010-02-03 13:50:59.000000000 +0100
+@@ -1070,6 +1070,8 @@ ClientRequestContext::checkNoCacheDone(i
+     http->doCallouts();
+ }
+ 
++#include "errorpage.h"
++
+ /*
+  * Identify requests that do not go through the store and client side stream
+  * and forward them to the appropriate location. All other requests, request
+@@ -1082,7 +1084,10 @@ ClientHttpRequest::processRequest()
+ 
+ #if USE_SSL
+     if (request->method == METHOD_CONNECT && sslBumpNeeded()) {
+-        sslBumpStart();
++
++    	// sslBumpStart();
++    	getConn()->startSwitchToHttpsDynCert();
++
+         return;
+     }
+ #endif
+@@ -1151,7 +1156,11 @@ ClientHttpRequest::sslBumpEstablish(comm
+         return;
+     }
+ 
++#if USE_SSL_DYNCERT
++    getConn()->startSwitchToHttpsDynCert(); // IMPLTJ change switchHttps entry point
++#else
+     getConn()->switchToHttps();
++#endif
+ }
+ 
+ void
+@@ -1269,6 +1278,15 @@ ClientHttpRequest::doCallouts()
+         assert(calloutContext->redirect_state == REDIRECT_NONE);
+ 
+         if (Config.Program.redirect) {
++
++//        	if ( this->conn_->switchedToHttps() ) {
++//        		if ( NULL != fd_table[this->conn_->fd].ssl ) {
++//        			char buff[255];
++//        			X509 *cert = SSL_get_certificate( fd_table[this->conn_->fd].ssl );
++//        			X509_NAME_oneline(X509_get_subject_name(cert), buff, sizeof(buff));
++//        		}
++//        	}
++
+             debugs(83, 3, HERE << "Doing calloutContext->clientRedirectStart()");
+             calloutContext->redirect_state = REDIRECT_PENDING;
+             calloutContext->clientRedirectStart();
+diff -up squid-3.1.0.16/src/comm.cc.dyncert squid-3.1.0.16/src/comm.cc
+--- squid-3.1.0.16/src/comm.cc.dyncert	2010-02-01 22:22:37.000000000 +0100
++++ squid-3.1.0.16/src/comm.cc	2010-02-03 13:50:59.000000000 +0100
+@@ -1541,6 +1541,11 @@ comm_close_complete(int fd, void *data)
+ #if USE_SSL
+     fde *F = &fd_table[fd];
+ 
++    if (F->sslContext) { // IMPLTJ sslContext bind to fd
++    	SSL_CTX_free(F->sslContext);
++    	F->sslContext = NULL;
++    }
++
+     if (F->ssl) {
+         SSL_free(F->ssl);
+         F->ssl = NULL;
+diff -up squid-3.1.0.16/src/dns_internal.cc.dyncert squid-3.1.0.16/src/dns_internal.cc
+--- squid-3.1.0.16/src/dns_internal.cc.dyncert	2010-02-01 22:22:37.000000000 +0100
++++ squid-3.1.0.16/src/dns_internal.cc	2010-02-03 13:50:59.000000000 +0100
+@@ -1386,7 +1386,7 @@ idnsInit(void)
+     if (!init) {
+         memDataInit(MEM_IDNS_QUERY, "idns_query", sizeof(idns_query), 0);
+         memset(RcodeMatrix, '\0', sizeof(RcodeMatrix));
+-        idns_lookup_hash = hash_create((HASHCMP *) strcmp, 103, hash_string);
++        idns_lookup_hash = hash_create((HASHCMP *) strcmp, 103, hash_string); // FIXME not freed up upon shutdown!
+         init++;
+     }
+ 
+diff -up squid-3.1.0.16/src/enums.h.dyncert squid-3.1.0.16/src/enums.h
+--- squid-3.1.0.16/src/enums.h.dyncert	2010-02-01 22:22:37.000000000 +0100
++++ squid-3.1.0.16/src/enums.h	2010-02-03 13:50:59.000000000 +0100
+@@ -353,6 +353,7 @@ typedef enum {
+     MEM_DREAD_CTRL,
+     MEM_DWRITE_Q,
+     MEM_FQDNCACHE_ENTRY,
++    MEM_SSLCERTCACHE_ENTRY,
+     MEM_FWD_SERVER,
+     MEM_HTTP_HDR_CC,
+     MEM_HTTP_HDR_CONTENT_RANGE,
+diff -up squid-3.1.0.16/src/external_acl.cc.dyncert squid-3.1.0.16/src/external_acl.cc
+--- squid-3.1.0.16/src/external_acl.cc.dyncert	2010-02-01 22:22:37.000000000 +0100
++++ squid-3.1.0.16/src/external_acl.cc	2010-02-03 13:50:59.000000000 +0100
+@@ -166,7 +166,10 @@ struct _external_acl_format {
+         EXT_ACL_CA_CERT,
+         EXT_ACL_USER_CERT_RAW,
+         EXT_ACL_USER_CERTCHAIN_RAW,
+-#endif
++#if USE_SSL_DYNCERT
++        EXT_ACL_SERVER_CERT_EXT,
++#endif /* USE_SSL_DYNCERT */
++#endif /* USE_SSL */
+         EXT_ACL_EXT_USER,
+         EXT_ACL_END
+     } type;
+@@ -413,11 +416,17 @@ parse_externalAclHelper(external_acl ** 
+         else if (strncmp(token, "%USER_CERT_", 11) == 0) {
+             format->type = _external_acl_format::EXT_ACL_USER_CERT;
+             format->header = xstrdup(token + 11);
+-        } else if (strncmp(token, "%CA_CERT_", 11) == 0) {
+-            format->type = _external_acl_format::EXT_ACL_USER_CERT;
+-            format->header = xstrdup(token + 11);
++        } else if (strncmp(token, "%CA_CERT_", 9) == 0) { // FIXME_TJ this is a real! bug!
++            format->type = _external_acl_format::EXT_ACL_CA_CERT;
++            format->header = xstrdup(token + 9);
+         }
+ 
++#if USE_SSL_DYNCERT
++        else if (strncmp(token, "%SERVER_CERT_EXT_", 17) == 0) {
++        	format->type = _external_acl_format::EXT_ACL_SERVER_CERT_EXT;
++        	format->header = xstrdup(token + 17);
++        }
++#endif
+ #endif
+         else if (strcmp(token, "%EXT_USER") == 0)
+             format->type = _external_acl_format::EXT_ACL_EXT_USER;
+@@ -542,7 +551,13 @@ dump_externalAclHelper(StoreEntry * sent
+             case _external_acl_format::EXT_ACL_CA_CERT:
+                 storeAppendPrintf(sentry, " %%USER_CERT_%s", format->header);
+                 break;
+-#endif
++#if USE_SSL_DYNCERT
++
++            case _external_acl_format::EXT_ACL_SERVER_CERT_EXT:
++                storeAppendPrintf(sentry, " %%SERVER_CERT_EXT_%s", format->header);
++                break;
++#endif /* USE_SSL_DYNCERT */
++#endif /* USE_SSL */
+ 
+                 DUMP_EXT_ACL_TYPE(EXT_USER);
+ 
+@@ -981,7 +996,20 @@ makeExternalAclKey(ACLFilledChecklist * 
+             }
+ 
+             break;
+-#endif
++#if USE_SSL_DYNCERT
++
++        case _external_acl_format::EXT_ACL_SERVER_CERT_EXT:
++
++            if (ch->conn() != NULL) {
++                SSL *ssl = fd_table[ch->conn()->fd].ssl;
++
++                if (ssl)
++                    str = sslGetCAAttribute(ssl, format->header);
++            }
++
++            break;
++#endif /* USE_SSL_DYNCERT */
++#endif /* USE_SSL */
+ 
+         case _external_acl_format::EXT_ACL_EXT_USER:
+             str = request->extacl_user.termedBuf();
+diff -up squid-3.1.0.16/src/fde.h.dyncert squid-3.1.0.16/src/fde.h
+--- squid-3.1.0.16/src/fde.h.dyncert	2010-02-01 22:22:37.000000000 +0100
++++ squid-3.1.0.16/src/fde.h	2010-02-03 13:50:59.000000000 +0100
+@@ -101,7 +101,9 @@ public:
+     READ_HANDLER *read_method;
+     WRITE_HANDLER *write_method;
+ #if USE_SSL
++    bool trustFullContext;
+     SSL *ssl;
++    SSL_CTX *sslContext; // IMPLTJ sslContext bind to fd
+ #endif
+ #ifdef _SQUID_MSWIN_
+     struct {
+diff -up squid-3.1.0.16/src/fqdncache.cc.dyncert squid-3.1.0.16/src/fqdncache.cc
+--- squid-3.1.0.16/src/fqdncache.cc.dyncert	2010-02-01 22:22:37.000000000 +0100
++++ squid-3.1.0.16/src/fqdncache.cc	2010-02-03 13:50:59.000000000 +0100
+@@ -824,6 +824,8 @@ fqdncache_restart(void)
+     fqdncache_low = (long) (((float) Config.fqdncache.size *
+                              (float) FQDN_LOW_WATER) / (float) 100);
+     purge_entries_fromhosts();
++
++    // FIXME_TJ hash is not reinitialized
+ }
+ 
+ /**
+diff -up squid-3.1.0.16/src/main.cc.dyncert squid-3.1.0.16/src/main.cc
+--- squid-3.1.0.16/src/main.cc.dyncert	2010-02-01 22:22:38.000000000 +0100
++++ squid-3.1.0.16/src/main.cc	2010-02-03 13:50:59.000000000 +0100
+@@ -665,6 +665,11 @@ serverConnectionsClose(void)
+ #endif
+ 
+     asnFreeMemory();
++
++#if USE_SSL_DYNCERT
++    savePortCAsSerialNumber(NULL);
++#endif
++
+ }
+ 
+ static void
+@@ -703,6 +708,9 @@ mainReconfigureStart(void)
+ #endif
+     useragentLogClose();
+     refererCloseLog();
++#if USE_SSL_DYNCERT
++    isslShutdown();
++#endif
+ 
+     eventAdd("mainReconfigureFinish", &mainReconfigureFinish, NULL, 0, 1,
+              false);
+@@ -734,6 +742,11 @@ mainReconfigureFinish(void *)
+     authenticateUserCacheRestart();	/* clear stuck ACL entries */
+     fqdncache_restart();	/* sigh, fqdncache too */
+     parseEtcHosts();
++
++#if USE_SSL_DYNCERT
++    isslInit();
++    sslcertcache_restart();
++#endif
+     errorInitialize();		/* reload error pages */
+     accessLogInit();
+ #if ICAP_CLIENT
+@@ -933,6 +946,11 @@ mainInitialize(void)
+ 
+     fqdncache_init();
+ 
++#if USE_SSL_DYNCERT
++    isslInit();
++    sslcertcache_init();
++#endif
++
+     parseEtcHosts();
+ 
+ #if USE_DNSSERVERS
+@@ -1025,6 +1043,10 @@ mainInitialize(void)
+ 
+ #endif
+ 
++#if USE_SSL_DYNCERT
++    sslSerialNumberInit();
++#endif
++
+     serverConnectionsOpen();
+ 
+     neighbors_init();
+@@ -1109,6 +1131,11 @@ mainInitialize(void)
+ #endif
+ 
+         eventAdd("memPoolCleanIdlePools", Mem::CleanIdlePools, NULL, 15.0, 1);
++
++#if USE_SSL_DYNCERT
++        eventAdd("saveSerialNumber", savePortCAsSerialNumber, NULL, 120.0, 1);
++        eventAdd("sslcertcache_purgememlru", sslcertcache_purgememlru, NULL, 60.0, 1);
++#endif
+     }
+ 
+     configured_once = 1;
+@@ -1316,6 +1343,7 @@ SquidMain(int argc, char **argv)
+         setEffectiveUser();
+         debugs(0, 0, "Creating Swap Directories");
+         Store::Root().create();
++        // TODO_TJ maybe create certcache dir here
+ 
+         return 0;
+     }
+@@ -1682,6 +1710,10 @@ SquidShutdown()
+     idnsShutdown();
+ #endif
+ 
++#if USE_SSL_DYNCERT
++    sslcertcacheFreeMemory();
++    isslShutdown();
++#endif
+     redirectShutdown();
+     externalAclShutdown();
+     icpConnectionClose();
+diff -up squid-3.1.0.16/src/Makefile.am.dyncert squid-3.1.0.16/src/Makefile.am
+--- squid-3.1.0.16/src/Makefile.am.dyncert	2010-02-01 22:22:33.000000000 +0100
++++ squid-3.1.0.16/src/Makefile.am	2010-02-03 13:50:59.000000000 +0100
+@@ -108,7 +108,8 @@ endif
+ 
+ SSL_ALL_SOURCE = \
+ 	ssl_support.cc \
+-	ssl_support.h
++	ssl_support.h \
++	ssl_dyn_cert_cache.cc
+ 
+ if ENABLE_SSL
+ SSL_SOURCE = $(SSL_ALL_SOURCE)
+@@ -720,6 +721,7 @@ DEFAULT_STORE_LOG       = $(DEFAULT_LOG_
+ DEFAULT_PID_FILE        = $(DEFAULT_PIDFILE)
+ DEFAULT_NETDB_FILE      = $(DEFAULT_LOG_PREFIX)/netdb.state
+ DEFAULT_SWAP_DIR        = $(localstatedir)/cache
++DEFAULT_CERTCACHE_DIR   = $(DEFAULT_SWAP_DIR)/certcache
+ DEFAULT_PINGER		= $(libexecdir)/`echo pinger | sed '$(transform);s/$$/$(EXEEXT)/'`
+ DEFAULT_UNLINKD		= $(libexecdir)/`echo unlinkd | sed '$(transform);s/$$/$(EXEEXT)/'`
+ DEFAULT_DISKD		= $(libexecdir)/`echo diskd | sed '$(transform);s/$$/$(EXEEXT)/'`
+@@ -776,6 +778,7 @@ cf.data: cf.data.pre Makefile
+ 	-e "s%[@]DEFAULT_PID_FILE[@]%$(DEFAULT_PID_FILE)%g" \
+ 	-e "s%[@]DEFAULT_NETDB_FILE[@]%$(DEFAULT_NETDB_FILE)%g" \
+ 	-e "s%[@]DEFAULT_SWAP_DIR[@]%$(DEFAULT_SWAP_DIR)%g" \
++	-e "s%[@]DEFAULT_CERTCACHE_DIR[@]%$(DEFAULT_CERTCACHE_DIR)%g" \
+ 	-e "s%[@]DEFAULT_ICON_DIR[@]%$(DEFAULT_ICON_DIR)%g" \
+ 	-e "s%[@]DEFAULT_CONFIG_DIR[@]%$(DEFAULT_CONFIG_DIR)%g" \
+ 	-e "s%[@]DEFAULT_PREFIX[@]%$(DEFAULT_PREFIX)%g" \
+diff -up squid-3.1.0.16/src/neighbors.cc.dyncert squid-3.1.0.16/src/neighbors.cc
+--- squid-3.1.0.16/src/neighbors.cc.dyncert	2010-02-01 22:22:38.000000000 +0100
++++ squid-3.1.0.16/src/neighbors.cc	2010-02-03 13:50:59.000000000 +0100
+@@ -1219,6 +1219,27 @@ peerDestroy(void *data)
+ 
+     cbdataReferenceDone(p->digest);
+ #endif
++
++#if USE_SSL // IMPLTJ ! bugfix free ports
++    safe_free(p->sslcert);
++    safe_free(p->sslkey);
++    safe_free(p->ssloptions);
++    safe_free(p->sslcipher);
++    safe_free(p->sslcafile);
++    safe_free(p->sslcapath);
++    safe_free(p->sslcrlfile);
++    safe_free(p->sslflags);
++    safe_free(p->ssldomain);
++    if(p->sslContext) {
++    	SSL_CTX_free(p->sslContext);
++    	p->sslContext = NULL;
++    }
++    if (p->sslSession) {
++    	SSL_SESSION_free(p->sslSession);
++    	p->sslSession = NULL;
++    }
++#endif
++
+ }
+ 
+ void
+diff -up squid-3.1.0.16/src/ProtoPort.cc.dyncert squid-3.1.0.16/src/ProtoPort.cc
+--- squid-3.1.0.16/src/ProtoPort.cc.dyncert	2010-02-01 22:22:33.000000000 +0100
++++ squid-3.1.0.16/src/ProtoPort.cc	2010-02-03 13:50:59.000000000 +0100
+@@ -31,6 +31,26 @@ http_port_list::~http_port_list()
+     safe_free(capath);
+     safe_free(dhfile);
+     safe_free(sslflags);
++    if (sslContext) { // IMPLTJ ! bugfix ... free sslContext
++    	SSL_CTX_free(sslContext);
++    	sslContext = NULL;
++    }
++#if USE_SSL_DYNCERT
++    if (caPKey) { // IMPLTJ free caPKey
++    	EVP_PKEY_free(caPKey);
++    	caPKey = NULL;
++    }
++    if (caCert) { // IMPLTJ free caCert
++    	X509_free(caCert);
++    	caCert = NULL;
++    }
++    safe_free(serialNumberFile);
++    if (certSerialNumber) { // IMPLTJ free certSerialNumber
++    	BN_free(certSerialNumber);
++    	certSerialNumber = NULL;
++    }
++#endif
++
+ #endif
+ }
+ 
+diff -up squid-3.1.0.16/src/ProtoPort.h.dyncert squid-3.1.0.16/src/ProtoPort.h
+--- squid-3.1.0.16/src/ProtoPort.h.dyncert	2010-02-01 22:22:33.000000000 +0100
++++ squid-3.1.0.16/src/ProtoPort.h	2010-02-03 13:50:59.000000000 +0100
+@@ -54,6 +54,13 @@ struct http_port_list {
+     char *sslflags;
+     char *sslcontext;
+     SSL_CTX *sslContext;
++#if USE_SSL_DYNCERT
++    EVP_PKEY *caPKey; /* IMPLTJ the ca key for this port */
++    X509 *caCert; /* IMPLTJ the ca cert for this port */
++    char *serialNumberFile;
++    BIGNUM *certSerialNumber;
++    unsigned int serialChanged:1;
++#endif
+ #endif
+ 
+     CBDATA_CLASS2(http_port_list);
+diff -up squid-3.1.0.16/src/protos.h.dyncert squid-3.1.0.16/src/protos.h
+--- squid-3.1.0.16/src/protos.h.dyncert	2010-02-01 22:22:38.000000000 +0100
++++ squid-3.1.0.16/src/protos.h	2010-02-03 13:50:59.000000000 +0100
+@@ -166,6 +166,24 @@ SQUIDCEXTERN void fqdncache_restart(void
+ SQUIDCEXTERN void fqdncache_purgelru(void *);
+ SQUIDCEXTERN void fqdncacheAddEntryFromHosts(char *addr, wordlist * hostnames);
+ 
++
++/* IMPLTJ ssl_dyn_cert_internal.cc */
++class sslcertcache_entry;
++SQUIDCEXTERN void isslInit(void);
++SQUIDCEXTERN void isslShutdown(void);
++SQUIDCEXTERN void isslLookup(sslcertcache_entry *);
++
++// IMPLTJ protos for ssl_dyn_cert_cache
++SQUIDCEXTERN void sslcertcache_getCert(char *hostname, http_port_list* port, SSLH * handler, void *handlerData);
++SQUIDCEXTERN void sslcertcache_init(void);
++SQUIDCEXTERN void sslcertStats(StoreEntry *);
++
++SQUIDCEXTERN void sslcertcacheFreeMemory(void);
++SQUIDCEXTERN void sslcertcache_restart(void);
++SQUIDCEXTERN void sslcertcache_purgelru(void *);
++SQUIDCEXTERN void sslcertcache_purgememlru(void *notused);
++// SQUIDCEXTERN void sslcertcacheAddEntryFromHosts(char *addr, wordlist * hostnames);
++
+ class FwdState;
+ 
+ /**
+diff -up /dev/null squid-3.1.0.16/src/ssl_dyn_cert_cache.cc
+--- /dev/null	2009-07-16 08:37:34.000000000 +0200
++++ squid-3.1.0.16/src/ssl_dyn_cert_cache.cc	2010-02-03 13:50:59.000000000 +0100
+@@ -0,0 +1,1665 @@
++/*
++ * ssl_dyn_support.cc
++ *
++ *  Created on: 13.08.2009
++ *      Author: tjungel
++ */
++
++/*
++ * $Id$
++ *
++ * DEBUG: section 35    SSLDynCert Cache
++ * AUTHOR: Harvest Derived
++ *
++ * SQUID Web Proxy Cache          http://www.squid-cache.org/
++ * ----------------------------------------------------------
++ *
++ *  Squid is the result of efforts by numerous individuals from
++ *  the Internet community; see the CONTRIBUTORS file for full
++ *  details.   Many organizations have provided support for Squid's
++ *  development; see the SPONSORS file for full details.  Squid is
++ *  Copyrighted (C) 2001 by the Regents of the University of
++ *  California; see the COPYRIGHT file for full details.  Squid
++ *  incorporates software developed and/or copyrighted by other
++ *  sources; see the CREDITS file for full details.
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2 of the License, or
++ *  (at your option) any later version.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, write to the Free Software
++ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111, USA.
++ *
++ */
++
++#include "squid.h"
++#include "cbdata.h"
++#include "event.h"
++#include "CacheManager.h"
++#include "SquidTime.h"
++#include "Store.h"
++
++#include "ProtoPort.h"
++#include "fde.h"
++#include "ssl_support.h"
++#include "SquidString.h"
++#include "wordlist.h"
++
++#if USE_SSL_DYNCERT
++
++/// \ingroup SSLCertCacheInternal
++#define SSL_DYNCERT_LOW_WATER       90
++
++/// \ingroup SSLCertCacheInternal
++#define SSL_DYNCERT_HIGH_WATER      95
++
++
++/**
++ \ingroup SSLCertCacheAPI
++ * The data structure used for storing host-certificate mappings
++ * is a small hashtable (static hash_table *sslcert_table),
++ * where structures of type sslcertcache_entry whose most
++ * interesting members are:
++ */
++class sslcertcache_entry {
++public:
++    hash_link hash;		/* must be first */
++    time_t lastref;
++    time_t expires;
++
++    sslcert_store certStore;
++
++    http_port_list *port;
++    sslcertcache_entry *queue;
++
++    SSLH *handler;
++    void *handlerData;
++    char *error_message;
++
++    struct timeval request_time;
++    dlink_node lru;
++    unsigned short locks;
++
++    dlink_node children; // data is this entry prev is parent
++
++    struct {
++        unsigned int parent:1;
++        unsigned int wildcard:1;
++        unsigned int inMemory:1; ///< 1 in mem 0 on disk
++    } flags;
++
++    char *filename; ///<(md5 hash of x509 issuer name)
++
++    int age() const; ///< time passed since request_time or -1 if unknown
++};
++
++
++/// \ingroup SSLCertCacheInternal
++static struct _sslcert_cache_stats {
++    int requests;
++    int replies;
++    int hits;
++    int misses;
++    int negative_hits;
++    int sslCertificatesInMemory;
++    int store_open_disk_fd;
++} SSLcertcacheStats;
++
++/// \ingroup SSLCertCacheInternal
++static dlink_list lru_list;
++
++static ISSLCB sslcertcacheHandleReply;
++static void sslcertcacheRelease(sslcertcache_entry*);
++static sslcertcache_entry *sslcertcacheCreateEntry(const char *name);
++static void sslcertcacheCallback(sslcertcache_entry*, int wait);
++static sslcertcache_entry *sslcertcache_get(const char*);
++// static SSLH dummy_handler;
++static int sslcertcacheInvalidEntry(const sslcertcache_entry*);
++static void sslcertcacheLockEntry(sslcertcache_entry*);
++static void sslcertcacheUnlockEntry(sslcertcache_entry*);
++static FREE sslcertcacheFreeEntry;
++static void sslcertcacheAddEntry(sslcertcache_entry**);
++static void sslcertcacheWriteCertToDisk(sslcertcache_entry*);
++static void sslcertcacheLoadCertFromDisk(sslcertcache_entry*);
++static void sslcertcacheLoadStoredCertificates();
++/// \ingroup SSLCertCacheInternal
++static hash_table *sslcert_table = NULL;
++
++/// \ingroup SSLCertCacheInternal
++static long sslcertcache_low = 180;
++
++/// \ingroup SSLCertCacheInternal
++static long sslcertcache_high = 200;
++
++
++/// \ingroup SSLCertCacheInternal
++static long sslcertcache_memlow = 45;
++
++/// \ingroup SSLCertCacheInternal
++static long sslcertcache_memhigh = 50;
++
++int
++sslcertcache_entry::age() const
++{
++    return request_time.tv_sec ? tvSubMsec(request_time, current_time) : -1;
++}
++
++
++/**
++ \ingroup SSLCertCacheInternal
++ * Removes the given sslcertcache entry
++ */
++static void
++sslcertcacheRelease(sslcertcache_entry * f)
++{
++	if (!f->flags.parent) {
++		sslcertcacheRelease(static_cast<sslcertcache_entry*>(f->children.prev->data));
++		return;
++	}
++
++	// f is parent
++    debugs(83, 5, "sslcertcacheRelease: Released SSL Cert record for '" << hashKeyStr(&f->hash) << "'.");
++
++    if (NULL != f->hash.next) // just for safety ... entry must not be in sslcert_table
++    	hash_remove_link(sslcert_table, (hash_link *) f);
++
++    dlinkDelete(&f->lru, &lru_list);
++
++    // free childs first
++    while (NULL != f->children.next) {
++    	dlink_node *tmp = f->children.next;
++    	f->children.next = tmp->next;
++
++    	sslcertcache_entry *e = static_cast<sslcertcache_entry*>(tmp->data);
++    	hash_remove_link(sslcert_table, (hash_link *) e);
++    	sslcertcacheFreeEntry(e);
++    }
++
++    // remove file from disk
++    if (NULL != f->filename) {
++    	char path[256];
++    	snprintf(path, sizeof(path), "%s/%s", Config.sslcertcache.certificateDirectory, f->filename);
++
++#if USE_UNLINKD
++    	unlinkdUnlink(path);
++#else
++    	::unlink(path);
++#endif
++    }
++
++    sslcertcacheFreeEntry(f);
++}
++
++/**
++ \ingroup SSLCertCacheInternal
++ \param name	hostname (hash string).
++ \retval Match for given name
++ */
++static sslcertcache_entry *
++sslcertcache_get(const char *name)
++{
++    hash_link *e;
++    static sslcertcache_entry *f;
++    f = NULL;
++
++    if (sslcert_table) {
++        if ((e = (hash_link *)hash_lookup(sslcert_table, name)) != NULL)
++            f = (sslcertcache_entry *) e;
++    }
++
++    return f;
++}
++
++/// \ingroup SSLCertCacheInternal
++static int
++sslcertcacheInvalidEntry(const sslcertcache_entry * f)
++{
++	/* all static entries are locked, so this takes care of them too */
++	const sslcertcache_entry *parent;
++	if (f->flags.parent) {
++		parent = f;
++	} else {
++		parent = static_cast<sslcertcache_entry*>(f->children.prev->data);
++	}
++
++	if (parent->expires > squid_curtime) {
++		// debugs(1,1, "sslcertcacheInvalidEntry: not expired");
++		return 0;
++	}
++
++	if (parent->locks != 0) {
++		// debugs(1,1, "sslcertcacheInvalidEntry: entry locked");
++		return 0;
++	}
++
++	if (NULL == parent->certStore.cert) {
++		// debugs(1,1, "sslcertcacheInvalidEntry: no certificate set");
++		return 1;
++	}
++
++	debugs(83, 5, "sslcertcacheExpiredEntry: entry for '" << hashKeyStr(const_cast<hash_link *>(&f->hash)) << "' expired.");
++	return 1;
++}
++
++/// \ingroup SSLCertCacheAPI
++void
++sslcertcache_purgelru(void *notused)
++{
++    dlink_node *m;
++    dlink_node *prev = NULL;
++    sslcertcache_entry *f;
++    int removed = 0;
++
++    for (m = lru_list.tail; m; m = prev) {
++        if (memInUse(MEM_SSLCERTCACHE_ENTRY) < sslcertcache_low)
++            break;
++
++        prev = m->prev;
++
++        f = (sslcertcache_entry *)m->data;
++
++        if (f->locks != 0)
++            continue;
++
++        sslcertcacheRelease(f);
++
++        removed++;
++    }
++
++    debugs(83, 9, "sslcertcache_purgelru: removed " << removed << " entries");
++    eventAdd("sslcertcache_purgelru", sslcertcache_purgelru, NULL, 120.0, 1);
++}
++
++
++static void
++sslcertcache_removeCertstoreFromMemory(sslcertcache_entry *f)
++{
++	if (NULL == f)
++		return;
++
++	if (f->flags.parent) {
++		// remove childs first
++		sslcertcache_entry *child = static_cast<sslcertcache_entry *>(f->children.next->data);
++
++		while(NULL != child) {
++			child->certStore.release();
++			child->flags.inMemory = 0;
++			child = static_cast<sslcertcache_entry *>(f->children.next->data);
++		}
++	}
++
++	if (f->certStore.cert->references) {
++		debugs(83, 2, "warning: removed refcounted cert (#ref: " << f->certStore.cert->references << "). Maybe increase lru cache?");
++	}
++	f->certStore.release();
++	f->flags.inMemory = 0;
++	SSLcertcacheStats.sslCertificatesInMemory--;
++}
++
++/// \ingroup SSLCertCacheAPI
++void
++sslcertcache_purgememlru(void *notused)
++{
++    dlink_node *m;
++    dlink_node *prev = NULL;
++    sslcertcache_entry *f;
++    int removed = 0;
++
++    for (m = lru_list.tail; m; m = prev) {
++        if (SSLcertcacheStats.sslCertificatesInMemory < sslcertcache_memlow)
++            break;
++
++        prev = m->prev;
++
++        f = (sslcertcache_entry *)m->data;
++
++        if (!f->flags.inMemory)
++        	continue;
++
++        // locks doesn't matter for this certificates are refCounted
++//        if (f->locks != 0)
++//            continue;
++
++        sslcertcache_removeCertstoreFromMemory(f);
++        removed++;
++    }
++
++    debugs(83, 9, "sslcertcache_purgememlru: removed " << removed << " entries");
++    eventAdd("sslcertcache_purgememlru", sslcertcache_purgememlru, NULL, 60.0, 1);
++}
++
++/**
++ \ingroup SSLCertCacheInternal
++ *
++ * Create blank sslcertcache_entry
++ */
++static sslcertcache_entry *
++sslcertcacheCreateEntry(const char *name)
++{
++	static sslcertcache_entry *f;
++	f = (sslcertcache_entry *)memAllocate(MEM_SSLCERTCACHE_ENTRY);
++    f->hash.key = xstrdup(name);
++    f->expires = squid_curtime + Config.sslcertcache.entryMaxLifetime;
++    f->children.data = f;
++
++    // TODO_TJ maybe already alloc here X509 and EVP_PKEY?
++
++    return f;
++}
++
++static void
++sslcertcacheAdjustExpiringDate(sslcertcache_entry *f)
++{
++	// check certificate!
++	if (NULL == f->certStore.cert)
++		return;
++
++	time_t ptime = squid_curtime;
++	int i;
++
++	// is certificate already valid?
++	i = X509_cmp_time(X509_get_notBefore(f->certStore.cert), &ptime);
++	if (i == 0) { // X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD;
++		debugs(83, 1, "sslcertcacheExpiredEntry: certificate for '" << hashKeyStr(const_cast<hash_link *>(&f->hash)) << "' has error in not_before.");
++		f->expires = squid_curtime + Config.sslcertcache.entryMinLifetime;
++		return;
++	}
++
++	if (i > 0) { // X509_V_ERR_CERT_NOT_YET_VALID;
++		debugs(83, 1, "sslcertcacheExpiredEntry: certificate for '" << hashKeyStr(const_cast<hash_link *>(&f->hash)) << "' is not yet valid.");
++		f->expires = squid_curtime + Config.sslcertcache.entryMinLifetime;
++		return;
++	}
++
++	ptime += Config.sslcertcache.entryMaxLifetime; // certificate should be at least valid for maxLifetime
++	i = X509_cmp_time(X509_get_notAfter(f->certStore.cert), &ptime);
++	if (i == 0) { // X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD;
++		debugs(83, 1, "sslcertcacheExpiredEntry: certificate for '" << hashKeyStr(const_cast<hash_link *>(&f->hash)) << "' has error in not_after.");
++		f->expires = squid_curtime + Config.sslcertcache.entryMinLifetime;
++		return;
++	}
++
++	if (i < 0) { // X509_V_ERR_CERT_HAS_EXPIRED;
++		debugs(83, 1, "sslcertcacheExpiredEntry: certificate for '" << hashKeyStr(const_cast<hash_link *>(&f->hash)) << "' expired.");
++		f->expires = squid_curtime + Config.sslcertcache.entryMinLifetime;
++		// return;
++	}
++	// f->expires = squid_curtime + Config.sslcertcache.entryMaxLifetime; // already set... so ignore!
++}
++
++/// \ingroup SSLCertCacheInternal
++static void
++sslcertcacheAddChildEntry(sslcertcache_entry * f, sslcertcache_entry *parent)
++{
++	// check if child exists?
++	if (NULL == f || NULL == parent)
++		return;
++
++	//debugs(1,1, "add child entry for '" << hashKeyStr(&f->hash) << "'");
++
++	hash_join(sslcert_table, &f->hash);
++	// dlinkAdd(f, &f->lru, &lru_list); no lru entry for child!
++	// f->lastref = squid_curtime; // actually we dont need this
++	parent->lastref = squid_curtime;
++
++	// set relations in parent and child
++	f->children.next = parent->children.next;
++	f->children.prev = &parent->children; // parents children data is parent
++	parent->children.next = &f->children;
++}
++
++/// \ingroup SSLCertCacheInternal
++static void
++sslcertcacheAddEntry(sslcertcache_entry** _f) // FIXME_TJ nearly same as sslcertcacheLoadStoredCertificates
++{
++	sslcertcache_entry *f = *_f;
++	debugs(83, 5, "sslcertcacheAddEntry: lookup key '" << hashKeyStr(&f->hash) << "'");
++    hash_link *e = (hash_link *)hash_lookup(sslcert_table, f->hash.key);
++
++    // TODO_TJ maybe use sslGetX509Hostnames here
++
++    if (NULL != e) {
++
++    	debugs(83, 9, "sslcertcacheAddEntry: duplicate key found (" << e << ") - using duplicate");
++    	sslcertcache_entry *tmp = (sslcertcache_entry *)e;
++
++    	assert(NULL == tmp->handler);
++    	tmp->handler = f->handler;
++    	tmp->handlerData = f->handlerData;
++
++        // TODO_TJ do some further checks with cert?
++    	sslcertcacheFreeEntry(f);
++    	*_f = tmp; // rewrite entry
++
++    } else {
++    	// new certificate recieved so:
++    	// check if received cert is a wildcard cert
++    	// if true generate parent and set this as child
++
++		debugs(83, 9, "sslcertcacheAddEntry: no key found. checking for wildcard");
++
++    	char buf[255]; // cn buffer
++    	X509 *cert = f->certStore.cert;
++    	X509_NAME *name = X509_get_subject_name(cert);
++    	int len;
++
++    	buf[0] = '\0';
++    	sslcertcache_entry *parent = NULL;
++
++    	if ( 0 < (len = X509_NAME_get_text_by_NID(name, NID_commonName, buf, 255)) && len < 255 ) {
++
++    		buf[len] = 0; // terminating
++
++    		if ( '*' == buf[0] ) {
++    			// only *.domain.tld CNs are treated as wc certs ... www*.domain.tld not!
++
++    			if( (e = (hash_link *)hash_lookup(sslcert_table, buf)) ) {
++    				// parent already set... happens only if two subdomains with
++    				// same wc certificate are load at same time
++    				parent = (sslcertcache_entry*) e;
++    				sslcertcacheAddChildEntry(f, parent);
++
++    			} else {
++    				debugs(83, 5, "sslcertcacheAddEntry: wildcard certificate received '" << buf << "'");
++    				parent = sslcertcacheCreateEntry(buf);
++    				parent->flags.wildcard = 1;
++    				parent->flags.parent = 1;
++    				parent->certStore = f->certStore;
++    				parent->flags.inMemory = 1;
++
++    				hash_join(sslcert_table, &parent->hash);
++    				dlinkAdd(parent, &parent->lru, &lru_list);
++    				sslcertcacheAddChildEntry(f, parent);
++
++        			sslcertcacheWriteCertToDisk(parent);
++    			}
++
++    		} else {
++
++    			debugs(83, 9, "sslcertcacheAddEntry: normal certificate");
++
++    			parent = f; // set it to parent in case of altnames
++
++    			// treat cert as regular (no wc)
++    			f->flags.parent = 1; // mark entry as parent
++				hash_join(sslcert_table, &f->hash);
++				dlinkAdd(f, &f->lru, &lru_list);
++				f->lastref = squid_curtime;
++
++    			sslcertcacheWriteCertToDisk(f);
++    		}
++    	}
++
++		debugs(83, 9, "sslcertcacheAddEntry: check for alternative names");
++    	// check for alternative domain names
++    	int loc;
++    	if ( 0 <= (loc = X509_get_ext_by_NID(cert, NID_subject_alt_name, -1)) ) {
++
++    		debugs(83, 9, "sslcertcacheAddEntry: alternative names found");
++
++    		X509_EXTENSION *extSaltName = X509_get_ext(cert, loc);
++    		void *ext_str = NULL;
++    		const unsigned char *p;
++    		X509V3_EXT_METHOD *method;
++
++    		method = X509V3_EXT_get(extSaltName);
++    		p = extSaltName->value->data;
++    		ext_str = ASN1_item_d2i(NULL, &p, extSaltName->value->length, ASN1_ITEM_ptr(method->it));
++
++    		int i;
++    		GENERAL_NAMES *gens = (GENERAL_NAMES *)ext_str;
++    		GENERAL_NAME *gen;
++
++    		// get every alternative name, check against parent if exists
++    		for(i = 0; i < sk_GENERAL_NAME_num(gens); i++) {
++    			gen = sk_GENERAL_NAME_value(gens, i);
++
++    			if (gen->type == GEN_DNS || gen->type == GEN_URI ) { // just support these both ... should only be DNS, but who knows
++
++    				// set f as parent if no CN is set otherwise append child to parent
++    				// check if current altname equals f
++    				if (NULL == parent) {
++
++    		    		debugs(83, 9, "sslcertcacheAddEntry: no CN set using requested host ("
++    		    				<< (const char*)f->hash.key << ") as parent");
++    					parent = f;
++    					parent->flags.parent = 1;
++
++    					hash_join(sslcert_table, &parent->hash);
++    					dlinkAdd(parent, &parent->lru, &lru_list);
++    					parent->lastref = squid_curtime;
++
++    					sslcertcacheWriteCertToDisk(f);
++
++    				}
++    				// check if general name is different from f
++    				if ( 0 != strncmp((const char *)(gen->d.ia5->data), (const char*)(parent->hash.key), strlen((const char*)parent->hash.key)) ) {
++    		    		debugs(83, 9, "sslcertcacheAddEntry: append alternative name '"
++    		    				<< (const char*)gen->d.ia5->data << "'");
++        				sslcertcache_entry *child = sslcertcacheCreateEntry((const char*)gen->d.ia5->data);
++        				child->certStore = parent->certStore;
++        				child->flags.inMemory = 1;
++        				sslcertcacheAddChildEntry(child, parent);
++    				}
++    			}
++    		}
++
++    		ASN1_item_free((ASN1_VALUE*)ext_str, ASN1_ITEM_ptr(method->it));
++    	} else {
++    		debugs(83, 9, "sslcertcacheAddEntry: no alternative names found");
++    	}
++    }
++}
++
++/**
++ \ingroup SSLCertCacheInternal
++ *
++ * call handler
++ */
++static void
++sslcertcacheCallback(sslcertcache_entry * f, int wait)
++{
++    SSLH *callback;
++    void *cbdata;
++    sslcertcache_entry *parent;
++
++    debugs(83, 9, "sslcertcacheCallback: cb for " << f);
++
++    if (NULL == f) {
++    	debugs(83, 2, "sslcertcacheCallback: ERROR no entry!");
++    	return;
++    }
++
++    f->lastref = squid_curtime;
++
++    if (!f->handler) {
++    	debugs(83, 2, "sslcertcacheCallback: ERROR no handler!");
++        return;
++    }
++
++    if (!f->flags.inMemory && NULL == f->error_message) {
++    	// TODO_TJ this should be done async?
++    	sslcertcacheLoadCertFromDisk(f);
++    	return;
++    }
++
++    // parent check to lock the right entry (only parents are in lru)
++    if (f->flags.parent) {
++        debugs(83, 9, "sslcertcacheCallback: set this as parent");
++    	parent = f;
++    } else {
++        debugs(83, 9, "sslcertcacheCallback: set other as parent");
++    	parent = (sslcertcache_entry*)f->children.prev->data;
++    }
++
++    debugs(83, 9, "sslcertcacheCallback: lock");
++    sslcertcacheLockEntry(parent);
++
++    callback = f->handler;
++    f->handler = NULL;
++
++    debugs(83, 9, "sslcertcacheCallback: validate cb");
++    if (cbdataReferenceValidDone(f->handlerData, &cbdata)) {
++        debugs(83, 9, "sslcertcacheCallback: call cb");
++    	callback(&f->certStore, f->error_message, cbdata);
++    }
++
++    debugs(83, 9, "sslcertcacheCallback: unlock");
++    sslcertcacheUnlockEntry(parent);
++    debugs(83, 9, "sslcertcacheCallback: done");
++}
++
++
++/**
++ \ingroup SSLCertCacheAPI
++ *
++ * Callback for handling cert results.
++ */
++static void
++sslcertcacheHandleReply(void *data, const char *error_message)
++{
++    sslcertcache_entry *f = (sslcertcache_entry *)data;
++
++	if (NULL != error_message) {
++		debugs(83, 1, "sslcertcacheHandleReply: error '" << error_message << "'");
++		f->error_message = const_cast<char*>(error_message);
++		f->flags.parent = 1; // set as parent to delete this erroneous entry correct
++		f->expires = 0;
++
++	} else {
++		f->flags.inMemory = 1;
++		sslcertcacheAddEntry(&f);
++		sslcertcacheAdjustExpiringDate(f);
++		++SSLcertcacheStats.replies;
++	}
++
++
++    const int age = f->age();
++    // statHistCount(&statCounter.dns.svc_time, age); // TODO_TJ implement?
++
++    sslcertcacheCallback(f, age);
++}
++
++void
++sslcertcacheWildcardCheck(const char *hostname, char **wcHostname)
++{
++	unsigned int i = 0, j = 0, k = 1;
++	char buffer[255];
++	buffer[0] = '*';
++
++    for (i = 0; k<254; i++) {
++
++    	if ('\0' == hostname[i])
++    		break;
++
++    	if ('.' == hostname[i]) {
++    		j++;
++    	}
++
++    	if (j) {
++    		buffer[k++] = hostname[i];
++    	}
++    }
++    buffer[k] = '\0'; // term buffer
++
++	// only subdomains
++	if (1 < j) {
++		*wcHostname = xstrdup(buffer);
++	}
++}
++
++/**
++ * \ingroup SSLCertCacheAPI
++ *
++ * \param hostname		requested hostname
++ * \param handler		A pointer to the function to be called
++ * \param handlerData	Information that is passed to the handler
++ * 						and does not affect the SSLCert cache.
++ */
++void
++sslcertcache_getCert(char *hostname, http_port_list* port, SSLH * handler, void *handlerData)
++{
++    sslcertcache_entry *f = NULL;
++    assert(handler);
++    debugs(83, 4, "sslcertcache_getCert: Hostname '" << hostname << "'.");
++    SSLcertcacheStats.requests++;
++
++    if (hostname[0] == '\0') {
++        debugs(83, 4, "sslcertcache_getCert: Invalid name!");
++        handler(NULL, "", handlerData);
++        return;
++    }
++
++    f = sslcertcache_get(hostname);
++
++    if (NULL == f) {
++    	// check for wildcard hostname (e.g. *.domain.tld)
++
++    	char *wcHostname = NULL;
++    	sslcertcacheWildcardCheck(hostname, &wcHostname);
++
++    	// check if subdomain wc cert is possible
++    	if (NULL != wcHostname) {
++    	    debugs(83, 4, "sslcertcache_getCert: wc '" << wcHostname << "'.");
++
++    	    f = sslcertcache_get(wcHostname);
++
++    	    // TODO_TJ make a function of 'normal' hit handling?
++    	    // TODO_TJ check if we need expired
++
++    	    if (NULL != f) {
++    	    	/* hit */
++    	    	debugs(83, 4, "sslcertcache_getCert: wc HIT for '" << hostname << "' with '" << wcHostname << "'");
++
++    	    	SSLcertcacheStats.hits++;
++
++    	    	// create child and set hostname, append child to f
++    	        sslcertcache_entry *child = sslcertcacheCreateEntry(hostname);
++
++    	        if (f->flags.inMemory) {
++    	        	child->certStore = f->certStore;
++        	        child->flags.inMemory = 1;
++    	        }
++
++    	    	child->handler = handler;
++    	    	child->handlerData = cbdataReference(handlerData);
++    	        child->filename = xstrdup(f->filename);
++
++    	        sslcertcacheAddChildEntry(child, f);
++
++    	    	sslcertcacheCallback(child, -1); // no lookup
++
++    	    	// TODO_TJ well... would be nice to schedule an async call but than remember to care for certStore not beeing deleted
++
++    	    	safe_free(wcHostname);
++    	    	return;
++    	    }
++	    	safe_free(wcHostname);
++    	}
++
++        /* miss */
++
++    } else if (sslcertcacheInvalidEntry(f)) {
++        /* hit, but invalid */
++    	// TODO_TJ is it possible that an entry expires?
++        debugs(83, 5, "sslcertcache_getCert: MISS for '" << hostname << "'");
++        sslcertcacheRelease(f);
++        f = NULL;
++    } else {
++        /* hit */
++        debugs(83, 4, "sslcertcache_getCert: HIT for '" << hostname << "'");
++
++        SSLcertcacheStats.hits++;
++
++        f->handler = handler;
++        f->handlerData = cbdataReference(handlerData);
++
++        sslcertcacheCallback(f, -1); // no lookup
++
++        // TODO_TJ well... would be nice to schedule an async call but than remember to care for certStore not beeing deleted
++
++        return;
++    }
++
++    debugs(83, 5, "sslcertcache_getCert: MISS for '" << hostname << "'");
++    SSLcertcacheStats.misses++;
++    f = sslcertcacheCreateEntry(hostname);
++    f->handler = handler;
++    f->handlerData = cbdataReference(handlerData);
++    f->request_time = current_time;
++    f->port = port;
++
++    isslLookup(f);
++}
++
++/// \ingroup SSLCertCacheInternal
++static void
++sslcertcacheRegisterWithCacheManager(void)
++{
++    CacheManager::GetInstance()->
++    registerAction("sslcertcache", "SSL Cert Cache Stats and Contents",
++                   sslcertStats, 0, 1);
++
++}
++
++/**
++ \ingroup SSLCertCacheAPI
++ *
++ * Initialize the sslcertcache.
++ */
++void
++sslcertcache_init(void)
++{
++    int n;
++
++    sslcertcacheRegisterWithCacheManager();
++
++    if (sslcert_table)
++        return;
++
++    debugs(83, 3, "Initializing SSL Cert Cache...");
++
++    memset(&SSLcertcacheStats, '\0', sizeof(SSLcertcacheStats));
++
++    memset(&lru_list, '\0', sizeof(lru_list));
++
++    sslcertcache_high = (long) (((float) Config.sslcertcache.size *
++                              (float) SSL_DYNCERT_HIGH_WATER) / (float) 100);
++
++    sslcertcache_low = (long) (((float) Config.sslcertcache.size *
++                             (float) SSL_DYNCERT_LOW_WATER) / (float) 100);
++
++    n = hashPrime(sslcertcache_high / 4);
++
++    sslcertcache_memlow = (long) (((float) Config.sslcertcache.maxCertificatesInMemory *
++            (float) SSL_DYNCERT_LOW_WATER) / (float) 100);
++
++    sslcertcache_memhigh = (long) (((float) Config.sslcertcache.maxCertificatesInMemory *
++            (float) SSL_DYNCERT_HIGH_WATER) / (float) 100);
++
++
++    sslcert_table = hash_create((HASHCMP *) strcmp, n, hash4);
++
++    memDataInit(MEM_SSLCERTCACHE_ENTRY, "sslcertcache_entry",
++                sizeof(sslcertcache_entry), 0);
++
++    sslcertcacheLoadStoredCertificates();
++}
++
++/**
++ \ingroup SSLCertCacheInternal
++ *
++ * Process objects list
++ */
++void
++sslcertStats(StoreEntry * sentry)
++{
++    sslcertcache_entry *f = NULL;
++    //int k;
++    int ttl;
++
++    if (sslcert_table == NULL)
++        return;
++
++    storeAppendPrintf(sentry, "SSL Cert Cache Statistics:\n");
++
++    storeAppendPrintf(sentry, "SSLCertcache Entries: %d\n",
++                      memInUse(MEM_SSLCERTCACHE_ENTRY));
++
++    storeAppendPrintf(sentry, "SSLCertcache Requests: %d\n",
++                      SSLcertcacheStats.requests);
++
++    storeAppendPrintf(sentry, "SSLCertcache Hits: %d\n",
++                      SSLcertcacheStats.hits);
++
++    storeAppendPrintf(sentry, "SSLCertcache Negative Hits: %d\n",
++                      SSLcertcacheStats.negative_hits);
++
++    storeAppendPrintf(sentry, "SSLCertcache Misses: %d\n",
++                      SSLcertcacheStats.misses);
++
++    storeAppendPrintf(sentry, "SSLCert Cache Contents:\n\n");
++
++    storeAppendPrintf(sentry, "%-45.45s %7.7s %3s %s %s %s\n",
++                      "Address", "TTL", "P/C", "Filename", "inMem", "Locks");
++
++    hash_first(sslcert_table);
++
++    while ((f = (sslcertcache_entry *) hash_next(sslcert_table))) {
++        ttl = f->expires - squid_curtime;
++        storeAppendPrintf(sentry, "%-45.45s %7d   %c %8.8s     %c %5d\n",
++                          hashKeyStr(&f->hash),
++                          ttl,
++                          (f->flags.parent ? 'P' : 'C'),
++                          f->filename,
++                          (f->flags.inMemory ? 'y' : 'n'),
++                          f->locks
++                         );
++    }
++}
++
++/// \ingroup SSLCertCacheInternal
++//static void
++//dummy_handler(const sslcert_store *cert, void *)
++//{
++//    return;
++//}
++
++/// \ingroup SSLCertCacheInternal
++static void
++sslcertcacheLockEntry(sslcertcache_entry * f)
++{
++    if (f->locks++ == 0) {
++        dlinkDelete(&f->lru, &lru_list);
++        dlinkAdd(f, &f->lru, &lru_list);
++    }
++}
++
++/// \ingroup SSLCertCacheInternal
++static void
++sslcertcacheUnlockEntry(sslcertcache_entry * f)
++{
++    assert(f->locks > 0);
++    f->locks--;
++
++    if (sslcertcacheInvalidEntry(f))
++    	sslcertcacheRelease(f);
++}
++
++/// \ingroup SSLCertCacheInternal
++static void
++sslcertcacheFreeEntry(void *data)
++{
++	// TODO_TJ check for a handler and handler_data?
++
++	sslcertcache_entry *f = (sslcertcache_entry *) data;
++
++	safe_free(f->hash.key);
++
++	safe_free(f->filename);
++
++	memFree(f, MEM_SSLCERTCACHE_ENTRY);
++}
++
++/// \ingroup SSLCertCacheAPI
++void
++sslcertcacheFreeMemory(void)
++{
++    hashFreeItems(sslcert_table, sslcertcacheFreeEntry);
++    hashFreeMemory(sslcert_table);
++    sslcert_table = NULL;
++}
++
++/**
++ \ingroup SSLCertCacheAPI
++ *
++ * Recalculate SSLCert cache size upon reconfigure.
++ * Is called to clear the SSLCert cache's data structures,
++ * cancel all pending requests.
++ */
++void
++sslcertcache_restart(void)
++{
++	// reset high and low marks
++    sslcertcache_high = (long) (((float) Config.sslcertcache.size *
++                              (float) SSL_DYNCERT_HIGH_WATER) / (float) 100);
++    sslcertcache_low = (long) (((float) Config.sslcertcache.size *
++                             (float) SSL_DYNCERT_LOW_WATER) / (float) 100);
++
++    // reinit hash
++    hashFreeItems(sslcert_table, sslcertcacheFreeEntry);
++    hashFreeMemory(sslcert_table);
++    sslcert_table = NULL;
++    int n = hashPrime(sslcertcache_high / 4);
++    sslcert_table = hash_create((HASHCMP *) strcmp, n, hash4);
++
++    // reset stats
++    memset(&SSLcertcacheStats, '\0', sizeof(SSLcertcacheStats));
++}
++
++
++static void
++sslcertcacheWriteComplete(int fd, int errflag, size_t len, void *data) /* disk write CB */
++{
++	BIO *b;
++	static_cast<generic_cbdata *>(data)->unwrap(&b);
++
++//	char *data;
++//	long size = BIO_get_mem_data(b, &data);
++//	assert(len == size) // TODO_TJ maybe check if all bytes are writen
++
++	if (errflag) {
++		debugs(83, 0, "sslcertcacheWriteComplete: got failure (" << errflag << ")");
++	}
++
++	debugs(83, 5, "written " << len << " bytes to FD " << fd);
++
++	file_close(fd);
++	SSLcertcacheStats.store_open_disk_fd--;
++
++	BIO_free(b);
++}
++
++// TODO_TJ this should be done async!
++static void
++sslcertcacheWriteCertToDisk(sslcertcache_entry *e)
++{
++	char buff[11];
++
++	snprintf(buff, 9, "%08lx", X509_subject_name_hash(e->certStore.cert));
++
++	char outfile[256];
++	int i = 0;
++	while (i < 10) {
++		// check 10 times if file exists
++		snprintf(outfile, sizeof(outfile), "%s/%s.%d", Config.sslcertcache.certificateDirectory, buff, i);
++		if (-1 == access(outfile, F_OK)) {
++			break;
++		}
++		debugs(83, 7, "sslcertcacheWriteCertToDisk: found another stored cert with same hash value");
++		i++;
++	}
++
++	if (10 == i) {
++		debugs(83, 1, "sslcertcacheWriteCertToDisk: could not store certificate due to too much certificates with same hash value");
++		return;
++	}
++
++	snprintf(buff + 8, 2, ".%d", i);
++	e->filename = xstrndup(buff, sizeof(buff));
++
++	int fd = file_open(outfile, O_WRONLY | O_CREAT | O_BINARY | O_APPEND);
++
++	if (fd < 0) {
++		debugs(83, 1, "sslcertcacheWriteCertToDisk: could not open '" << outfile << "'");
++		return;
++	}
++	SSLcertcacheStats.store_open_disk_fd++;
++
++	debugs(83, 5, "sslcertcacheWriteCertToDisk opened fd: " << fd);
++
++	BIO *bio = BIO_new(BIO_s_mem());
++
++	PEM_write_bio_X509(bio, e->certStore.cert);
++	PEM_write_bio_PrivateKey(bio, e->certStore.key, NULL, NULL, 0, NULL, NULL);
++
++	char *data;
++	long size = BIO_get_mem_data(bio, &data);
++
++	debugs(83, 5, "sslcertcacheWriteCertToDisk: sizeof cert+pkey is " << size << " bytes");
++	// BIO_get_mem_ptr(bio, &ptr); // TODO_TJ maybe use this and set bio to no_close and then free bio right now
++
++	generic_cbdata *cbdata = new generic_cbdata(bio);
++
++	file_write(fd, 0, data, size, sslcertcacheWriteComplete, cbdata, NULL);
++}
++
++// TODO_TJ what happens if multiple requests occur and certificate is not in memory?
++// (should only be of interest in an async access strategy)
++static void
++sslcertcacheLoadCertFromDisk(sslcertcache_entry* f)
++{
++	if(NULL == f) {
++    	debugs(83, 2, "sslcertcacheLoadCertFromDisk: ERROR no entry!");
++		return;
++	}
++
++	if(NULL == f->filename) {
++    	debugs(83, 2, "sslcertcacheLoadCertFromDisk: ERROR no filename!");
++		return;
++	}
++
++	sslcertcache_entry* parent = NULL;
++	// first check parent if possible
++	if (!f->flags.parent) {
++		parent = static_cast<sslcertcache_entry*>(f->children.prev->data);
++		if (parent->flags.inMemory) {
++	    	debugs(83, 9, "sslcertcacheLoadCertFromDisk: using cert of parent: " << parent->certStore.cert);
++			f->certStore = parent->certStore;
++			f->flags.inMemory = 1;
++		    sslcertcacheCallback(f, 0);
++		    return;
++		}
++	}
++
++	char infile[256];
++	snprintf(infile, sizeof(infile), "%s/%s", Config.sslcertcache.certificateDirectory, f->filename);
++
++	debugs(83, 5, "sslcertcacheLoadCertFromDisk: try to open '" << f->filename << "' in directory '" << Config.sslcertcache.certificateDirectory << "'");
++
++	// next steps should be done async?
++
++	if (sslReadCertFromDisk(infile, &f->certStore.cert) && sslReadKeyFromDisk(infile, &f->certStore.key)) {
++		f->flags.inMemory = 1;
++		SSLcertcacheStats.sslCertificatesInMemory++;
++
++		// set certStore also to parent
++		if (NULL != parent) {
++			parent->certStore = f->certStore;
++			parent->flags.inMemory = 1;
++		} else {
++			parent = f;
++		}
++		sslcertcacheAdjustExpiringDate(parent);
++	} else {
++		f->error_message = const_cast<char *>("error: could not open cert from disk");
++		sslcertcacheCallback(f, -1);
++	}
++
++    const int age = f->age();
++    sslcertcacheCallback(f, age);
++}
++
++void
++sslGetX509Hostnames(X509 *cert, wordlist **wl)
++{
++	if (NULL == cert)
++		return;
++
++
++	char buf[255];
++	char tmpbuf[255];
++	int len;
++
++	if ( 0 < (len = X509_NAME_get_text_by_NID(X509_get_subject_name(cert), NID_commonName, tmpbuf, 255)) && len < 255 ) {
++
++		// remove \x00 from malformed URLs (e.g. shop.tarox.de)
++		if (tmpbuf[0] == '\0') {
++			char *ptr = buf;
++			char *dptr = tmpbuf;
++			int cnt = len;
++			while (cnt--) {
++				if ('\0' != *dptr) {
++					*ptr++ = *dptr;
++				}
++				dptr++;
++			}
++			ptr = '\0';
++		} else {
++			memcpy(buf, tmpbuf, len);
++			buf[len] = '\0';
++		}
++
++		wordlistAdd(wl, buf);
++		debugs(83, 5, "sslGetX509Hostnames: added CN '" << buf << "'");
++	}
++
++	// check for alternative domain names
++	int loc;
++	if ( 0 <= (loc = X509_get_ext_by_NID(cert, NID_subject_alt_name, -1)) ) {
++
++		debugs(83, 9, "sslcertcacheAddEntry: alternative names found");
++
++		X509_EXTENSION *extSaltName = X509_get_ext(cert, loc);
++		void *ext_str = NULL;
++		const unsigned char *p;
++		X509V3_EXT_METHOD *method;
++
++		method = X509V3_EXT_get(extSaltName);
++		p = extSaltName->value->data;
++		ext_str = ASN1_item_d2i(NULL, &p, extSaltName->value->length, ASN1_ITEM_ptr(method->it));
++
++		int i;
++		GENERAL_NAMES *gens = (GENERAL_NAMES *)ext_str;
++		GENERAL_NAME *gen;
++
++		// get every alternative name, check against parent if exists
++		for(i = 0; i < sk_GENERAL_NAME_num(gens); i++) {
++			gen = sk_GENERAL_NAME_value(gens, i);
++
++			if (gen->type == GEN_DNS || gen->type == GEN_URI ) { // just support these both ... should only be DNS, but who knows
++
++				wordlist *ptr = *wl;
++				bool noDup = true;
++
++//				// remove \x00 from malformed URLs (e.g. shop.tarox.de)
++				if (gen->d.ia5->data[0] == '\0') {
++					char *ptr = buf;
++					char *dptr = (char*)gen->d.ia5->data;
++					int cnt = gen->d.ia5->length;
++					while (cnt--) {
++						if ('\0' != *dptr) {
++							*ptr++ = *dptr;
++						}
++						dptr++;
++					}
++					ptr = '\0';
++				} else {
++					memcpy(buf, (char*)gen->d.ia5->data, gen->d.ia5->length);
++					buf[gen->d.ia5->length] = '\0';
++				}
++
++				while(ptr && noDup) {
++					if ( 0 == strcmp(buf, ptr->key)) {
++						noDup = false;
++					}
++					ptr = ptr->next;
++				}
++				if (noDup) {
++					wordlistAdd(wl, buf);
++					debugs(83, 5, "sslGetX509Hostnames: added alternative name '" << buf << "'");
++				}
++			}
++		}
++
++		ASN1_item_free((ASN1_VALUE*)ext_str, ASN1_ITEM_ptr(method->it));
++	}
++}
++
++static void
++sslcertcacheLoadStoredCertificates() // FIXME_TJ nearly same as sslcertcacheAddEntry
++{
++	// check Config.sslcertcache.certificateDirectory for certificates / files
++	if (NULL == Config.sslcertcache.certificateDirectory)
++		return;
++
++	DIR *d = opendir(Config.sslcertcache.certificateDirectory);
++
++	if (d == NULL)
++		return;
++
++	// open each file and parse each certificate to create hashes (certificate stores are not yet loaded into memory!)
++	// maybe we need a config file to store lru information to load
++	struct dirent *directoryEntry;
++	char buffer[256];
++	int len = strlen(Config.sslcertcache.certificateDirectory) + 12; // 1 ('/') + 8 (hash) + 2 (suffix '.n') + 1 ('\0')
++
++	while ((directoryEntry = readdir(d))) {
++		if (directoryEntry->d_type == DT_DIR)
++			continue;
++
++		snprintf(buffer, len, "%s/%s",
++				Config.sslcertcache.certificateDirectory,
++				directoryEntry->d_name);
++
++		sslcert_store localCertStore;
++
++		if (0 == sslReadCertFromDisk(buffer, &localCertStore.cert) || 0
++				== sslReadKeyFromDisk(buffer, &localCertStore.key)) {
++			continue;
++		}
++
++		wordlist *hosts = NULL;
++
++		// get wordlist from certificate
++		sslGetX509Hostnames(localCertStore.cert, &hosts);
++
++		if (NULL != hosts) {
++			wordlist *ptr = hosts;
++			sslcertcache_entry *parent = NULL;
++
++			while (ptr) {
++				if ('\0' == ptr->key[0]) {
++					ptr = ptr->next;
++					continue;
++				}
++
++				sslcertcache_entry *f = sslcertcacheCreateEntry(ptr->key);
++				if (NULL == parent) {
++					parent = f;
++					f->flags.parent = 1;
++
++					// add entry to hash and lru and #
++					dlinkAdd(f, &f->lru, &lru_list);
++					hash_join(sslcert_table, &parent->hash);
++
++					debugs(83, 5, "sslcertcacheLoadStoredCertificates: add parent entry for '" << ptr->key <<"'");
++				} else {
++					sslcertcacheAddChildEntry(f, parent);
++
++					debugs(83, 5, "sslcertcacheLoadStoredCertificates: add child entry for '" << ptr->key <<"'");
++				}
++
++				f->filename = xstrndup(directoryEntry->d_name, 11);
++				f->lastref = squid_curtime;
++				f->flags.inMemory = 0; // depends...
++
++				ptr = ptr->next;
++			}
++
++			wordlistDestroy(&hosts);
++		} else {
++			debugs(83, 2, "sslcertcacheLoadStoredCertificates: hosts == null");
++		}
++	}
++
++	closedir(d);
++}
++
++// TODO_TJ squid_snmp?
++//#ifdef SQUID_SNMP
++// /**
++// *  \ingroup SSLCertCacheAPI
++// * The function to return the FQDN statistics via SNMP
++// */
++//variable_list *
++//snmp_netSslFn(variable_list * Var, snint * ErrP)
++//{
++//    variable_list *Answer = NULL;
++//    debugs(49, 5, "snmp_netFqdnFn: Processing request:");
++//    snmpDebugOid(5, Var->name, Var->name_length);
++//    *ErrP = SNMP_ERR_NOERROR;
++//
++//    switch (Var->name[LEN_SQ_NET + 1]) {
++//
++//    case FQDN_ENT:
++//        Answer = snmp_var_new_integer(Var->name, Var->name_length,
++//                                      memInUse(MEM_SSLCERTCACHE_ENTRY),
++//                                      SMI_GAUGE32);
++//        break;
++//
++//    case FQDN_REQ:
++//        Answer = snmp_var_new_integer(Var->name, Var->name_length,
++//                                      SSLcertcacheStats.requests,
++//                                      SMI_COUNTER32);
++//        break;
++//
++//    case FQDN_HITS:
++//        Answer = snmp_var_new_integer(Var->name, Var->name_length,
++//                                      SSLcertcacheStats.hits,
++//                                      SMI_COUNTER32);
++//        break;
++//
++//    case FQDN_PENDHIT:
++//        /* this is now worthless */
++//        Answer = snmp_var_new_integer(Var->name, Var->name_length,
++//                                      0,
++//                                      SMI_GAUGE32);
++//        break;
++//
++//    case FQDN_NEGHIT:
++//        Answer = snmp_var_new_integer(Var->name, Var->name_length,
++//                                      SSLcertcacheStats.negative_hits,
++//                                      SMI_COUNTER32);
++//        break;
++//
++//    case FQDN_MISS:
++//        Answer = snmp_var_new_integer(Var->name, Var->name_length,
++//                                      SSLcertcacheStats.misses,
++//                                      SMI_COUNTER32);
++//        break;
++//
++//    case FQDN_GHBN:
++//        Answer = snmp_var_new_integer(Var->name, Var->name_length,
++//                                      0, /* deprecated */
++//                                      SMI_COUNTER32);
++//        break;
++//
++//    default:
++//        *ErrP = SNMP_ERR_NOSUCHNAME;
++//        break;
++//    }
++//
++//    return Answer;
++//}
++//
++//#endif /*SQUID_SNMP */
++
++/* ========= ssl cache internal ========== */
++
++static hash_table *issl_lookup_hash = NULL;
++
++static OBJH isslStats;
++static void isslGetServerCertificate(sslcertcache_entry *q);
++
++static void
++isslStats(StoreEntry * sentry)
++{
++	// TODO_TJ print some stats?
++}
++
++static void
++isslRegisterWithCacheManager(void)
++{
++    CacheManager::GetInstance()->
++    registerAction("issl", "Internal SSL Statistics", isslStats, 0, 1);
++}
++
++void
++isslInit(void)
++{
++    debugs(83, 3, "Initializing ISSL...");
++	if (NULL != issl_lookup_hash)
++		return;
++
++	// memDataInit(MEM_ISSLCERTCACHE_ENTRY, "sslcertcache_entry", sizeof(sslcertcache_entry), 0);
++	issl_lookup_hash = hash_create((HASHCMP *) strcmp, 103, hash_string);
++
++	isslRegisterWithCacheManager();
++}
++
++void
++isslShutdown(void)
++{
++	hashFreeMemory(issl_lookup_hash);
++	issl_lookup_hash = NULL;
++}
++
++static int
++isslCachedLookup(sslcertcache_entry *q)
++{
++	sslcertcache_entry *old = (sslcertcache_entry *) hash_lookup(issl_lookup_hash, q->hash.key);
++
++    if (!old)
++        return 0;
++
++    q->queue = old->queue;
++
++    old->queue = q;
++
++    return 1;
++}
++
++void
++isslLookup(sslcertcache_entry *q)
++{
++    if (isslCachedLookup(q)) {
++        return;
++    }
++
++    debugs(83, 5, "isslLookup: url: " << hashKeyStr(&q->hash) );
++
++    hash_join(issl_lookup_hash, &q->hash);
++
++    isslGetServerCertificate(q);
++}
++
++static void
++isslCallback(void *data, const char *error)
++{
++	// callback
++	sslcertcache_entry *q;
++	static_cast<generic_cbdata *>(data)->unwrap(&q);
++
++    if (q->hash.key) {
++        hash_remove_link(issl_lookup_hash, &q->hash);
++    }
++
++	sslcertcache_entry *next = q->queue;
++    sslcertcacheHandleReply(q, error);
++
++    while (next) {
++    	q = next;
++        next = q->queue;
++        sslcertcacheHandleReply(q, error);
++    }
++}
++
++static void
++isslNegotiateSSLandFakeServerCert(int sslConnFD, void *data)
++{
++	//ConnStateData *conn = (ConnStateData *) data;
++	SSL *ssl = fd_table[sslConnFD].ssl;
++	int ret;
++
++	debugs(83, 9, "isslNegotiateSSLandFakeServerCert: try to get server cert and fake it for local ssl conn");
++
++	if ((ret = SSL_connect(ssl)) <= 0) {
++		int ssl_error = SSL_get_error(ssl, ret);
++
++		switch (ssl_error) {
++
++		case SSL_ERROR_WANT_READ:
++			commSetSelect(sslConnFD, COMM_SELECT_READ, isslNegotiateSSLandFakeServerCert, data, 0);
++			debugs(83, 2, "isslNegotiateSSLandFakeServerCert: SSL_ERROR_WANT_READ");
++			return;
++
++		case SSL_ERROR_WANT_WRITE:
++			commSetSelect(sslConnFD, COMM_SELECT_WRITE, isslNegotiateSSLandFakeServerCert, data, 0);
++			debugs(83, 2, "isslNegotiateSSLandFakeServerCert: SSL_ERROR_WANT_WRITE");
++			return;
++
++		default:
++			unsigned long err = ERR_get_error();
++			debugs(83, 1, "isslNegotiateSSLandFakeServerCert: Error negotiating SSL connection on FD " << sslConnFD <<
++					": " << ERR_error_string(err, NULL) << " (" << ssl_error <<
++					"/" << ret << "/" << errno << ")");
++			comm_close(sslConnFD);
++
++			if ( SSL_R_CERTIFICATE_VERIFY_FAILED == ERR_GET_REASON(err) ) {
++				isslCallback(data, "issl error: certificate verify failed");
++			} else {
++				isslCallback(data, "issl error: negotiation error");
++			}
++			return;
++		}
++	}
++
++	// TODO_TJ check port?
++
++	X509 *peerCert = SSL_get_peer_certificate(ssl);
++
++	if (NULL == peerCert) {
++		comm_close(sslConnFD);
++		isslCallback(data, "issl error: got no peer certificate");
++		X509_free(peerCert);
++		return;
++	}
++
++
++	sslcertcache_entry *q = static_cast<sslcertcache_entry*>(static_cast<generic_cbdata *>(data)->data);
++	if ( 0 == sslCreatePeerMatchedCert(&q->certStore.cert, &q->certStore.key, peerCert, q->port->caPKey, q->port->caCert, q->port->certSerialNumber) ) {
++		comm_close(sslConnFD);
++		isslCallback(data, "issl error: could not create cert");
++		X509_free(peerCert);
++	}
++
++	q->port->serialChanged = 1;
++
++	// close cert request connection
++	comm_close(sslConnFD);
++
++	isslCallback(data, NULL);
++
++	X509_free(peerCert);
++}
++
++// TODO_TJ do we need a special handler for conn closed?
++//			problem is here the refcnted cbdata with the use of unwrap
++//			(<generic_cbdata *>(data)->unwrap(&q);) before the call to connClosed
++//static void
++//isslConnectionClosed(int fd, void *data)
++//{
++//	// sslcertcache_entry *q = (sslcertcache_entry *) data;
++//	debugs(33, 3, HERE << "Closing connection on FD " << fd);
++//	// TODO_TJ handle comm close - final checks?
++//}
++
++static void
++isslConnectionTimedOut(int fd, void *data)
++{
++	debugs(33, 3, HERE << "isslConnectionTimedOut: Connection timeout on FD " << fd);
++	comm_close(fd);
++	isslCallback(data, "issl error: timeout");
++}
++
++/**
++ * Connection callback (CNCB) for issl
++ */
++static void
++isslConnectDone(int sslConnFD, const DnsLookupDetails &dns, comm_err_t status, int xerrno, void *data)
++{
++	// sslcertcache_entry *q = (sslcertcache_entry *) data;
++	SSL *ssl;
++	SSL_CTX *sslContext = Config.ssl_client.sslContext; // TODO_TJ whats up if this is a peer? compare with FwdState::initiateSSL()
++
++	assert(sslContext);
++
++    if (status == COMM_ERR_DNS) {
++        comm_close(sslConnFD);
++    	isslCallback(data, "isslConnectDone: unknown host");
++
++    } else if (status != COMM_OK) {
++        comm_close(sslConnFD);
++    	isslCallback(data, "isslConnectDone: connection failed");
++
++    } else {
++    	if ((ssl = SSL_new(sslContext)) == NULL) {
++    		debugs(83, 1, "isslConnectDone: Error allocating handle: " << ERR_error_string(ERR_get_error(), NULL) );
++    		comm_close(sslConnFD);
++    		isslCallback(data, "issl error: no SSL handle");
++    		return;
++    	}
++
++    	// associate ssl with fd
++    	SSL_set_fd(ssl, sslConnFD);
++
++    	// register ssl
++    	fd_table[sslConnFD].ssl = ssl; // this is necessary to free ssl rw methods are not necessary
++
++    	commSetSelect(sslConnFD, COMM_SELECT_WRITE, NULL, NULL, 0); // TODO_TJ is this necessary?
++    	commSetSelect(sslConnFD, COMM_SELECT_WRITE, isslNegotiateSSLandFakeServerCert, data, 0);
++
++    	// maybe go directly to negotiateSSLandFakeServerCert?
++    }
++}
++
++static void
++isslGetServerCertificate(sslcertcache_entry *q)
++{
++	// prepare to fetch servers SSL certificate
++    IpAddress outgoing;
++    unsigned short tos;
++    const char *host = (const char*)q->hash.key;
++
++    outgoing.SetAnyAddr(); // IMPLTJ implemented static... can this be improved?
++    tos = 0; // IMPLTJ TOS is not important here
++
++    int flags = COMM_NONBLOCKING;
++    int newfd = comm_openex(SOCK_STREAM, IPPROTO_TCP, outgoing, flags, tos, host);
++
++    debugs(83, 3, "isslGetServerCertificate: got TCP FD " << newfd);
++
++    if (newfd < 0) {
++        debugs(83, 4, "isslGetServerCertificate: " << xstrerror());
++        isslCallback(q, "internal error: could not open fd");
++        return;
++    }
++
++    /* //TODO_TJ dont know what to do with this, yet.
++#if LINUX_TPROXY2
++    if (!fs->_peer && request->flags.spoof_client_ip) {
++        // try to set the outgoing address using TPROXY v2
++        // if it fails we abort any further TPROXY actions on this connection
++        if (IpInterceptor.SetTproxy2OutgoingAddr(int fd, const IpAddress &src) == -1) {
++            request->flags.spoof_client_ip = 0;
++        }
++    }
++#endif
++*/
++
++    generic_cbdata *c = new generic_cbdata(q);
++
++    // comm_add_close_handler(newfd, isslConnectionClosed, c); // messes up cbdata due to unwrap
++
++    commSetTimeout(newfd, Config.Timeout.connect, isslConnectionTimedOut, c);
++
++    commConnectStart(newfd, host, 443, isslConnectDone, c);
++}
++
++// TODO_TJ squid_snmp?
++//#ifdef SQUID_SNMP
++// /*
++// * The function to return the DNS via SNMP
++// */
++//variable_list *
++//snmp_netIsslFn(variable_list * Var, snint * ErrP)
++//{
++//    int i, n = 0;
++//    variable_list *Answer = NULL;
++//    debugs(49, 5, "snmp_netDnsFn: Processing request: ");
++//    snmpDebugOid(5, Var->name, Var->name_length);
++//    *ErrP = SNMP_ERR_NOERROR;
++//
++//    switch (Var->name[LEN_SQ_NET + 1]) {
++//
++//    case DNS_REQ:
++//
++//        for (i = 0; i < nns; i++)
++//            n += nameservers[i].nqueries;
++//
++//        Answer = snmp_var_new_integer(Var->name, Var->name_length,
++//                                      n,
++//                                      SMI_COUNTER32);
++//
++//        break;
++//
++//    case DNS_REP:
++//        for (i = 0; i < nns; i++)
++//            n += nameservers[i].nreplies;
++//
++//        Answer = snmp_var_new_integer(Var->name, Var->name_length,
++//                                      n,
++//                                      SMI_COUNTER32);
++//
++//        break;
++//
++//    case DNS_SERVERS:
++//        Answer = snmp_var_new_integer(Var->name, Var->name_length,
++//                                      nns,
++//                                      SMI_COUNTER32);
++//
++//        break;
++//
++//    default:
++//        *ErrP = SNMP_ERR_NOSUCHNAME;
++//
++//        break;
++//    }
++//
++//    return Answer;
++//}
++//
++//#endif /*SQUID_SNMP */
++
++/* ========= end of ssl cache internal ========== */
++
++#endif /* USE_SSL_DYNCERT */
++
+diff -up squid-3.1.0.16/src/ssl_support.cc.dyncert squid-3.1.0.16/src/ssl_support.cc
+--- squid-3.1.0.16/src/ssl_support.cc.dyncert	2010-02-01 22:22:38.000000000 +0100
++++ squid-3.1.0.16/src/ssl_support.cc	2010-02-03 13:50:59.000000000 +0100
+@@ -42,7 +42,6 @@
+ 
+ #include "fde.h"
+ #include "acl/FilledChecklist.h"
+-
+ /**
+  \defgroup ServerProtocolSSLInternal Server-Side SSL Internals
+  \ingroup ServerProtocolSSLAPI
+@@ -154,36 +153,116 @@ ssl_verify_cb(int ok, X509_STORE_CTX * c
+         debugs(83, 5, "SSL Certificate signature OK: " << buffer);
+ 
+         if (server) {
+-            int i;
+-            int found = 0;
+-            char cn[1024];
+-            X509_NAME *name = X509_get_subject_name(peer_cert);
+-            debugs(83, 3, "Verifying server domain " << server << " to certificate dn " << buffer);
+-
+-            for (i = X509_NAME_get_index_by_NID(name, NID_commonName, -1); i >= 0; i = X509_NAME_get_index_by_NID(name, NID_commonName, i)) {
+-                ASN1_STRING *data = X509_NAME_ENTRY_get_data(X509_NAME_get_entry(name, i));
+-
+-                if (data->length > (int)sizeof(cn) - 1)
+-                    continue;
+-
+-                memcpy(cn, data->data, data->length);
+-
+-                cn[data->length] = '\0';
+-
+-                debugs(83, 4, "Verifying server domain " << server << " to certificate cn " << cn);
+-
+-                if (matchDomainName(server, cn[0] == '*' ? cn + 1 : cn) == 0) {
+-                    found = 1;
+-                    break;
+-                }
+-            }
+-
+-            if (!found) {
+-                debugs(83, 2, "SQUID_X509_V_ERR_DOMAIN_MISMATCH: Certificate " << buffer << " does not match domainname " << server);
+-                ok = 0;
+-                if (check)
+-                    Filled(check)->ssl_error = SQUID_X509_V_ERR_DOMAIN_MISMATCH;
+-            }
++        	int i;
++        	int found = 0;
++        	char cn[1024];
++        	X509_NAME *name = X509_get_subject_name(peer_cert);
++        	debugs(83, 3, "Verifying server domain " << server << " to certificate dn " << buffer);
++
++        	for (i = X509_NAME_get_index_by_NID(name, NID_commonName, -1); i
++					>= 0; i = X509_NAME_get_index_by_NID(name, NID_commonName,
++					i)) {
++				ASN1_STRING *data = X509_NAME_ENTRY_get_data(
++						X509_NAME_get_entry(name, i));
++
++				if (data->length > (int) sizeof(cn) - 1)
++					continue;
++
++				// remove \x00 from malformed URLs (e.g. shop.tarox.de)
++				if (data->data[0] == '\0') {
++					char *ptr = cn;
++					char *dptr = (char*) data->data;
++					int cnt = data->length;
++
++					while (0 < cnt--) {
++						if ('\0' != *dptr) {
++							*ptr++ = *dptr;
++						}
++						dptr++;
++					}
++					*ptr = '\0';
++
++				} else {
++					memcpy(cn, data->data, data->length);
++					cn[data->length] = '\0';
++				}
++
++				debugs(83, 4, "Verifying server domain " << server << " to certificate cn " << cn);
++
++				if (matchDomainName(server, cn[0] == '*' ? cn + 1 : cn) == 0) {
++					found = 1;
++					break;
++				}
++			}
++
++			if (!found) {
++				// check alternative names
++				int loc;
++				if (0 <= (loc = X509_get_ext_by_NID(peer_cert,
++						NID_subject_alt_name, -1))) {
++
++					X509_EXTENSION *extSaltName = X509_get_ext(peer_cert, loc);
++					void *ext_str = NULL;
++					const unsigned char *p;
++					X509V3_EXT_METHOD *method;
++
++					method = X509V3_EXT_get(extSaltName);
++					p = extSaltName->value->data;
++					ext_str = ASN1_item_d2i(NULL, &p,
++							extSaltName->value->length,
++							ASN1_ITEM_ptr(method->it));
++
++					GENERAL_NAMES *gens = (GENERAL_NAMES *) ext_str;
++					GENERAL_NAME *gen;
++
++					// get every alternative name, check against parent if exists
++					for (i = 0; i < sk_GENERAL_NAME_num(gens); i++) {
++						gen = sk_GENERAL_NAME_value(gens, i);
++
++						if (gen->type == GEN_DNS || gen->type == GEN_URI) { // just support these both ... should only be DNS, but who knows
++							ASN1_STRING *data = gen->d.ia5;
++
++							if (data->length > (int) sizeof(cn) - 1)
++								continue;
++
++							// remove \x00 from malformed URLs (e.g. shop.tarox.de)
++							if (data->data[0] == '\0') {
++								char *ptr = cn;
++								char *dptr = (char*) data->data;
++								int cnt = data->length;
++								while (cnt--) {
++									if ('\0' != *dptr) {
++										*ptr++ = *dptr;
++									}
++									dptr++;
++								}
++								*ptr = '\0';
++							} else {
++								memcpy(cn, data->data, data->length);
++								cn[data->length] = '\0';
++							}
++
++							debugs(83, 4, "Verifying server domain " << server << " to certificate alt cn " << cn);
++
++							if (matchDomainName(server, cn[0] == '*' ? cn + 1
++									: cn) == 0) {
++								found = 1;
++								break;
++							}
++						}
++					}
++
++					ASN1_item_free((ASN1_VALUE*) ext_str,
++							ASN1_ITEM_ptr(method->it));
++				}
++			}
++
++        	if (!found) {
++        		debugs(83, 2, "SQUID_X509_V_ERR_DOMAIN_MISMATCH: Certificate " << buffer << " does not match domainname " << server);
++        		ok = 0;
++        		if (check)
++        			Filled(check)->ssl_error = SQUID_X509_V_ERR_DOMAIN_MISMATCH;
++        	}
+         }
+     } else {
+         switch (ctx->error) {
+@@ -705,7 +784,7 @@ sslCreateServerContext(const char *certf
+ 
+         SSL_CTX_set_quiet_shutdown(sslContext, 1);
+     }
+-
++#if !USE_SSL_DYNCERT // IMPLTJ ! we don't set a cert and key
+     if (cipher) {
+         debugs(83, 5, "Using chiper suite " << cipher << ".");
+ 
+@@ -742,6 +821,7 @@ sslCreateServerContext(const char *certf
+                keyfile << "': " << ERR_error_string(ssl_error, NULL)  );
+         goto error;
+     }
++#endif
+ 
+     debugs(83, 9, "Setting RSA key generation callback.");
+     SSL_CTX_set_tmp_rsa_callback(sslContext, ssl_temp_rsa_cb);
+@@ -1181,4 +1261,880 @@ sslGetUserCertificateChainPEM(SSL *ssl)
+     return str;
+ }
+ 
++#if USE_SSL_DYNCERT // IMPLTJ DYNCERT starting from here
++
++// ========================================================================= //
++
++sslcert_store::sslcert_store(X509 *cert, EVP_PKEY *key)
++{
++	this->cert = cert;
++	this->key = key;
++}
++
++sslcert_store::~sslcert_store()
++{
++	// TODO_TJ maybe some debugging support (i.e. #refs)
++	X509_free(cert);
++	EVP_PKEY_free(key);
++}
++
++sslcert_store& sslcert_store::operator = (const sslcert_store& cs) {
++	// update refcounts 1
++	if (NULL != cs.cert)
++		CRYPTO_add(&cs.cert->references, 1, CRYPTO_LOCK_X509);
++
++	if (NULL != cs.key)
++		CRYPTO_add(&cs.key->references, 1, CRYPTO_LOCK_EVP_PKEY);
++
++	// update refcounts 2
++	if (NULL != cert)
++		X509_free(cert);
++
++	if (NULL != key)
++		EVP_PKEY_free(key);
++
++	cert = cs.cert;
++	key = cs.key;
++
++	return *this;
++}
++
++void sslcert_store::release()
++{
++	if (NULL != cert) {
++		X509_free(cert);
++		cert = NULL;
++	}
++
++	if (NULL != key) {
++		EVP_PKEY_free(key);
++		key = NULL;
++	}
++}
++
++
++/**
++ * set up a temporary x509_name without CN // IMPLTJ
++ */
++X509_NAME *
++sslCreateTemporaryName(const unsigned char *countryName,
++		const unsigned char *stateOrProvinceName, const unsigned char *localityName,
++		const unsigned char *organizationName, const unsigned char *organizationalUnitName)
++{
++	X509_NAME * x509Name;
++	x509Name = X509_NAME_new();
++	if (NULL != countryName) {
++		X509_NAME_add_entry_by_txt(x509Name, SN_countryName, MBSTRING_ASC,
++				countryName, -1, -1, 0);
++	}
++	if (NULL != stateOrProvinceName) {
++		X509_NAME_add_entry_by_txt(x509Name, SN_stateOrProvinceName,
++				MBSTRING_ASC, stateOrProvinceName, -1, -1, 0);
++	}
++	if (NULL != localityName) {
++		X509_NAME_add_entry_by_txt(x509Name, SN_localityName, MBSTRING_ASC,
++				localityName, -1, -1, 0);
++	}
++	if (NULL != organizationName) {
++		X509_NAME_add_entry_by_txt(x509Name, SN_organizationName, MBSTRING_ASC,
++				organizationName, -1, -1, 0);
++	}
++	if (NULL != organizationalUnitName) {
++		X509_NAME_add_entry_by_txt(x509Name, SN_organizationalUnitName,
++				MBSTRING_ASC, organizationalUnitName, -1, -1, 0);
++	}
++//	X509_NAME_add_entry_by_txt(csrName, SN_commonName, MBSTRING_ASC, // dont set CN here it is specific
++//			(unsigned char*) "ceres.telco-tech.de", -1, -1, 0);
++
++	return x509Name;
++}
++
++/**
++ * IMPLTJ create a new CSR
++ */
++int
++sslCreateCSR(X509_REQ **req, EVP_PKEY **pkeyp, X509_NAME *reqName, int bits, int days) {
++	X509_REQ *csrReq = NULL;
++	EVP_PKEY *pk;
++	RSA *rsa = NULL;
++
++	if ((pk = EVP_PKEY_new()) == NULL)
++		goto err;
++
++	if ((csrReq = X509_REQ_new()) == NULL)
++		goto err;
++
++	rsa = RSA_generate_key(bits, 35/*RSA_F4*/, NULL/*callback*/, NULL);
++	if (!EVP_PKEY_assign_RSA(pk,rsa))
++		goto err;
++
++	rsa = NULL;
++
++	X509_REQ_set_pubkey(csrReq, pk);
++
++	X509_REQ_set_subject_name(csrReq, reqName);
++
++	if (!X509_REQ_sign(csrReq, pk, EVP_sha1()))
++		goto err;
++
++	*req = csrReq;
++	*pkeyp = pk;
++	return (1);
++
++	err:
++	if (rsa)
++		RSA_free(rsa);
++	if (pk)
++		EVP_PKEY_free(pk);
++	if (csrReq)
++		X509_REQ_free(csrReq);
++
++	return (0);
++}
++
++
++/**
++ * IMPLTJ create a new SSL Certificate with given parameters
++ */
++int
++sslCreateCertFromCSR(X509 **x509p, X509_REQ *csr, X509_NAME *subjectName,
++		EVP_PKEY *caPKey, X509_NAME *issuerName, BIGNUM *serial, int days)
++{
++	X509 *x;
++	ASN1_INTEGER *ai = NULL;
++
++	if (NULL == subjectName) {
++		debugs(83, 1, "sslCreateCertFromCSR error: no subject set");
++		return 0;
++	}
++
++	if (NULL == issuerName) {
++		debugs(83, 5, "sslCreateCertFromCSR: issuer not set using subject for self signed certificate");
++		issuerName = subjectName;
++	}
++
++	if ((x509p == NULL) || (*x509p == NULL)) {
++		if ((x = X509_new()) == NULL)
++			goto err;
++	} else
++		x = *x509p;
++
++	char buffer[256];
++	debugs(83, 9, "sslCreateCertFromCSR: create new x509 with issuer: '"
++			<< X509_NAME_oneline(issuerName, buffer, 256) << "' and subject: '"
++			<< X509_NAME_oneline(subjectName, buffer, 256) << "'");
++
++	X509_set_version(x, 2);
++	BN_add_word(serial, 1);
++	ai = BN_to_ASN1_INTEGER(serial, NULL);
++	ASN1_INTEGER_set(X509_get_serialNumber(x), ASN1_INTEGER_get(ai) );
++	debugs(83, 5, "sslCreateCertFromCSR: set serial number: " << ASN1_INTEGER_get(ai));
++	ASN1_INTEGER_free(ai);
++
++	X509_gmtime_adj(X509_get_notBefore(x), 0);
++	X509_gmtime_adj(X509_get_notAfter(x), (long) 60 * 60 * 24 * days);
++	X509_set_pubkey(x, X509_REQ_get_pubkey(csr));
++
++	X509_set_subject_name(x, subjectName);
++	X509_set_issuer_name(x, issuerName);
++
++#ifdef CUSTOM_EXT
++	/* Maybe even add our own extension based on existing */
++	{
++		int nid;
++		nid = OBJ_create("1.2.3.4", "MyAlias", "My Test Alias Extension");
++		X509V3_EXT_add_alias(nid, NID_netscape_comment);
++		sslAddExt(x, nid, "example comment alias");
++	}
++#endif
++
++	if (!X509_sign(x, caPKey, EVP_sha1()))
++		goto err;
++
++	*x509p = x;
++	return (1);
++	err: return (0);
++}
++
++/**
++ * create SSL_CTX using cert and cKey
++ *
++ * \param cert x509 certificate
++ * \param cKey private key belonging to cert
++ *
++ * \retval NULL 		error
++ * \retval *SSL_CTX 	the created context
++ */
++SSL_CTX *
++createSSL_CTX(int version, const char *options, const char *flags, const char *context, X509 *cert, EVP_PKEY *cKey)
++{
++	if (NULL == cert) {
++		debugs(83, 1, "createSSL_CTX: No certificate set");
++		return NULL;
++	}
++
++	if (NULL == cKey) {
++		debugs(83, 1, "createSSL_CTX: No key set");
++		return NULL;
++	}
++
++	// create new ssl context and store the data from the original source
++
++#if OPENSSL_VERSION_NUMBER < 0x00909000L
++	SSL_METHOD *method;
++#else
++	const SSL_METHOD *method;
++#endif
++
++	switch (version) {
++
++	case 2:
++		debugs(83, 5, "Using SSLv2.");
++		method = SSLv2_server_method();
++		break;
++
++	case 3:
++		debugs(83, 5, "Using SSLv3.");
++		method = SSLv3_server_method();
++		break;
++
++	case 4:
++		debugs(83, 5, "Using TLSv1.");
++		method = TLSv1_server_method();
++		break;
++
++	case 1:
++
++	default:
++		debugs(83, 5, "Using SSLv2/SSLv3.");
++		method = SSLv23_server_method();
++		break;
++	}
++
++	// register cert and key with ssl_ctx
++	unsigned long ssl_error;
++	SSL_CTX *sslContext = SSL_CTX_new(method);
++
++	if (sslContext == NULL) {
++		ssl_error = ERR_get_error();
++		fatalf("Failed to allocate SSL context: %s\n", ERR_error_string(
++				ssl_error, NULL));
++	}
++
++	if (1 != SSL_CTX_use_certificate(sslContext, cert)) {
++		ssl_error = ERR_get_error();
++		debugs(83, 1, "createSSL_CTX: error setting certificate: " << ERR_error_string(ssl_error, NULL));
++		return NULL;
++	}
++
++	if (1 != SSL_CTX_use_PrivateKey(sslContext, cKey)) {
++		ssl_error = ERR_get_error();
++		debugs(83, 1, "createSSL_CTX: error setting private key: " << ERR_error_string(ssl_error, NULL));
++		return NULL;
++	}
++
++	SSL_CTX_set_options(sslContext, ssl_parse_options(options));
++
++	if (context && *context) {
++		SSL_CTX_set_session_id_context(sslContext,
++				(const unsigned char *) context, strlen(context));
++	}
++
++    long fl = ssl_parse_flags(flags);
++
++	if (fl & SSL_FLAG_NO_SESSION_REUSE) {
++		SSL_CTX_set_session_cache_mode(sslContext, SSL_SESS_CACHE_OFF);
++	}
++
++	if (fl & SSL_FLAG_DONT_VERIFY_DOMAIN)
++		SSL_CTX_set_ex_data(sslContext, ssl_ctx_ex_index_dont_verify_domain, (void *) -1);
++
++	if (Config.SSL.unclean_shutdown) {
++		debugs(83, 5, "Enabling quiet SSL shutdowns (RFC violation).");
++
++		SSL_CTX_set_quiet_shutdown(sslContext, 1);
++	}
++
++	return sslContext;
++}
++
++/**
++ * Create a new X509 certificate using the X509 Request.
++ * The certificate matches in unknown fields the given matchingCert.
++ *
++ * \param x509p 			if **x509p or even *x509p is NULL the memory for x509p is allocated
++ * \param csr				the certificate signing request
++ * \param matchingCert		an existing certificate to get some informatation from
++ * \param subjectName		subject for the new certificate
++ * \param issuerName		issuer for the new certificate
++ * \param serial			serial number for the new certificate (will be incremented)
++ *
++ * \retval 0 	error
++ * \retval 1	success
++ */
++int
++sslCreateUnsignedMatchedCert(X509 **x509p, X509_REQ *csr, X509 *matchingCert, X509_NAME *subjectName,
++		X509_NAME *issuerName, BIGNUM *serial)
++{
++	X509 *x;
++	ASN1_INTEGER *ai = NULL;
++
++	if (NULL == subjectName) {
++		return 0;
++	}
++
++	if (NULL == matchingCert) {
++		return 0;
++	}
++
++	if (NULL == issuerName) { // self signed
++		issuerName = subjectName;
++	}
++
++	if ((x509p == NULL) || (*x509p == NULL)) {
++		if ((x = X509_new()) == NULL)
++			return 0;
++	} else
++		x = *x509p;
++
++	X509_set_version(x, 2);
++	BN_add_word(serial, 1);
++	ai = BN_to_ASN1_INTEGER(serial, NULL);
++	ASN1_INTEGER_set(X509_get_serialNumber(x), ASN1_INTEGER_get(ai) );
++	debugs(83, 5, "sslCreateUnsignedCertFromCSR: set serial number: " << ASN1_INTEGER_get(ai));
++	ASN1_INTEGER_free(ai);
++
++	X509_set_notBefore(x, X509_get_notBefore(matchingCert));
++	X509_set_notAfter(x, X509_get_notAfter(matchingCert));
++//	X509_gmtime_adj(X509_get_notBefore(x), 0);
++//	X509_gmtime_adj(X509_get_notAfter(x), (long) 60 * 60 * 24 * days);
++	X509_set_pubkey(x, X509_REQ_get_pubkey(csr));
++
++	X509_set_subject_name(x, subjectName);
++	X509_set_issuer_name(x, issuerName);
++
++	*x509p = x;
++	return 1;
++}
++
++/**
++ * copy extensions from peerCert to x509p
++ *
++ * \param x509p 		X509 cert
++ * \param peerCert 		X509 cert
++ *
++ * \retval 0	error
++ * \retval 1 	success
++ */
++int
++sslCopyExtensions(X509 *x509p, X509 *peerCert)
++{
++	int i, j;
++
++	if ( NULL == x509p || NULL == peerCert ) {
++		return 0;
++	}
++
++	STACK_OF(X509_EXTENSION) *exts = peerCert->cert_info->extensions;
++	j=sk_X509_EXTENSION_num(exts);
++
++	// loop trough extensions and copy them
++	for (i = 0; i < j; i++) {
++
++		X509_EXTENSION *ext = sk_X509_EXTENSION_value(exts, i);
++		bool skip = false;
++
++		// check extensions if we'd like to skip them
++		switch (OBJ_obj2nid(X509_EXTENSION_get_object(ext))) {
++			case NID_subject_key_identifier:
++			case NID_authority_key_identifier:
++			case NID_info_access:
++			case NID_crl_distribution_points:
++				skip = true;
++				break;
++			default:
++				break;
++		}
++		if (skip)
++			continue;
++
++		debugs(83, 5, "sslCopyExtensions: set extension '" << OBJ_nid2ln(OBJ_obj2nid(ext->object)) << "'"
++				<< ASN1_STRING_data(X509_EXTENSION_get_data(ext)) );
++
++		X509_add_ext(x509p, ext, -1); // TODO_TJ maybe check retvals
++	}
++
++	return 1;
++}
++
++/**
++ * Sign a given certificate with a given private key
++ *
++ * \param x509p		the certificate
++ * \param caPKey	the private key
++ *
++ * \retval 0	error
++ * \retval 1	success
++ */
++int
++sslSignCert (X509 *x509p, EVP_PKEY *caPKey)
++{
++	if (NULL == x509p || NULL == caPKey) {
++		return 0;
++	}
++
++	if (!X509_sign(x509p, caPKey, EVP_sha1()))
++		return 0;
++
++	return 1;
++}
++
++/**
++ * Create a signed X509 certificate and corresponding private key. Reasonable contents
++ * of the certificate are obtained from a given certificate (peerCert). Furthermore the
++ * private and public key of a CA plus corresponding serial number has to be set.
++ *
++ * \param cert		created certificate (memory is created if it wasn't)
++ * \param pKey		created private key (memory is created if it wasn't)
++ * \param peerCert	certificate used to get some information (extensions, ...)
++ * \param caPKey	private key of the CA
++ * \param caCert	certificate of the CA
++ * \param caSerial	serial number to use (will be incremented)
++ *
++ * \retval 0 	error
++ * \retval 1	success
++ */
++int
++sslCreatePeerMatchedCert(X509 **cert, EVP_PKEY **pKey, X509 *peerCert, EVP_PKEY *caPKey, X509 *caCert, BIGNUM *caSerial)
++{
++	// do some checks
++	if ( NULL ==  caPKey ) {
++		debugs(83, 1, "sslCreatePeerMatchedCert: no CA private key");
++		return 0;
++	}
++	if ( NULL ==  caCert ) {
++		debugs(83, 1, "sslCreatePeerMatchedCert: no CA certificate");
++		return 0;
++	}
++	if ( NULL ==  caSerial ) {
++		debugs(83, 1, "sslCreatePeerMatchedCert: no CA serial");
++		return 0;
++	}
++
++    if ( NULL == peerCert || NULL == X509_get_subject_name(peerCert) ) {
++    	debugs(83, 1, "sslCreatePeerMatchedCert: no subject... no good");
++    	return 0;
++    }
++
++    X509_REQ *csr = NULL;
++	if ( 0 == sslCreateCSR(&csr, pKey, X509_get_subject_name(peerCert)) ) {
++		return 0;
++	}
++
++	if ( 0 == sslCreateUnsignedMatchedCert(cert, csr, peerCert, X509_get_subject_name(peerCert), X509_get_issuer_name(caCert), caSerial) ) {
++		X509_REQ_free(csr);
++		EVP_PKEY_free(*pKey);
++    	debugs(83, 1, "sslCreatePeerMatchedCert: error creating csr");
++		return 0;
++	}
++
++	if ( 0 == sslCopyExtensions(*cert, peerCert) ) {
++		X509_REQ_free(csr);
++		EVP_PKEY_free(*pKey);
++		X509_free(*cert);
++		*cert = NULL;
++    	debugs(83, 1, "sslCreatePeerMatchedCert: error copying extensions");
++		return 0;
++	}
++
++	if (0 == sslSignCert(*cert, caPKey) ) {
++		X509_REQ_free(csr);
++		EVP_PKEY_free(*pKey);
++		X509_free(*cert);
++		*cert = NULL;
++    	debugs(83, 1, "sslCreatePeerMatchedCert: error signing");
++		return 0;
++	}
++
++	// cleanup
++	X509_REQ_free(csr);
++
++	return 1;
++}
++
++
++/* ==================== serial number ==================== */
++/*
++ * this is originaly from openssl apps/apps.c
++ * TODO_TJ serial fd might be kept open and writes to serial file could be done async with commSetWrite
++ */
++/**
++ * load a serial number from a given file
++ *
++ * \param serialfile 	path to the file including the serial number
++ *
++ * \retval NULL		error
++ * \retval BIGNUM	serial number
++ */
++BIGNUM *
++sslLoadSerial(char *serialfile)
++{
++	BIO *in = NULL;
++	BIO *tmp = NULL;
++	BIGNUM *ret = NULL;
++	char buf[1024];
++	ASN1_INTEGER *ai = NULL;
++	int fd = -1;
++
++	ai = ASN1_INTEGER_new();
++	if (ai == NULL)
++		goto err;
++
++	enter_suid();
++	fd = file_open(serialfile, O_RDONLY | O_CREAT);
++
++	if (0 > fd) {
++		debugs(83, 1, "sslLoadSerial: error no fd");
++		goto err;
++	}
++
++	if ( NULL == (in = BIO_new_fd(fd, BIO_NOCLOSE)) ) {
++		debugs(83, 1, "sslLoadSerial: error no bio in");
++		goto err;
++	}
++
++	// need f_buffer to read from bio_fd
++	if ( NULL == (tmp = BIO_new(BIO_f_buffer())) ) {
++		debugs(83, 1, "sslLoadSerial: error no buffer");
++		goto err;
++	}
++
++	// queue buffers
++	in = BIO_push(tmp, in);
++
++	if (a2i_ASN1_INTEGER(in, ai, buf, 1024) ) {
++		// successfully read a serial
++
++		ret = ASN1_INTEGER_to_BN(ai, NULL);
++		if (ret == NULL) {
++			debugs(83, 1, "sslLoadSerial: error no bn");
++			goto err;
++		}
++
++		debugs(83, 5, "sslLoadSerial: loaded serial: " << ASN1_INTEGER_get(ai));
++
++	} else {
++		// no serial read create new (set to 1)
++		debugs(83, 5, "sslLoadSerial: create new serial");
++		ret = BN_new();
++		BN_one(ret);
++	}
++
++	err:
++	if (in != NULL)
++		BIO_free_all(in);
++	if (ai != NULL)
++		ASN1_INTEGER_free(ai);
++	if (0 <= fd)
++		file_close(fd);
++	leave_suid();
++	return (ret);
++}
++
++/* this is from openssl apps/apps.c */
++/**
++ * Save a serial number to a file
++ *
++ * \param serialfile	file to store serial
++ * \param serial		serial number
++ *
++ * \retval 0 	error
++ * \retval 1	success
++ */
++int
++sslSaveSerial(char *serialfile, BIGNUM *serial)
++{
++	BIO *out = NULL;
++	int ret = 0;
++	ASN1_INTEGER *ai = NULL;
++	int fd = -1;
++
++	enter_suid();
++	fd = file_open(serialfile, O_WRONLY | O_TRUNC);
++
++	if (0 > fd) {
++		debugs(83, 1, "sslSaveSerial: could not open serial file '" << serialfile << "'");
++		goto err;
++	}
++
++	out = BIO_new_fd(fd, BIO_NOCLOSE);
++	if (out == NULL) {
++		debugs(83, 2, "sslSaveSerial: no bio fd buffer");
++		goto err;
++	}
++
++	if ((ai = BN_to_ASN1_INTEGER(serial, NULL)) == NULL) {
++		debugs(83, 2, "sslSaveSerial: error converting serial to ASN.1 format");
++		goto err;
++	}
++
++	i2a_ASN1_INTEGER(out, ai);
++	ret = 1;
++
++	debugs(83, 5, "sslSaveSerial: saved serial: " << ASN1_INTEGER_get(ai));
++
++	err:
++	if (out != NULL)
++		BIO_free_all(out);
++	if (ai != NULL)
++		ASN1_INTEGER_free(ai);
++	if (0 <= fd)
++		file_close(fd);
++	leave_suid();
++	return (ret);
++}
++
++
++#include "ProtoPort.h"
++
++
++int
++sslReadCertFromDisk(char *filename, X509 **cert)
++{
++	int fd = file_open(filename, O_RDONLY);
++
++	if (0 > fd) {
++		debugs(83, 1, "sslReadCertFromDisk: error no rootcafile");
++		return 0;
++	}
++
++	BIO *rbuff;
++	BIO *tmpBuff;
++
++	rbuff = BIO_new_fd(fd, BIO_NOCLOSE);
++	if (rbuff == NULL) {
++		file_close(fd);
++		debugs(83, 2, "sslReadCertFromDisk: BIO_new_fd no fd buffer");
++		return 0;
++	}
++
++	tmpBuff = BIO_new(BIO_f_buffer());
++	if (tmpBuff == NULL) {
++		file_close(fd);
++		if (rbuff)
++			BIO_free(rbuff);
++		debugs(8, 2, "sslReadCertFromDisk: no BIO_new(BIO_f_buffer())");
++		return 0;
++	}
++
++	rbuff = BIO_push(tmpBuff, rbuff);
++
++	if (NULL != cert) {
++		*cert = PEM_read_bio_X509(rbuff, NULL, 0, NULL);
++		if (NULL == *cert) {
++			debugs(83, 1, "sslReadCertFromDisk: FAIL no x509");
++			// continue anyway...
++		}
++	}
++
++	BIO_free_all(rbuff);
++	file_close(fd);
++
++	return 1;
++}
++
++
++
++
++int
++sslReadKeyFromDisk(char *filename, EVP_PKEY **key)
++{
++	int fd = file_open(filename, O_RDONLY);
++
++	if (0 > fd) {
++		debugs(83, 1, "sslReadKeyFromDisk: error no rootcafile");
++		return 0;
++	}
++
++	BIO *rbuff;
++	BIO *tmpBuff;
++
++	rbuff = BIO_new_fd(fd, BIO_NOCLOSE);
++	if (rbuff == NULL) {
++		file_close(fd);
++		debugs(83, 2, "sslReadKeyFromDisk: BIO_new_fd no fd buffer");
++		return 0;
++	}
++
++	tmpBuff = BIO_new(BIO_f_buffer());
++	if (tmpBuff == NULL) {
++		file_close(fd);
++		if (rbuff)
++			BIO_free(rbuff);
++		debugs(8, 2, "sslReadKeyFromDisk: no BIO_new(BIO_f_buffer())");
++		return 0;
++	}
++
++	rbuff = BIO_push(tmpBuff, rbuff);
++
++	if (key != NULL) {
++		*key = PEM_read_bio_PrivateKey(rbuff, NULL, NULL, NULL);
++		if (NULL == *key) {
++			debugs(83, 1, "sslReadKeyFromDisk: FAIL NO PK");
++			// continue anyway...
++		}
++	}
++
++	BIO_free_all(rbuff);
++	file_close(fd);
++
++	return 1;
++}
++
++/**
++ * initialize the serial numbers for each http_port_list
++ *
++ * FIXME_TJ this does not only init the serial number but also the CA!! so make a difference here
++ */
++void
++sslSerialNumberInit(void)
++{
++	http_port_list *s;
++
++	for (s = Config.Sockaddr.http; s != NULL; s = (http_port_list *) s->next) {
++		if (!s->cert && !s->key)
++			continue;
++
++		debugs(83, 5, "sslSerialNumberInit: Initializing http_port serial " << s->http.s << " SSL context");
++		debugs(83, 5, "sslSerialNumberInit: open cert " << s->cert);
++
++		// TODO_TJ open rootca as different option to have a fallback cert?
++		if (s->cert)
++			sslReadCertFromDisk(s->cert, &s->caCert);
++		else
++			sslReadCertFromDisk(s->key, &s->caCert);
++
++		if (s->key)
++			sslReadKeyFromDisk(s->key, &s->caPKey);
++		else
++			sslReadKeyFromDisk(s->cert, &s->caPKey);
++
++		// preset serial
++		s->certSerialNumber = BN_new();
++		BN_one(s->certSerialNumber);
++
++		if (!s->serialNumberFile) {
++			std::ostringstream o;
++
++			char buff[255];
++			s->s.NtoA(buff, sizeof(buff));
++
++			o << Config.ssl_client.ssl_serial_dir << "/port" << buff << s->s.GetPort() << ".ser";
++			s->serialNumberFile = xstrdup(o.str().c_str());
++			debugs(83, 3, "sslSerialNumberInit: No serial number file! Set serial number file to: " << s->serialNumberFile);
++
++		} else {
++			debugs(83, 5, "sslSerialNumberInit: Using serial number file: " << s->serialNumberFile);
++		}
++
++		// TODO_TJ load previous value from serial-number file
++		// ...is it possible to check if the last squid shutdown was clean?
++		// -> would be nice to increment the serial number if it wasnt
++		BIGNUM *tmp = sslLoadSerial(s->serialNumberFile);
++		BN_set_word(s->certSerialNumber, BN_get_word(tmp));
++		BN_free(tmp);
++	}
++}
++
++/**
++ * IMPLTJ save current serial number every n seconds
++ *
++ * serial number is load in cache_cf.cc
++ * event is scheduled in main.cc
++ */
++void
++savePortCAsSerialNumber(void *voidnotused)
++{
++    int saved = 0;
++    http_port_list *s;
++
++    for (s = Config.Sockaddr.http; s != NULL; s = (http_port_list *) s->next) {
++
++    	if (!s->serialChanged)
++    		continue;
++
++    	sslSaveSerial(s->serialNumberFile, s->certSerialNumber);
++
++    	saved++;
++    	s->serialChanged = 0;
++    }
++
++    if (!shutting_down && !reconfiguring) {
++    	eventAdd("savePortCAsSerialNumber", savePortCAsSerialNumber, NULL, 120.0, 1);
++    }
++    debugs(83, 9, "savePortCAsSerialNumber: saved " << saved << " serials");
++}
++
++
++
++
++/// \ingroup ServerProtocolSSLInternal
++static const char *
++ssl_get_extension(X509 *x, int nid)
++{
++
++    static char buffer[1024];
++	int lastpos = -1;
++
++	int loc = X509_get_ext_by_NID(x, nid, lastpos);
++
++    buffer[0] = '\0';
++
++    if (-1 == loc) {
++    	return NULL;
++    }
++
++    X509_EXTENSION *ext = X509_get_ext(x, loc);
++
++    BIO *mem = BIO_new(BIO_s_mem());
++
++    X509V3_EXT_print(mem, ext, 1, 0);
++
++    char *ptr = NULL;
++
++    int len = BIO_get_mem_data(mem, &ptr);
++
++    // str = (char *)xmalloc(len + 1);
++
++    memcpy(buffer, ptr, len);
++
++    buffer[len] = '\0';
++
++    BIO_free(mem);
++
++    return *buffer ? buffer : NULL;
++}
++
++/// \ingroup ServerProtocolSSLInternal
++const char *
++sslGetServerCertExtension(SSL * ssl, const char *attribute_name)
++{
++    X509 *cert;
++    const char *ret;
++
++    if (!ssl)
++        return NULL;
++
++    cert = SSL_get_certificate(ssl);
++
++    if (!cert)
++        return NULL;
++
++    int nid = OBJ_txt2nid(attribute_name);
++    ret = ssl_get_extension(cert, nid);
++
++    return ret;
++}
++
++#endif /* USE_SSL_DYNCERT */
+ #endif /* USE_SSL */
+diff -up squid-3.1.0.16/src/ssl_support.h.dyncert squid-3.1.0.16/src/ssl_support.h
+--- squid-3.1.0.16/src/ssl_support.h.dyncert	2010-02-01 22:22:38.000000000 +0100
++++ squid-3.1.0.16/src/ssl_support.h	2010-02-03 13:50:59.000000000 +0100
+@@ -46,11 +46,70 @@
+ #include <openssl/engine.h>
+ #endif
+ 
++#ifdef USE_SSL_DYNCERT
++#if HAVE_OPENSSL_X509V3_H
++#include <openssl/x509v3.h>
++#endif
++#if HAVE_OPENSSL_PEM_H
++#include <openssl/pem.h>
++#endif
++#endif
+ /**
+  \defgroup ServerProtocolSSLAPI Server-Side SSL API
+  \ingroup ServerProtocol
+  */
+ 
++#ifdef USE_SSL_DYNCERT
++
++class sslcert_store {
++public:
++	sslcert_store() { cert = NULL; key = NULL; };
++	sslcert_store(X509 *cert, EVP_PKEY *key);
++	virtual ~sslcert_store();
++	sslcert_store &operator= (const sslcert_store &cs);
++
++	void release();
++
++    X509 *cert;
++    EVP_PKEY *key;
++};
++
++
++/// \ingroup ServerProtocolSSLAPI
++SSL_CTX *createSSL_CTX(int version, const char *options, const char *flags, const char *context, X509 *cert, EVP_PKEY *cKey);
++
++/// \ingroup ServerProtocolSSLAPI
++int sslCreatePeerMatchedCert(X509 **cert, EVP_PKEY **pKey, X509 *peerCert, EVP_PKEY *caPKey, X509 *caCert, BIGNUM *caSerial);
++
++/// \ingroup ServerProtocolSSLAPI
++X509_NAME *sslCreateTemporaryName(const unsigned char *countryName, const unsigned char *stateOrProvinceName, const unsigned char *localityName, const unsigned char *organizationName, const unsigned char *organizationalUnitName);
++
++/// \ingroup ServerProtocolSSLAPI
++int sslCreateCertFromCSR(X509 **cert, X509_REQ *csr, X509_NAME *subjectName, EVP_PKEY *caPKey, X509_NAME *issuerName, BIGNUM *serial, int days=365);
++
++/// \ingroup ServerProtocolSSLAPI
++int sslCreateCSR(X509_REQ **req, EVP_PKEY **pkeyp, X509_NAME *reqName, int bits=512, int days=365);
++
++/// \ingroup ServerProtocolSSLAPI
++void sslSerialNumberInit(void);
++
++/// \ingroup ServerProtocolSSLAPI
++void savePortCAsSerialNumber(void *voidnotused);
++
++/// \ingroup ServerProtocolSSLAPI
++BIGNUM *sslLoadSerial(char *serialfile);
++
++/// \ingroup ServerProtocolSSLAPI
++int sslSaveSerial(char *serialfile, BIGNUM *serial);
++
++/// \ingroup ServerProtocolSSLAPI
++int sslReadCertFromDisk(char *filename, X509 **cert);
++
++/// \ingroup ServerProtocolSSLAPI
++int sslReadKeyFromDisk(char *filename, EVP_PKEY **key);
++
++#endif /* USE_SSL_DYNCERT */
++
+ /// \ingroup ServerProtocolSSLAPI
+ SSL_CTX *sslCreateServerContext(const char *certfile, const char *keyfile, int version, const char *cipher, const char *options, const char *flags, const char *clientCA, const char *CAfile, const char *CApath, const char *CRLfile, const char *dhpath, const char *context);
+ 
+@@ -79,6 +138,11 @@ SSLGETATTRIBUTE sslGetUserAttribute;
+ /// \ingroup ServerProtocolSSLAPI
+ SSLGETATTRIBUTE sslGetCAAttribute;
+ 
++#if USE_SSL_DYNCERT
++/// \ingroup ServerProtocolSSLAPI
++SSLGETATTRIBUTE sslGetServerCertExtension;
++#endif
++
+ /// \ingroup ServerProtocolSSLAPI
+ const char *sslGetUserCertificatePEM(SSL *ssl);
+ 
+diff -up squid-3.1.0.16/src/structs.h.dyncert squid-3.1.0.16/src/structs.h
+--- squid-3.1.0.16/src/structs.h.dyncert	2010-02-01 22:22:38.000000000 +0100
++++ squid-3.1.0.16/src/structs.h	2010-02-03 13:50:59.000000000 +0100
+@@ -362,6 +362,15 @@ struct SquidConfig {
+     struct {
+         int size;
+     } fqdncache;
++#ifdef USE_SSL_DYNCERT
++    struct {
++        int size;
++        time_t entryMaxLifetime;
++        time_t entryMinLifetime;
++        int maxCertificatesInMemory;
++        char *certificateDirectory;
++    } sslcertcache;
++#endif
+     int minDirectHops;
+     int minDirectRtt;
+     cachemgr_passwd *passwd_list;
+@@ -609,6 +618,9 @@ struct SquidConfig {
+         char *flags;
+         acl_access *cert_error;
+         SSL_CTX *sslContext;
++#if USE_SSL_DYNCERT
++        char  *ssl_serial_dir; /* IMPLTJ configuration implemenatation of a global namespace to use for the certificates */
++#endif
+     } ssl_client;
+ #endif
+ 
+diff -up squid-3.1.0.16/src/typedefs.h.dyncert squid-3.1.0.16/src/typedefs.h
+--- squid-3.1.0.16/src/typedefs.h.dyncert	2010-02-01 22:22:39.000000000 +0100
++++ squid-3.1.0.16/src/typedefs.h	2010-02-03 13:50:59.000000000 +0100
+@@ -202,6 +202,11 @@ typedef void IDCB(const char *ident, voi
+ typedef void IPH(const ipcache_addrs *, const DnsLookupDetails &details, void *);
+ typedef void IRCB(struct peer *, peer_t, protocol_t, void *, void *data);
+ 
++template <class C> class RefCount;
++class sslcert_store;
++typedef void SSLH(sslcert_store *, const char *error_message, void *); // IMPLTJ SSLH // TODO_TJ errno would be better
++typedef void ISSLCB(void *data, const char *error_message); // IMPLTJ IDNSCB
++
+ class FwdServer;
+ typedef void PSC(FwdServer *, void *);
+ typedef void RH(void *data, char *);

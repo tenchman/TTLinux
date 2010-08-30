@@ -1,0 +1,10 @@
+--- dietlibc-0.30/libcompat/strnlen.c.strnlen	2006-10-08 22:24:01.000000000 +0200
++++ dietlibc-0.30/libcompat/strnlen.c	2006-10-08 22:49:11.000000000 +0200
+@@ -4,6 +4,7 @@
+ size_t strnlen(const char *s,size_t maxlen) {
+   const char* max=s+maxlen;
+   const char* orig=s;
++  if (__unlikely(!s)) return 0;
+   while (s<max && *s) ++s;
+   return s-orig;
+ }

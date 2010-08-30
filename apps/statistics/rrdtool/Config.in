@@ -1,0 +1,15 @@
+# vim:set syntax=kconfig:
+config CONFIG_RRDTOOL
+  bool "rrdtool - Time-series data storage and graphing software"
+  default n
+  select CONFIG_FREETYPE
+  select CONFIG_LIBART_LGPL
+  select CONFIG_LIBPNG
+  select CONFIG_ZLIB
+  help
+    RRDtool (Round  Robin  Database  Tool) is time-series  data  storage and
+    graphing utility created  by the author  of MRTG. Using RRDtool, you can
+    write your own MRTG-like tools in a matter minutes with only a few lines
+    of Perl or shell code.
+
+    http://oss.oetiker.ch/rrdtool/

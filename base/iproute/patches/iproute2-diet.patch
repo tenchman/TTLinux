@@ -1,0 +1,787 @@
+diff -up iproute2-2.6.35/include/libnetlink.h.diet iproute2-2.6.35/include/libnetlink.h
+--- iproute2-2.6.35/include/libnetlink.h.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/include/libnetlink.h	2010-08-09 10:19:42.395929614 +0200
+@@ -13,8 +13,8 @@ struct rtnl_handle
+ 	int			fd;
+ 	struct sockaddr_nl	local;
+ 	struct sockaddr_nl	peer;
+-	__u32			seq;
+-	__u32			dump;
++	uint32_t		seq;
++	uint32_t		dump;
+ };
+ 
+ extern int rcvbuf;
+@@ -50,14 +50,14 @@ extern int rtnl_talk(struct rtnl_handle 
+ extern int rtnl_send(struct rtnl_handle *rth, const char *buf, int);
+ extern int rtnl_send_check(struct rtnl_handle *rth, const char *buf, int);
+ 
+-extern int addattr32(struct nlmsghdr *n, int maxlen, int type, __u32 data);
++extern int addattr32(struct nlmsghdr *n, int maxlen, int type, uint32_t data);
+ extern int addattr_l(struct nlmsghdr *n, int maxlen, int type, const void *data, int alen);
+ extern int addraw_l(struct nlmsghdr *n, int maxlen, const void *data, int len);
+ extern struct rtattr *addattr_nest(struct nlmsghdr *n, int maxlen, int type);
+ extern int addattr_nest_end(struct nlmsghdr *n, struct rtattr *nest);
+ extern struct rtattr *addattr_nest_compat(struct nlmsghdr *n, int maxlen, int type, const void *data, int len);
+ extern int addattr_nest_compat_end(struct nlmsghdr *n, struct rtattr *nest);
+-extern int rta_addattr32(struct rtattr *rta, int maxlen, int type, __u32 data);
++extern int rta_addattr32(struct rtattr *rta, int maxlen, int type, uint32_t data);
+ extern int rta_addattr_l(struct rtattr *rta, int maxlen, int type, const void *data, int alen);
+ 
+ extern int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len);
+diff -up iproute2-2.6.35/include/rt_names.h.diet iproute2-2.6.35/include/rt_names.h
+--- iproute2-2.6.35/include/rt_names.h.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/include/rt_names.h	2010-08-09 10:19:42.396929978 +0200
+@@ -8,11 +8,11 @@ char* rtnl_rtscope_n2a(int id, char *buf
+ char* rtnl_rttable_n2a(__u32 id, char *buf, int len);
+ char* rtnl_rtrealm_n2a(int id, char *buf, int len);
+ char* rtnl_dsfield_n2a(int id, char *buf, int len);
+-int rtnl_rtprot_a2n(__u32 *id, char *arg);
+-int rtnl_rtscope_a2n(__u32 *id, char *arg);
+-int rtnl_rttable_a2n(__u32 *id, char *arg);
+-int rtnl_rtrealm_a2n(__u32 *id, char *arg);
+-int rtnl_dsfield_a2n(__u32 *id, char *arg);
++int rtnl_rtprot_a2n(uint32_t *id, char *arg);
++int rtnl_rtscope_a2n(uint32_t *id, char *arg);
++int rtnl_rttable_a2n(uint32_t *id, char *arg);
++int rtnl_rtrealm_a2n(uint32_t *id, char *arg);
++int rtnl_dsfield_a2n(uint32_t *id, char *arg);
+ 
+ const char *inet_proto_n2a(int proto, char *buf, int len);
+ int inet_proto_a2n(char *buf);
+diff -up iproute2-2.6.35/include/utils.h.diet iproute2-2.6.35/include/utils.h
+--- iproute2-2.6.35/include/utils.h.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/include/utils.h	2010-08-09 10:19:42.396929978 +0200
+@@ -42,11 +42,11 @@ extern void incomplete_command(void) __a
+ 
+ typedef struct
+ {
+-	__u8 family;
+-	__u8 bytelen;
+-	__s16 bitlen;
+-	__u32 flags;
+-	__u32 data[8];
++	uint8_t family;
++	uint8_t bytelen;
++	int16_t bitlen;
++	uint32_t flags;
++	uint32_t data[8];
+ } inet_prefix;
+ 
+ #define PREFIXLEN_SPECIFIED 1
+@@ -65,16 +65,16 @@ struct dn_naddr
+ #define IPX_NODE_LEN 6
+ 
+ struct ipx_addr {
+-	u_int32_t ipx_net;
+-	u_int8_t  ipx_node[IPX_NODE_LEN];
++	uint32_t ipx_net;
++	uint8_t  ipx_node[IPX_NODE_LEN];
+ };
+ 
+-extern __u32 get_addr32(const char *name);
++extern uint32_t get_addr32(const char *name);
+ extern int get_addr_1(inet_prefix *dst, const char *arg, int family);
+ extern int get_prefix_1(inet_prefix *dst, char *arg, int family);
+ extern int get_addr(inet_prefix *dst, const char *arg, int family);
+ extern int get_prefix(inet_prefix *dst, char *arg, int family);
+-extern int mask2bits(__u32 netmask);
++extern int mask2bits(uint32_t netmask);
+ 
+ extern int get_integer(int *val, const char *arg, int base);
+ extern int get_unsigned(unsigned *val, const char *arg, int base);
+@@ -82,15 +82,15 @@ extern int get_jiffies(unsigned *val, co
+ #define get_byte get_u8
+ #define get_ushort get_u16
+ #define get_short get_s16
+-extern int get_u64(__u64 *val, const char *arg, int base);
+-extern int get_u32(__u32 *val, const char *arg, int base);
+-extern int get_u16(__u16 *val, const char *arg, int base);
+-extern int get_s16(__s16 *val, const char *arg, int base);
+-extern int get_u8(__u8 *val, const char *arg, int base);
+-extern int get_s8(__s8 *val, const char *arg, int base);
++extern int get_u64(uint64_t *val, const char *arg, int base);
++extern int get_u32(uint32_t *val, const char *arg, int base);
++extern int get_u16(uint16_t *val, const char *arg, int base);
++extern int get_s16(int16_t *val, const char *arg, int base);
++extern int get_u8(uint8_t *val, const char *arg, int base);
++extern int get_s8(int8_t *val, const char *arg, int base);
+ 
+-extern char* hexstring_n2a(const __u8 *str, int len, char *buf, int blen);
+-extern __u8* hexstring_a2n(const char *str, __u8 *buf, int blen);
++extern char* hexstring_n2a(const uint8_t *str, int len, char *buf, int blen);
++extern uint8_t* hexstring_a2n(const char *str, uint8_t *buf, int blen);
+ 
+ extern const char *format_host(int af, int len, const void *addr,
+ 			       char *buf, int buflen);
+@@ -130,7 +130,7 @@ static __inline__ int get_user_hz(void)
+ 	return __iproute2_user_hz_internal;
+ }
+ 
+-static inline __u32 nl_mgrp(__u32 group)
++static inline uint32_t nl_mgrp(uint32_t group)
+ {
+ 	if (group > 31 ) {
+ 		fprintf(stderr, "Use setsockopt for this group %d\n", group);
+diff -up iproute2-2.6.35/ip/ipaddress.c.diet iproute2-2.6.35/ip/ipaddress.c
+--- iproute2-2.6.35/ip/ipaddress.c.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/ip/ipaddress.c	2010-08-09 10:19:42.396929978 +0200
+@@ -18,7 +18,7 @@
+ #include <sys/ioctl.h>
+ #include <sys/socket.h>
+ #include <sys/ioctl.h>
+-#include <sys/errno.h>
++#include <errno.h>
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
+ #include <string.h>
+diff -up iproute2-2.6.35/lib/libnetlink.c.diet iproute2-2.6.35/lib/libnetlink.c
+--- iproute2-2.6.35/lib/libnetlink.c.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/lib/libnetlink.c	2010-08-09 10:19:42.397929854 +0200
+@@ -525,7 +525,7 @@ int rtnl_from_file(FILE *rtnl, rtnl_filt
+ 	}
+ }
+ 
+-int addattr32(struct nlmsghdr *n, int maxlen, int type, __u32 data)
++int addattr32(struct nlmsghdr *n, int maxlen, int type, uint32_t data)
+ {
+ 	int len = RTA_LENGTH(4);
+ 	struct rtattr *rta;
+@@ -605,7 +605,7 @@ int addattr_nest_compat_end(struct nlmsg
+ 	return n->nlmsg_len;
+ }
+ 
+-int rta_addattr32(struct rtattr *rta, int maxlen, int type, __u32 data)
++int rta_addattr32(struct rtattr *rta, int maxlen, int type, uint32_t data)
+ {
+ 	int len = RTA_LENGTH(4);
+ 	struct rtattr *subrta;
+diff -up iproute2-2.6.35/lib/rt_names.c.diet iproute2-2.6.35/lib/rt_names.c
+--- iproute2-2.6.35/lib/rt_names.c.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/lib/rt_names.c	2010-08-09 10:19:42.397929854 +0200
+@@ -147,7 +147,7 @@ char * rtnl_rtprot_n2a(int id, char *buf
+ 	return buf;
+ }
+ 
+-int rtnl_rtprot_a2n(__u32 *id, char *arg)
++int rtnl_rtprot_a2n(uint32_t *id, char *arg)
+ {
+ 	static char *cache = NULL;
+ 	static unsigned long res;
+@@ -214,7 +214,7 @@ char * rtnl_rtscope_n2a(int id, char *bu
+ 	return buf;
+ }
+ 
+-int rtnl_rtscope_a2n(__u32 *id, char *arg)
++int rtnl_rtscope_a2n(uint32_t *id, char *arg)
+ {
+ 	static char *cache = NULL;
+ 	static unsigned long res;
+@@ -278,7 +278,7 @@ char * rtnl_rtrealm_n2a(int id, char *bu
+ }
+ 
+ 
+-int rtnl_rtrealm_a2n(__u32 *id, char *arg)
++int rtnl_rtrealm_a2n(uint32_t *id, char *arg)
+ {
+ 	static char *cache = NULL;
+ 	static unsigned long res;
+@@ -330,7 +330,7 @@ static void rtnl_rttable_initialize(void
+ 			     rtnl_rttable_hash, 256);
+ }
+ 
+-char * rtnl_rttable_n2a(__u32 id, char *buf, int len)
++char * rtnl_rttable_n2a(uint32_t id, char *buf, int len)
+ {
+ 	struct rtnl_hash_entry *entry;
+ 
+@@ -349,13 +349,13 @@ char * rtnl_rttable_n2a(__u32 id, char *
+ 	return buf;
+ }
+ 
+-int rtnl_rttable_a2n(__u32 *id, char *arg)
++int rtnl_rttable_a2n(uint32_t *id, char *arg)
+ {
+ 	static char *cache = NULL;
+ 	static unsigned long res;
+ 	struct rtnl_hash_entry *entry;
+ 	char *end;
+-	__u32 i;
++	uint32_t i;
+ 
+ 	if (cache && strcmp(cache, arg) == 0) {
+ 		*id = res;
+@@ -415,7 +415,7 @@ char * rtnl_dsfield_n2a(int id, char *bu
+ }
+ 
+ 
+-int rtnl_dsfield_a2n(__u32 *id, char *arg)
++int rtnl_dsfield_a2n(uint32_t *id, char *arg)
+ {
+ 	static char *cache = NULL;
+ 	static unsigned long res;
+diff -up iproute2-2.6.35/lib/utils.c.diet iproute2-2.6.35/lib/utils.c
+--- iproute2-2.6.35/lib/utils.c.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/lib/utils.c	2010-08-09 10:19:42.397929854 +0200
+@@ -16,6 +16,7 @@
+ #include <syslog.h>
+ #include <fcntl.h>
+ #include <sys/socket.h>
++#include <asm/types.h>
+ #include <netinet/in.h>
+ #include <string.h>
+ #include <netdb.h>
+@@ -43,11 +44,11 @@ int get_integer(int *val, const char *ar
+ 	return 0;
+ }
+ 
+-int mask2bits(__u32 netmask)
++int mask2bits(uint32_t netmask)
+ {
+ 	unsigned bits = 0;
+-	__u32 mask = ntohl(netmask);
+-	__u32 host = ~mask;
++	uint32_t mask = ntohl(netmask);
++	uint32_t host = ~mask;
+ 
+ 	/* a valid netmask must be 2^n - 1 */
+ 	if ((host & (host + 1)) != 0)
+@@ -156,7 +157,7 @@ int get_jiffies(unsigned *jiffies, const
+ 
+ }
+ 
+-int get_u64(__u64 *val, const char *arg, int base)
++int get_u64(uint64_t *val, const char *arg, int base)
+ {
+ 	unsigned long long res;
+ 	char *ptr;
+@@ -170,7 +171,7 @@ int get_u64(__u64 *val, const char *arg,
+  	return 0;
+ }
+ 
+-int get_u32(__u32 *val, const char *arg, int base)
++int get_u32(uint32_t *val, const char *arg, int base)
+ {
+ 	unsigned long res;
+ 	char *ptr;
+@@ -184,7 +185,7 @@ int get_u32(__u32 *val, const char *arg,
+ 	return 0;
+ }
+ 
+-int get_u16(__u16 *val, const char *arg, int base)
++int get_u16(uint16_t *val, const char *arg, int base)
+ {
+ 	unsigned long res;
+ 	char *ptr;
+@@ -198,7 +199,7 @@ int get_u16(__u16 *val, const char *arg,
+ 	return 0;
+ }
+ 
+-int get_u8(__u8 *val, const char *arg, int base)
++int get_u8(uint8_t *val, const char *arg, int base)
+ {
+ 	unsigned long res;
+ 	char *ptr;
+@@ -212,7 +213,7 @@ int get_u8(__u8 *val, const char *arg, i
+ 	return 0;
+ }
+ 
+-int get_s16(__s16 *val, const char *arg, int base)
++int get_s16(int16_t *val, const char *arg, int base)
+ {
+ 	long res;
+ 	char *ptr;
+@@ -226,7 +227,7 @@ int get_s16(__s16 *val, const char *arg,
+ 	return 0;
+ }
+ 
+-int get_s8(__s8 *val, const char *arg, int base)
++int get_s8(int8_t *val, const char *arg, int base)
+ {
+ 	long res;
+ 	char *ptr;
+@@ -398,7 +399,7 @@ int get_prefix(inet_prefix *dst, char *a
+ 	return 0;
+ }
+ 
+-__u32 get_addr32(const char *name)
++uint32_t get_addr32(const char *name)
+ {
+ 	inet_prefix addr;
+ 	if (get_addr_1(&addr, name, AF_INET)) {
+@@ -448,8 +449,8 @@ int matches(const char *cmd, const char 
+ 
+ int inet_addr_match(const inet_prefix *a, const inet_prefix *b, int bits)
+ {
+-	const __u32 *a1 = a->data;
+-	const __u32 *a2 = b->data;
++	const uint32_t *a1 = a->data;
++	const uint32_t *a2 = b->data;
+ 	int words = bits >> 0x05;
+ 
+ 	bits &= 0x1f;
+@@ -459,8 +460,8 @@ int inet_addr_match(const inet_prefix *a
+ 			return -1;
+ 
+ 	if (bits) {
+-		__u32 w1, w2;
+-		__u32 mask;
++		uint32_t w1, w2;
++		uint32_t mask;
+ 
+ 		w1 = a1[words];
+ 		w2 = a2[words];
+@@ -551,14 +552,14 @@ static const char *resolve_address(const
+ 	static int notfirst;
+ 
+ 
+-	if (af == AF_INET6 && ((__u32*)addr)[0] == 0 &&
+-	    ((__u32*)addr)[1] == 0 && ((__u32*)addr)[2] == htonl(0xffff)) {
++	if (af == AF_INET6 && ((uint32_t*)addr)[0] == 0 &&
++	    ((uint32_t*)addr)[1] == 0 && ((uint32_t*)addr)[2] == htonl(0xffff)) {
+ 		af = AF_INET;
+ 		addr += 12;
+ 		len = 4;
+ 	}
+ 
+-	hash = *(__u32 *)(addr + len - 4) % NHASH;
++	hash = *(uint32_t *)(addr + len - 4) % NHASH;
+ 
+ 	for (n = nht[hash]; n; n = n->next) {
+ 		if (n->addr.family == af &&
+@@ -624,7 +625,7 @@ const char *format_host(int af, int len,
+ }
+ 
+ 
+-char *hexstring_n2a(const __u8 *str, int len, char *buf, int blen)
++char *hexstring_n2a(const uint8_t *str, int len, char *buf, int blen)
+ {
+ 	char *ptr = buf;
+ 	int i;
+@@ -643,7 +644,7 @@ char *hexstring_n2a(const __u8 *str, int
+ 	return buf;
+ }
+ 
+-__u8* hexstring_a2n(const char *str, __u8 *buf, int blen)
++uint8_t* hexstring_a2n(const char *str, uint8_t *buf, int blen)
+ {
+ 	int cnt = 0;
+ 
+diff -up iproute2-2.6.35/Makefile.diet iproute2-2.6.35/Makefile
+--- iproute2-2.6.35/Makefile.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/Makefile	2010-08-09 10:19:42.397929854 +0200
+@@ -12,13 +12,13 @@ DBM_INCLUDE:=$(ROOTDIR)/usr/include
+ 
+ SHARED_LIBS = y
+ 
+-DEFINES= -DRESOLVE_HOSTNAMES -DLIBDIR=\"$(LIBDIR)\"
++DEFINES= $(KERNEL_INCLUDE) -DRESOLVE_HOSTNAMES -DDESTDIR=\"$(DESTDIR)\" -DLIBDIR=\"$(LIBDIR)\"
+ ifneq ($(SHARED_LIBS),y)
+ DEFINES+= -DNO_SHARED_LIBS
+ endif
+ 
+ #options if you have a bind>=4.9.4 libresolv (or, maybe, glibc)
+-LDLIBS=-lresolv
++LDLIBS=
+ ADDLIB=
+ 
+ #options for decnet
+@@ -29,13 +29,14 @@ ADDLIB+=ipx_ntop.o ipx_pton.o
+ 
+ CC = gcc
+ HOSTCC = gcc
+-CCOPTS = -D_GNU_SOURCE -O2 -Wstrict-prototypes -Wall
++CCOPTS = -D_GNU_SOURCE -D_BSD_SOURCE -O2 -Wstrict-prototypes -Wall
++CCOPTS += -D__KERNEL_STRICT_NAMES -D__GLIBC__=2 -D__USE_MISC
+ CFLAGS = $(CCOPTS) -I../include $(DEFINES)
+ YACCFLAGS = -d -t -v
+ 
+-LDLIBS += -L../lib -lnetlink -lutil
++LDLIBS += -L../lib -lnetlink -lutil -lcompat
+ 
+-SUBDIRS=lib ip tc misc netem genl
++SUBDIRS=lib ip tc misc
+ 
+ LIBNETLINK=../lib/libnetlink.a ../lib/libutil.a
+ 
+diff -up iproute2-2.6.35/misc/arpd.c.diet iproute2-2.6.35/misc/arpd.c
+--- iproute2-2.6.35/misc/arpd.c.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/misc/arpd.c	2010-08-09 10:19:42.398929711 +0200
+@@ -16,6 +16,8 @@
+ #include <unistd.h>
+ #include <stdlib.h>
+ #include <netdb.h>
++#include <sys/types.h>
++#include <db_185.h>
+ #include <db_185.h>
+ #include <sys/ioctl.h>
+ #include <sys/poll.h>
+@@ -48,15 +50,15 @@ char	**ifnames;
+ 
+ struct dbkey
+ {
+-	__u32	iface;
+-	__u32	addr;
++	uint32_t	iface;
++	uint32_t	addr;
+ };
+ 
+-#define IS_NEG(x)	(((__u8*)(x))[0] == 0xFF)
++#define IS_NEG(x)	(((uint8_t*)(x))[0] == 0xFF)
+ #define NEG_TIME(x)	(((x)[2]<<24)|((x)[3]<<16)|((x)[4]<<8)|(x)[5])
+-#define NEG_AGE(x)	((__u32)time(NULL) - NEG_TIME((__u8*)x))
++#define NEG_AGE(x)	((uint32_t)time(NULL) - NEG_TIME((uint8_t*)x))
+ #define NEG_VALID(x)	(NEG_AGE(x) < negative_timeout)
+-#define NEG_CNT(x)	(((__u8*)(x))[1])
++#define NEG_CNT(x)	(((uint8_t*)(x))[1])
+ 
+ struct rtnl_handle rth;
+ 
+@@ -176,7 +178,7 @@ void undo_sysctl_adjustments(void)
+ }
+ 
+ 
+-int send_probe(int ifindex, __u32 addr)
++int send_probe(int ifindex, uint32_t addr)
+ {
+ 	struct ifreq ifr;
+ 	struct sockaddr_in dst;
+@@ -236,7 +238,7 @@ int send_probe(int ifindex, __u32 addr)
+ 
+ /* Be very tough on sending probes: 1 per second with burst of 3. */
+ 
+-int queue_active_probe(int ifindex, __u32 addr)
++int queue_active_probe(int ifindex, uint32_t addr)
+ {
+ 	static struct timeval prev;
+ 	static int buckets;
+@@ -260,7 +262,7 @@ int queue_active_probe(int ifindex, __u3
+ 	return -1;
+ }
+ 
+-int respond_to_kernel(int ifindex, __u32 addr, char *lla, int llalen)
++int respond_to_kernel(int ifindex, uint32_t addr, char *lla, int llalen)
+ {
+ 	struct {
+ 		struct nlmsghdr 	n;
+@@ -284,7 +286,7 @@ int respond_to_kernel(int ifindex, __u32
+ 	return rtnl_send(&rth, (char*)&req, req.n.nlmsg_len) <= 0;
+ }
+ 
+-void prepare_neg_entry(__u8 *ndata, __u32 stamp)
++void prepare_neg_entry(uint8_t *ndata, uint32_t stamp)
+ {
+ 	ndata[0] = 0xFF;
+ 	ndata[1] = 0;
+@@ -401,7 +403,7 @@ int do_one_request(struct nlmsghdr *n)
+ 			if (!dbdat.data ||
+ 			    !IS_NEG(dbdat.data) ||
+ 			    !NEG_VALID(dbdat.data)) {
+-				__u8 ndata[6];
++				uint8_t ndata[6];
+ 				stats.kern_neg++;
+ 				prepare_neg_entry(ndata, time(NULL));
+ 				dbdat.data = ndata;
+@@ -691,7 +693,7 @@ int main(int argc, char **argv)
+ 
+ 		buf[sizeof(buf)-1] = 0;
+ 		while (fgets(buf, sizeof(buf)-1, fp)) {
+-			__u8 b1[6];
++			uint8_t b1[6];
+ 			char ipbuf[128];
+ 			char macbuf[128];
+ 
+diff -up iproute2-2.6.35/misc/lnstat_util.c.diet iproute2-2.6.35/misc/lnstat_util.c
+--- iproute2-2.6.35/misc/lnstat_util.c.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/misc/lnstat_util.c	2010-08-09 10:19:42.398929711 +0200
+@@ -251,8 +251,10 @@ struct lnstat_file *lnstat_scan_dir(cons
+ 	while ((de = readdir(dir))) {
+ 		struct lnstat_file *lf;
+ 
++#ifdef _DIRENT_HAVE_D_TYPE
+ 		if (de->d_type != DT_REG)
+ 			continue;
++#endif
+ 
+ 		if (num_req_files && !name_in_array(num_req_files,
+ 						    req_files, de->d_name))
+diff -up iproute2-2.6.35/misc/Makefile.diet iproute2-2.6.35/misc/Makefile
+--- iproute2-2.6.35/misc/Makefile.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/misc/Makefile	2010-08-09 10:20:00.091805696 +0200
+@@ -1,4 +1,4 @@
+-SSOBJ=ss.o ssfilter.o
++SSOBJ=ss.o ssfilter.o stpcpy.o
+ LNSTATOBJ=lnstat.o lnstat_util.o
+ 
+ TARGETS=ss nstat ifstat rtacct arpd lnstat
+@@ -10,16 +10,16 @@ all: $(TARGETS)
+ ss: $(SSOBJ) $(LIBUTIL)
+ 
+ nstat: nstat.c
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o nstat nstat.c -lm
++	$(CC) $(CFLAGS) $(LDFLAGS) -o nstat nstat.c -lm -lcompat
+ 
+ ifstat: ifstat.c
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o ifstat ifstat.c $(LIBNETLINK) -lm
++	$(CC) $(CFLAGS) $(LDFLAGS) -o ifstat ifstat.c $(LIBNETLINK) -lm -lcompat
+ 
+ rtacct: rtacct.c
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o rtacct rtacct.c $(LIBNETLINK) -lm
++	$(CC) $(CFLAGS) $(LDFLAGS) -o rtacct rtacct.c $(LIBNETLINK) -lm -lcompat
+ 
+ arpd: arpd.c
+-	$(CC) $(CFLAGS) -I$(DBM_INCLUDE) $(LDFLAGS) -o arpd arpd.c $(LIBNETLINK) -ldb -lpthread
++	$(CC) $(CFLAGS) -I$(DBM_INCLUDE) $(LDFLAGS) -o arpd arpd.c $(LIBNETLINK) -ldb -lpthread -lcompat
+ 
+ ssfilter.c: ssfilter.y
+ 	bison ssfilter.y -o ssfilter.c
+diff -up iproute2-2.6.35/misc/rtacct.c.diet iproute2-2.6.35/misc/rtacct.c
+--- iproute2-2.6.35/misc/rtacct.c.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/misc/rtacct.c	2010-08-09 10:19:42.399929819 +0200
+@@ -60,11 +60,11 @@ int net_rtacct_open(void)
+ 	return generic_proc_open("PROC_NET_RTACCT", "net/rt_acct");
+ }
+ 
+-__u32 rmap[256/4];
++uint32_t rmap[256/4];
+ 
+ struct rtacct_data
+ {
+-	__u32			ival[256*4];
++	uint32_t		ival[256*4];
+ 
+ 	unsigned long long	val[256*4];
+ 	double			rate[256*4];
+@@ -94,9 +94,9 @@ void nread(int fd, char *buf, int tot)
+ }
+ 
+ 
+-__u32 *read_kern_table(__u32 *tbl)
++uint32_t *read_kern_table(uint32_t *tbl)
+ {
+-	static __u32 *tbl_ptr;
++	static uint32_t *tbl_ptr;
+ 	int fd;
+ 
+ 	if (magic_number) {
+@@ -302,14 +302,14 @@ void sigchild(int signo)
+ void update_db(int interval)
+ {
+ 	int i;
+-	__u32 *ival;
+-	__u32 _ival[256*4];
++	uint32_t *ival;
++	uint32_t _ival[256*4];
+ 
+ 	ival = read_kern_table(_ival);
+ 
+ 	for (i=0; i<256*4; i++) {
+ 		double sample;
+-		__u32 incr = ival[i] - kern_db->ival[i];
++		uint32_t incr = ival[i] - kern_db->ival[i];
+ 
+ 		if (ival[i] == 0 && incr == 0 &&
+ 		    kern_db->val[i] == 0 && kern_db->rate[i] == 0)
+@@ -351,7 +351,7 @@ void send_db(int fd)
+ #define T_DIFF(a,b) (((a).tv_sec-(b).tv_sec)*1000 + ((a).tv_usec-(b).tv_usec)/1000)
+ 
+ 
+-void pad_kern_table(struct rtacct_data *dat, __u32 *ival)
++void pad_kern_table(struct rtacct_data *dat, uint32_t *ival)
+ {
+ 	int i;
+ 	memset(dat->rate, 0, sizeof(dat->rate));
+@@ -489,7 +489,7 @@ int main(int argc, char *argv[])
+ 
+ 	if (argc) {
+ 		while (argc > 0) {
+-			__u32 realm;
++			uint32_t realm;
+ 			if (rtnl_rtrealm_a2n(&realm, argv[0])) {
+ 				fprintf(stderr, "Warning: realm \"%s\" does not exist.\n", argv[0]);
+ 				exit(-1);
+diff -up iproute2-2.6.35/misc/ss.c.diet iproute2-2.6.35/misc/ss.c
+--- iproute2-2.6.35/misc/ss.c.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/misc/ss.c	2010-08-09 10:19:42.399929819 +0200
+@@ -19,6 +19,8 @@
+ #include <sys/uio.h>
+ #include <netinet/in.h>
+ #include <string.h>
++#include <strings.h>
++#include <termios.h>
+ #include <errno.h>
+ #include <netdb.h>
+ #include <arpa/inet.h>
+diff -up iproute2-2.6.35/misc/stpcpy.c.diet iproute2-2.6.35/misc/stpcpy.c
+--- iproute2-2.6.35/misc/stpcpy.c.diet	2010-08-09 10:19:42.399929819 +0200
++++ iproute2-2.6.35/misc/stpcpy.c	2010-08-09 10:19:42.399929819 +0200
+@@ -0,0 +1,12 @@
++char *stpcpy (char *dest, const char *src)
++{ 
++  register char *d = dest; 
++  register const char *s = src;
++	      
++  do
++    *d++ = *s;
++  while (*s++ != '\0');
++	         
++  return d - 1;
++}
++
+diff -up iproute2-2.6.35/tc/tc_core.c.diet iproute2-2.6.35/tc/tc_core.c
+--- iproute2-2.6.35/tc/tc_core.c.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/tc/tc_core.c	2010-08-09 10:19:42.400930115 +0200
+@@ -24,6 +24,10 @@
+ #include "tc_core.h"
+ #include <linux/atm.h>
+ 
++#ifndef UINT16_MAX
++# define UINT16_MAX             (65535)
++#endif
++
+ static double tick_in_usec = 1;
+ static double clock_factor = 1;
+ 
+diff -up iproute2-2.6.35/tc/tc_util.c.diet iproute2-2.6.35/tc/tc_util.c
+--- iproute2-2.6.35/tc/tc_util.c.diet	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/tc/tc_util.c	2010-08-09 10:19:42.400930115 +0200
+@@ -39,9 +39,9 @@ const char *get_tc_lib(void)
+ 	return lib_dir;
+ }
+ 
+-int get_qdisc_handle(__u32 *h, const char *str)
++int get_qdisc_handle(uint32_t *h, const char *str)
+ {
+-	__u32 maj;
++	uint32_t maj;
+ 	char *p;
+ 
+ 	maj = TC_H_UNSPEC;
+@@ -58,9 +58,9 @@ ok:
+ 	return 0;
+ }
+ 
+-int get_tc_classid(__u32 *h, const char *str)
++int get_tc_classid(uint32_t *h, const char *str)
+ {
+-	__u32 maj, min;
++	uint32_t maj, min;
+ 	char *p;
+ 
+ 	maj = TC_H_ROOT;
+@@ -94,7 +94,7 @@ ok:
+ 	return 0;
+ }
+ 
+-int print_tc_classid(char *buf, int len, __u32 h)
++int print_tc_classid(char *buf, int len, uint32_t h)
+ {
+ 	if (h == TC_H_ROOT)
+ 		sprintf(buf, "root");
+@@ -109,7 +109,7 @@ int print_tc_classid(char *buf, int len,
+ 	return 0;
+ }
+ 
+-char * sprint_tc_classid(__u32 h, char *buf)
++char * sprint_tc_classid(uint32_t h, char *buf)
+ {
+ 	if (print_tc_classid(buf, SPRINT_BSIZE-1, h))
+ 		strcpy(buf, "???");
+@@ -196,7 +196,7 @@ int get_rate_and_cell(unsigned *rate, in
+ 	return 0;
+ }
+ 
+-void print_rate(char *buf, int len, __u32 rate)
++void print_rate(char *buf, int len, uint32_t rate)
+ {
+ 	double tmp = (double)rate*8;
+ 	extern int use_iec;
+@@ -218,7 +218,7 @@ void print_rate(char *buf, int len, __u3
+ 	}
+ }
+ 
+-char * sprint_rate(__u32 rate, char *buf)
++char * sprint_rate(uint32_t rate, char *buf)
+ {
+ 	print_rate(buf, SPRINT_BSIZE-1, rate);
+ 	return buf;
+@@ -252,7 +252,7 @@ int get_time(unsigned *time, const char 
+ }
+ 
+ 
+-void print_time(char *buf, int len, __u32 time)
++void print_time(char *buf, int len, uint32_t time)
+ {
+ 	double tmp = time;
+ 
+@@ -264,13 +264,13 @@ void print_time(char *buf, int len, __u3
+ 		snprintf(buf, len, "%uus", time);
+ }
+ 
+-char * sprint_time(__u32 time, char *buf)
++char * sprint_time(uint32_t time, char *buf)
+ {
+ 	print_time(buf, SPRINT_BSIZE-1, time);
+ 	return buf;
+ }
+ 
+-char * sprint_ticks(__u32 ticks, char *buf)
++char * sprint_ticks(uint32_t ticks, char *buf)
+ {
+ 	return sprint_time(tc_core_tick2time(ticks), buf);
+ }
+@@ -334,7 +334,7 @@ int get_size_and_cell(unsigned *size, in
+ 	return 0;
+ }
+ 
+-void print_size(char *buf, int len, __u32 sz)
++void print_size(char *buf, int len, uint32_t sz)
+ {
+ 	double tmp = sz;
+ 
+@@ -346,7 +346,7 @@ void print_size(char *buf, int len, __u3
+ 		snprintf(buf, len, "%ub", sz);
+ }
+ 
+-char * sprint_size(__u32 size, char *buf)
++char * sprint_size(uint32_t size, char *buf)
+ {
+ 	print_size(buf, SPRINT_BSIZE-1, size);
+ 	return buf;
+@@ -354,7 +354,7 @@ char * sprint_size(__u32 size, char *buf
+ 
+ static const double max_percent_value = 0xffffffff;
+ 
+-int get_percent(__u32 *percent, const char *str)
++int get_percent(uint32_t *percent, const char *str)
+ {
+ 	char *p;
+ 	double per = strtod(str, &p) / 100.;
+@@ -368,23 +368,23 @@ int get_percent(__u32 *percent, const ch
+ 	return 0;
+ }
+ 
+-void print_percent(char *buf, int len, __u32 per)
++void print_percent(char *buf, int len, uint32_t per)
+ {
+ 	snprintf(buf, len, "%g%%", 100. * (double) per / max_percent_value);
+ }
+ 
+-char * sprint_percent(__u32 per, char *buf)
++char * sprint_percent(uint32_t per, char *buf)
+ {
+ 	print_percent(buf, SPRINT_BSIZE-1, per);
+ 	return buf;
+ }
+ 
+-void print_qdisc_handle(char *buf, int len, __u32 h)
++void print_qdisc_handle(char *buf, int len, uint32_t h)
+ {
+ 	snprintf(buf, len, "%x:", TC_H_MAJ(h)>>16);
+ }
+ 
+-char * sprint_qdisc_handle(__u32 h, char *buf)
++char * sprint_qdisc_handle(uint32_t h, char *buf)
+ {
+ 	print_qdisc_handle(buf, SPRINT_BSIZE-1, h);
+ 	return buf;

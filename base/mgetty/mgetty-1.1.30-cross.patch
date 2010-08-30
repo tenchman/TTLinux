@@ -1,0 +1,50 @@
+--- mgetty-1.1.30/g3/Makefile.cross	2008-03-20 22:16:31.000000000 +0100
++++ mgetty-1.1.30/g3/Makefile	2008-03-20 22:16:49.000000000 +0100
+@@ -37,7 +37,7 @@
+ # install programs
+ #
+ 	for f in $(G3_PROGRAMS) ; do \
+-		$(INSTALL) -s -m 755 $$f $(BINDIR) ; \
++		$(INSTALL) -m 755 $$f $(BINDIR) ; \
+ 	done
+ #
+ # make symlink for "g3topbm" (so third-party fax viewers won't fail)
+--- mgetty-1.1.30/Makefile.cross	2008-03-20 22:14:18.000000000 +0100
++++ mgetty-1.1.30/Makefile	2008-03-20 22:14:18.000000000 +0100
+@@ -5,6 +5,7 @@
+ # this is the C compiler to use (on SunOS, the standard "cc" does not
+ # grok my code, so please use gcc there. On ISC 4.0, use "icc".).
+ CC=gcc
++HOSTCC=gcc
+ #CC=cc
+ #
+ #### C Compiler Flags ####
+@@ -428,7 +429,7 @@
+ 	chmod 700 sedscript
+ 
+ mksed: mksed.c policy.h Makefile 
+-	$(CC) $(CFLAGS) -DBINDIR=\"$(BINDIR)\" -DSBINDIR=\"$(SBINDIR)\" \
++	$(HOSTCC) $(HOSTCFLAGS) -DBINDIR=\"$(BINDIR)\" -DSBINDIR=\"$(SBINDIR)\" \
+ 		-DLIBDIR=\"$(LIBDIR)\" \
+ 		-DCONFDIR=\"$(CONFDIR)\" \
+ 		-DFAX_SPOOL=\"$(FAX_SPOOL)\" \
+@@ -602,8 +603,8 @@
+ 	-test -d $(ROOT_SBINDIR) || ( ./mkidirs $(ROOT_SBINDIR) ; chmod 755 $(ROOT_SBINDIR) )
+ 	-mv -f $(ROOT_SBINDIR)/mgetty $(ROOT_SBINDIR)/mgetty.old
+ 	-mv -f $(SBINDIR)/sendfax $(SBINDIR)/sendfax.old
+-	$(INSTALL) -s -m 700 mgetty $(ROOT_SBINDIR)
+-	$(INSTALL) -s -m 755 sendfax $(SBINDIR)
++	$(INSTALL) -m 700 mgetty $(ROOT_SBINDIR)
++	$(INSTALL) -m 755 sendfax $(SBINDIR)
+ #
+ # data files + directories
+ #
+@@ -665,7 +666,7 @@
+ 	if [ ! -z "$(INSTALL_MECHO)" ] ; then \
+ 	    cd compat ; \
+ 	    $(CC) $(CFLAGS) -o mg.echo mg.echo.c && \
+-	    $(INSTALL) -s -m 755 mg.echo $(BINDIR) ; \
++	    $(INSTALL) -m 755 mg.echo $(BINDIR) ; \
+ 	fi
+ 
+ #

@@ -1,0 +1,483 @@
+--- ethtool-6/ethtool-util.h.diet	2007-07-26 19:31:30.000000000 +0200
++++ ethtool-6/ethtool-util.h	2007-11-01 23:08:47.000000000 +0100
+@@ -7,15 +7,15 @@
+ 
+ /* hack, so we may include kernel's ethtool.h */
+ typedef unsigned long long __u64;
+-typedef __uint32_t __u32;         /* ditto */
+-typedef __uint16_t __u16;         /* ditto */
+-typedef __uint8_t __u8;           /* ditto */
++typedef uint32_t __u32;         /* ditto */
++typedef uint16_t __u16;         /* ditto */
++typedef uint8_t __u8;           /* ditto */
+ 
+ /* historical: we used to use kernel-like types; remove these once cleaned */
+ typedef unsigned long long u64;
+-typedef __uint32_t u32;         /* ditto */
+-typedef __uint16_t u16;         /* ditto */
+-typedef __uint8_t u8;           /* ditto */
++typedef uint32_t u32;         /* ditto */
++typedef uint16_t u16;         /* ditto */
++typedef uint8_t u8;           /* ditto */
+ 
+ #include "ethtool-copy.h"
+ 
+--- ethtool-6/marvell.c.diet	2007-07-26 19:22:06.000000000 +0200
++++ ethtool-6/marvell.c	2007-11-01 23:09:53.000000000 +0100
+@@ -31,23 +31,23 @@
+ static void dump_queue(const char *name, const void *a, int rx)
+ {
+ 	struct desc {
+-		u_int32_t		ctl;
+-		u_int32_t		next;
+-		u_int32_t		data_lo;
+-		u_int32_t		data_hi;
+-		u_int32_t		status;
+-		u_int32_t		timestamp;
+-		u_int16_t		csum2;
+-		u_int16_t		csum1;
+-		u_int16_t		csum2_start;
+-		u_int16_t		csum1_start;
+-		u_int32_t		addr_lo;
+-		u_int32_t		addr_hi;
+-		u_int32_t		count_lo;
+-		u_int32_t		count_hi;
+-		u_int32_t               byte_count;
+-		u_int32_t               csr;
+-		u_int32_t               flag;
++		uint32_t		ctl;
++		uint32_t		next;
++		uint32_t		data_lo;
++		uint32_t		data_hi;
++		uint32_t		status;
++		uint32_t		timestamp;
++		uint16_t		csum2;
++		uint16_t		csum1;
++		uint16_t		csum2_start;
++		uint16_t		csum1_start;
++		uint32_t		addr_lo;
++		uint32_t		addr_hi;
++		uint32_t		count_lo;
++		uint32_t		count_hi;
++		uint32_t               byte_count;
++		uint32_t               csr;
++		uint32_t               flag;
+ 	};
+ 	const struct desc *d = a;
+ 
+--- ethtool-6/ethtool.c.diet	2007-07-26 19:22:06.000000000 +0200
++++ ethtool-6/ethtool.c	2007-11-01 23:08:47.000000000 +0100
+@@ -674,7 +674,7 @@
+ 
+ static void dump_supported(struct ethtool_cmd *ep)
+ {
+-	u_int32_t mask = ep->supported;
++	uint32_t mask = ep->supported;
+ 	int did1;
+ 
+ 	fprintf(stdout, "	Supported ports: [ ");
+@@ -736,7 +736,7 @@
+ 
+ static void dump_advertised(struct ethtool_cmd *ep)
+ {
+-	u_int32_t mask = ep->advertising;
++	uint32_t mask = ep->advertising;
+ 	int did1;
+ 
+ 	fprintf(stdout, "	Advertised link modes:  ");
+@@ -1290,7 +1290,7 @@
+ 	struct ethtool_drvinfo drvinfo;
+ 
+ 	drvinfo.cmd = ETHTOOL_GDRVINFO;
+-	ifr->ifr_data = (caddr_t)&drvinfo;
++	ifr->ifr_data = (char*)&drvinfo;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0) {
+ 		perror("Cannot get driver information");
+@@ -1306,7 +1306,7 @@
+ 	fprintf(stdout, "Pause parameters for %s:\n", devname);
+ 
+ 	epause.cmd = ETHTOOL_GPAUSEPARAM;
+-	ifr->ifr_data = (caddr_t)&epause;
++	ifr->ifr_data = (char*)&epause;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err == 0) {
+ 		err = dump_pause();
+@@ -1354,7 +1354,7 @@
+ 	int err, changed = 0;
+ 
+ 	epause.cmd = ETHTOOL_GPAUSEPARAM;
+-	ifr->ifr_data = (caddr_t)&epause;
++	ifr->ifr_data = (char*)&epause;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err) {
+ 		perror("Cannot get device pause settings");
+@@ -1369,7 +1369,7 @@
+ 	}
+ 
+ 	epause.cmd = ETHTOOL_SPAUSEPARAM;
+-	ifr->ifr_data = (caddr_t)&epause;
++	ifr->ifr_data = (char*)&epause;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err) {
+ 		perror("Cannot set device pause parameters");
+@@ -1384,7 +1384,7 @@
+ 	int err, changed = 0;
+ 
+ 	ering.cmd = ETHTOOL_GRINGPARAM;
+-	ifr->ifr_data = (caddr_t)&ering;
++	ifr->ifr_data = (char*)&ering;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err) {
+ 		perror("Cannot get device ring settings");
+@@ -1399,7 +1399,7 @@
+ 	}
+ 
+ 	ering.cmd = ETHTOOL_SRINGPARAM;
+-	ifr->ifr_data = (caddr_t)&ering;
++	ifr->ifr_data = (char*)&ering;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err) {
+ 		perror("Cannot set device ring parameters");
+@@ -1416,7 +1416,7 @@
+ 	fprintf(stdout, "Ring parameters for %s:\n", devname);
+ 
+ 	ering.cmd = ETHTOOL_GRINGPARAM;
+-	ifr->ifr_data = (caddr_t)&ering;
++	ifr->ifr_data = (char*)&ering;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err == 0) {
+ 		err = dump_ring();
+@@ -1437,7 +1437,7 @@
+ 	fprintf(stdout, "Coalesce parameters for %s:\n", devname);
+ 
+ 	ecoal.cmd = ETHTOOL_GCOALESCE;
+-	ifr->ifr_data = (caddr_t)&ecoal;
++	ifr->ifr_data = (char*)&ecoal;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err == 0) {
+ 		err = dump_coalesce();
+@@ -1456,7 +1456,7 @@
+ 	int err, changed = 0;
+ 
+ 	ecoal.cmd = ETHTOOL_GCOALESCE;
+-	ifr->ifr_data = (caddr_t)&ecoal;
++	ifr->ifr_data = (char*)&ecoal;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err) {
+ 		perror("Cannot get device coalesce settings");
+@@ -1472,7 +1472,7 @@
+ 	}
+ 
+ 	ecoal.cmd = ETHTOOL_SCOALESCE;
+-	ifr->ifr_data = (caddr_t)&ecoal;
++	ifr->ifr_data = (char*)&ecoal;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err) {
+ 		perror("Cannot set device ring parameters");
+@@ -1490,7 +1490,7 @@
+ 	fprintf(stdout, "Offload parameters for %s:\n", devname);
+ 
+ 	eval.cmd = ETHTOOL_GRXCSUM;
+-	ifr->ifr_data = (caddr_t)&eval;
++	ifr->ifr_data = (char*)&eval;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err)
+ 		perror("Cannot get device rx csum settings");
+@@ -1500,7 +1500,7 @@
+ 	}
+ 
+ 	eval.cmd = ETHTOOL_GTXCSUM;
+-	ifr->ifr_data = (caddr_t)&eval;
++	ifr->ifr_data = (char*)&eval;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err)
+ 		perror("Cannot get device tx csum settings");
+@@ -1510,7 +1510,7 @@
+ 	}
+ 
+ 	eval.cmd = ETHTOOL_GSG;
+-	ifr->ifr_data = (caddr_t)&eval;
++	ifr->ifr_data = (char*)&eval;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err)
+ 		perror("Cannot get device scatter-gather settings");
+@@ -1520,7 +1520,7 @@
+ 	}
+ 
+ 	eval.cmd = ETHTOOL_GTSO;
+-	ifr->ifr_data = (caddr_t)&eval;
++	ifr->ifr_data = (char*)&eval;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err)
+ 		perror("Cannot get device tcp segmentation offload settings");
+@@ -1530,7 +1530,7 @@
+ 	}
+ 
+ 	eval.cmd = ETHTOOL_GUFO;
+-	ifr->ifr_data = (caddr_t)&eval;
++	ifr->ifr_data = (char *)&eval;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err)
+ 		perror("Cannot get device udp large send offload settings");
+@@ -1540,7 +1540,7 @@
+ 	}
+ 
+ 	eval.cmd = ETHTOOL_GGSO;
+-	ifr->ifr_data = (caddr_t)&eval;
++	ifr->ifr_data = (char *)&eval;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err)
+ 		perror("Cannot get device generic segmentation offload settings");
+@@ -1566,7 +1566,7 @@
+ 		changed = 1;
+ 		eval.cmd = ETHTOOL_SRXCSUM;
+ 		eval.data = (off_csum_rx_wanted == 1);
+-		ifr->ifr_data = (caddr_t)&eval;
++		ifr->ifr_data = (char*)&eval;
+ 		err = ioctl(fd, SIOCETHTOOL, ifr);
+ 		if (err) {
+ 			perror("Cannot set device rx csum settings");
+@@ -1578,7 +1578,7 @@
+ 		changed = 1;
+ 		eval.cmd = ETHTOOL_STXCSUM;
+ 		eval.data = (off_csum_tx_wanted == 1);
+-		ifr->ifr_data = (caddr_t)&eval;
++		ifr->ifr_data = (char*)&eval;
+ 		err = ioctl(fd, SIOCETHTOOL, ifr);
+ 		if (err) {
+ 			perror("Cannot set device tx csum settings");
+@@ -1590,7 +1590,7 @@
+ 		changed = 1;
+ 		eval.cmd = ETHTOOL_SSG;
+ 		eval.data = (off_sg_wanted == 1);
+-		ifr->ifr_data = (caddr_t)&eval;
++		ifr->ifr_data = (char*)&eval;
+ 		err = ioctl(fd, SIOCETHTOOL, ifr);
+ 		if (err) {
+ 			perror("Cannot set device scatter-gather settings");
+@@ -1602,7 +1602,7 @@
+ 		changed = 1;
+ 		eval.cmd = ETHTOOL_STSO;
+ 		eval.data = (off_tso_wanted == 1);
+-		ifr->ifr_data = (caddr_t)&eval;
++		ifr->ifr_data = (char*)&eval;
+ 		err = ioctl(fd, SIOCETHTOOL, ifr);
+ 		if (err) {
+ 			perror("Cannot set device tcp segmentation offload settings");
+@@ -1613,7 +1613,7 @@
+ 		changed = 1;
+ 		eval.cmd = ETHTOOL_SUFO;
+ 		eval.data = (off_ufo_wanted == 1);
+-		ifr->ifr_data = (caddr_t)&eval;
++		ifr->ifr_data = (char *)&eval;
+ 		err = ioctl(fd, SIOCETHTOOL, ifr);
+ 		if (err) {
+ 			perror("Cannot set device udp large send offload settings");
+@@ -1624,7 +1624,7 @@
+ 		changed = 1;
+ 		eval.cmd = ETHTOOL_SGSO;
+ 		eval.data = (off_gso_wanted == 1);
+-		ifr->ifr_data = (caddr_t)&eval;
++		ifr->ifr_data = (char *)&eval;
+ 		err = ioctl(fd, SIOCETHTOOL, ifr);
+ 		if (err) {
+ 			perror("Cannot set device generic segmentation offload settings");
+@@ -1649,7 +1649,7 @@
+ 	fprintf(stdout, "Settings for %s:\n", devname);
+ 
+ 	ecmd.cmd = ETHTOOL_GSET;
+-	ifr->ifr_data = (caddr_t)&ecmd;
++	ifr->ifr_data = (char*)&ecmd;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err == 0) {
+ 		err = dump_ecmd(&ecmd);
+@@ -1661,7 +1661,7 @@
+ 	}
+ 
+ 	wolinfo.cmd = ETHTOOL_GWOL;
+-	ifr->ifr_data = (caddr_t)&wolinfo;
++	ifr->ifr_data = (char*)&wolinfo;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err == 0) {
+ 		err = dump_wol(&wolinfo);
+@@ -1673,7 +1673,7 @@
+ 	}
+ 
+ 	edata.cmd = ETHTOOL_GMSGLVL;
+-	ifr->ifr_data = (caddr_t)&edata;
++	ifr->ifr_data = (char*)&edata;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err == 0) {
+ 		fprintf(stdout, "	Current message level: 0x%08x (%d)\n",
+@@ -1684,7 +1684,7 @@
+ 	}
+ 
+ 	edata.cmd = ETHTOOL_GLINK;
+-	ifr->ifr_data = (caddr_t)&edata;
++	ifr->ifr_data = (char*)&edata;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err == 0) {
+ 		fprintf(stdout, "	Link detected: %s\n",
+@@ -1709,7 +1709,7 @@
+ 		struct ethtool_cmd ecmd;
+ 
+ 		ecmd.cmd = ETHTOOL_GSET;
+-		ifr->ifr_data = (caddr_t)&ecmd;
++		ifr->ifr_data = (char*)&ecmd;
+ 		err = ioctl(fd, SIOCETHTOOL, ifr);
+ 		if (err < 0) {
+ 			perror("Cannot get current device settings");
+@@ -1744,7 +1744,7 @@
+ 
+ 			/* Try to perform the update. */
+ 			ecmd.cmd = ETHTOOL_SSET;
+-			ifr->ifr_data = (caddr_t)&ecmd;
++			ifr->ifr_data = (char*)&ecmd;
+ 			err = ioctl(fd, SIOCETHTOOL, ifr);
+ 			if (err < 0)
+ 				perror("Cannot set new settings");
+@@ -1769,7 +1769,7 @@
+ 		struct ethtool_wolinfo wol;
+ 
+ 		wol.cmd = ETHTOOL_GWOL;
+-		ifr->ifr_data = (caddr_t)&wol;
++		ifr->ifr_data = (char*)&wol;
+ 		err = ioctl(fd, SIOCETHTOOL, ifr);
+ 		if (err < 0) {
+ 			perror("Cannot get current wake-on-lan settings");
+@@ -1787,7 +1787,7 @@
+ 
+ 			/* Try to perform the update. */
+ 			wol.cmd = ETHTOOL_SWOL;
+-			ifr->ifr_data = (caddr_t)&wol;
++			ifr->ifr_data = (char*)&wol;
+ 			err = ioctl(fd, SIOCETHTOOL, ifr);
+ 			if (err < 0)
+ 				perror("Cannot set new wake-on-lan settings");
+@@ -1805,7 +1805,7 @@
+ 
+ 		edata.cmd = ETHTOOL_SMSGLVL;
+ 		edata.data = msglvl_wanted;
+-		ifr->ifr_data = (caddr_t)&edata;;
++		ifr->ifr_data = (char*)&edata;;
+ 		err = ioctl(fd, SIOCETHTOOL, ifr);
+ 		if (err < 0)
+ 			perror("Cannot set new msglvl");
+@@ -1821,7 +1821,7 @@
+ 	struct ethtool_regs *regs;
+ 
+ 	drvinfo.cmd = ETHTOOL_GDRVINFO;
+-	ifr->ifr_data = (caddr_t)&drvinfo;
++	ifr->ifr_data = (char*)&drvinfo;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0) {
+ 		perror("Cannot get driver information");
+@@ -1835,7 +1835,7 @@
+ 	}
+ 	regs->cmd = ETHTOOL_GREGS;
+ 	regs->len = drvinfo.regdump_len;
+-	ifr->ifr_data = (caddr_t)regs;
++	ifr->ifr_data = (char*)regs;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0) {
+ 		perror("Cannot get register dump");
+@@ -1858,7 +1858,7 @@
+ 	int err;
+ 
+ 	edata.cmd = ETHTOOL_NWAY_RST;
+-	ifr->ifr_data = (caddr_t)&edata;
++	ifr->ifr_data = (char*)&edata;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0)
+ 		perror("Cannot restart autonegotiation");
+@@ -1873,7 +1873,7 @@
+ 	struct ethtool_eeprom *eeprom;
+ 
+ 	drvinfo.cmd = ETHTOOL_GDRVINFO;
+-	ifr->ifr_data = (caddr_t)&drvinfo;
++	ifr->ifr_data = (char*)&drvinfo;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0) {
+ 		perror("Cannot get driver information");
+@@ -1894,7 +1894,7 @@
+ 	eeprom->cmd = ETHTOOL_GEEPROM;
+ 	eeprom->len = geeprom_length;
+ 	eeprom->offset = geeprom_offset;
+-	ifr->ifr_data = (caddr_t)eeprom;
++	ifr->ifr_data = (char*)eeprom;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0) {
+ 		perror("Cannot get EEPROM data");
+@@ -1920,7 +1920,7 @@
+ 	edata.eeprom.offset = seeprom_offset;
+ 	edata.eeprom.magic = seeprom_magic;
+ 	edata.data = seeprom_value;
+-	ifr->ifr_data = (caddr_t)&edata.eeprom;
++	ifr->ifr_data = (char*)&edata.eeprom;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0) {
+ 		perror("Cannot set EEPROM data");
+@@ -1938,7 +1938,7 @@
+ 	struct ethtool_gstrings *strings;
+ 
+ 	drvinfo.cmd = ETHTOOL_GDRVINFO;
+-	ifr->ifr_data = (caddr_t)&drvinfo;
++	ifr->ifr_data = (char*)&drvinfo;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0) {
+ 		perror("Cannot get driver information");
+@@ -1957,7 +1957,7 @@
+ 		test->flags = ETH_TEST_FL_OFFLINE;
+ 	else
+ 		test->flags = 0;
+-	ifr->ifr_data = (caddr_t)test;
++	ifr->ifr_data = (char*)test;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0) {
+ 		perror("Cannot test");
+@@ -1976,7 +1976,7 @@
+ 	strings->cmd = ETHTOOL_GSTRINGS;
+ 	strings->string_set = ETH_SS_TEST;
+ 	strings->len = drvinfo.testinfo_len;
+-	ifr->ifr_data = (caddr_t)strings;
++	ifr->ifr_data = (char*)strings;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0) {
+ 		perror("Cannot get strings");
+@@ -1998,7 +1998,7 @@
+ 
+ 	edata.cmd = ETHTOOL_PHYS_ID;
+ 	edata.data = phys_id_time;
+-	ifr->ifr_data = (caddr_t)&edata;
++	ifr->ifr_data = (char*)&edata;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0)
+ 		perror("Cannot identify NIC");
+@@ -2015,7 +2015,7 @@
+ 	int err;
+ 
+ 	drvinfo.cmd = ETHTOOL_GDRVINFO;
+-	ifr->ifr_data = (caddr_t)&drvinfo;
++	ifr->ifr_data = (char*)&drvinfo;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0) {
+ 		perror("Cannot get driver information");
+@@ -2041,7 +2041,7 @@
+ 	strings->cmd = ETHTOOL_GSTRINGS;
+ 	strings->string_set = ETH_SS_STATS;
+ 	strings->len = n_stats;
+-	ifr->ifr_data = (caddr_t) strings;
++	ifr->ifr_data = (char*) strings;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0) {
+ 		perror("Cannot get stats strings information");
+@@ -2052,7 +2052,7 @@
+ 
+ 	stats->cmd = ETHTOOL_GSTATS;
+ 	stats->n_stats = n_stats;
+-	ifr->ifr_data = (caddr_t) stats;
++	ifr->ifr_data = (char*) stats;
+ 	err = ioctl(fd, SIOCETHTOOL, ifr);
+ 	if (err < 0) {
+ 		perror("Cannot get stats information");

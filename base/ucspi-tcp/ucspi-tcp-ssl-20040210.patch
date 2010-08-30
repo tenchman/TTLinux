@@ -1,0 +1,743 @@
+--- ucspi-tcp-0.88/MatrixSSL.h.20040210	2004-02-11 20:09:28.000000000 +0100
++++ ucspi-tcp-0.88/MatrixSSL.h	2004-02-11 20:09:28.000000000 +0100
+@@ -0,0 +1,18 @@
++#ifndef __MATRIX_SSL_H
++#define __MATRIX_SSL_H
++
++#include <matrixSsl.h>
++
++typedef struct __SSL {
++  int	    fdr, fdw;
++  ssl_t	    *ssl;
++  sslKeys_t *keys;
++  sslBuf_t  insock, outsock, inbuf;
++  int	    outBufferCount;
++  int	    partial;
++} SSL;
++
++SSL * SSL_new(sslKeys_t *keys);
++int SSL_read(SSL *ssl, char *b, int len);
++int SSL_write(SSL *ssl, char *buf, int len);
++#endif
+--- ucspi-tcp-0.88/MatrixSSL.c.20040210	2004-02-11 20:09:28.000000000 +0100
++++ ucspi-tcp-0.88/MatrixSSL.c	2004-02-11 20:10:14.000000000 +0100
+@@ -0,0 +1,358 @@
++#include <unistd.h>
++#include <fcntl.h>
++#include "MatrixSSL.h"
++
++static void setSocketBlock(int fd)
++{
++         fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
++         fcntl(fd, F_SETFD, FD_CLOEXEC);
++}
++ 
++static void setSocketNonblock(int fd)
++{
++         fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
++}
++
++SSL * SSL_new(sslKeys_t *keys)
++{
++  SSL * ssl;
++  ssl = (SSL *)malloc(sizeof(SSL));
++  
++  if (!ssl) return 0;
++ 
++  ssl->keys = keys;
++  ssl->ssl = matrixSslNewSession(ssl->keys, SSL_FLAGS_SERVER);
++  
++  ssl->insock.size = 1024;
++  ssl->insock.buf = ssl->insock.start = ssl->insock.end =
++    (unsigned char *)malloc(ssl->insock.size);
++  
++  ssl->outsock.size = 1024;
++  ssl->outsock.buf = ssl->outsock.start = ssl->outsock.end = 
++    (unsigned char *)malloc(ssl->outsock.size);
++  
++  ssl->inbuf.size = 0;
++  ssl->inbuf.buf = ssl->inbuf.start = ssl->inbuf.end = NULL;
++
++  return ssl;
++}
++
++/*
++  Encode caller's data buffer into an SSL record and write to socket.
++  The encoded data will always be bigger than the incoming data because
++  of the record header (5 bytes) and MAC (16 bytes MD5 / 20 bytes SHA1)
++  This would be fine if we were using blocking sockets, but non-blocking
++  presents an interesting problem.  Example:
++	A 100 byte input record is encoded to a 125 byte SSL record
++	We can send 124 bytes without blocking, leaving one buffered byte
++	We can't return 124 to the caller because it's more than they requested
++	We can't return 100 to the caller because they would assume all data
++	has been written, and we wouldn't get re-called to send the last byte
++  We handle the above case by returning 0 to the caller if the entire
++  encoded record could not be sent.  Returning 0 will prompt AppWeb to
++  select this socket for write events, and we'll be called again when the
++  socket is writable.  We'll use this mechanism to flush the remaining 
++  encoded data, ignoring the bytes sent in, as they have already been
++  encoded.  When it is completely flushed, we return the originally 
++  requested length, and resume normal processing.
++*/
++int	SSL_write(SSL *ssl, char *buf, int len)
++{
++	int	  rc;
++	sslBuf_t  outsock, insock, inbuf;
++
++	outsock = ssl->outsock;
++	insock  = ssl->insock;
++	inbuf	= ssl->inbuf;
++/*
++	Pack the buffered socket data (if any) so that start is at zero.
++*/
++	if (outsock.buf < outsock.start) {
++		if (outsock.start == outsock.end) {
++			outsock.start = outsock.end = outsock.buf;
++		} else {
++			memmove(outsock.buf, outsock.start, outsock.end - outsock.start);
++			outsock.end -= (outsock.start - outsock.buf);
++			outsock.start = outsock.buf;
++		}
++	}
++/*
++	If there is buffered output data, the caller must be trying to
++	send the same amount of data as last time.  We don't support 
++	sending additional data until the original buffered request has
++	been completely sent.
++*/
++	if (ssl->outBufferCount > 0 && len != ssl->outBufferCount) {
++		return -1;
++	}
++/*
++	If we don't have buffered data, encode the caller's data
++*/
++	if (ssl->outBufferCount == 0) {
++retryEncode:
++		rc = matrixSslEncode(ssl->ssl, (unsigned char *)buf, len, &outsock);
++		switch (rc) {
++		case SSL_ERROR:
++			return -1;
++		case SSL_FULL:
++			if (outsock.size > SSL_MAX_RECORD_SIZE) {
++				return -1;
++			}
++			outsock.size *= 2;
++			outsock.buf = 
++				(unsigned char *)realloc(outsock.buf, outsock.size);
++			outsock.end = outsock.buf + (outsock.end - outsock.start);
++			outsock.start = outsock.buf;
++			goto retryEncode;
++		}
++	}
++/*
++	We've got data to send.  Try to write it all out.
++*/
++	rc = write(ssl->fdw, (char *)outsock.start, outsock.end - outsock.start);
++	if (rc <= 0) {
++		return rc;
++	}
++	outsock.start += rc;
++/*
++	If we wrote it all return the length, otherwise remember the number of
++	bytes passed in, and return 0 to be called again later.
++*/
++	if (outsock.start == outsock.end) {
++		ssl->outBufferCount = 0;
++		return len;
++	}
++	ssl->outBufferCount = len;
++	return 0;
++}
++
++////////////////////////////////////////////////////////////////////////////////
++//
++//	Read and decode SSL record data.
++//	The various return codes of matrixSslDecode() are relatively simple to
++//	handle on their own, but this code is complicated by the use of:
++//		non-blocking sockets
++//		fixed caller buffer size
++//		use of caller's buffer as direct output unless a larger buffer is reqd.
++//		record oriented protocol of SSL being accessed in a streamlike fashion
++//		use of buffers that can grow to fit larger records.
++//
++//	Here's a scenario that illustrates some of the difficulties handled:
++//	1	Caller passes in a buffer of length 1024 bytes
++//	2	Insock buffer is also 1024 bytes initially
++//	3	Socket read returns 1024 bytes, filling entire insock buffer
++//	4	Decode returns SSL_PARTIAL - the record is bigger than 1K.
++//	5	insock is doubled to 2K, socket is read again.
++//	6	Another 1024K is read from the socket (2K total in insock)
++//	7	Decode returns SSL_FULL - the caller's buffer is too small for record
++//	8	Allocate inbuf to twice the length of caller's buffer, decode again.
++//	9	Decode returns SSL_PROCESS_DATA
++//	10	Length of decoded data (in inbuf) is 1.5K
++//	11	Copy 1K of data to caller's buffer
++//	12	Return 1K as length read
++//
++//	This scenario has a few side effects.  The insock buffer still contains
++//	512 bytes of encrypted data, inbuf still contains 512 bytes of decrypted
++//	data.  So we have two layers of buffering.  To complicate matters, if 
++//	there is no more data in the socket itself, we will not get select
++//	read events to prompt AppWeb to call read again to get our buffered data.
++//
++//	Two ways to handle this are to have a isBufferedData() method called
++//	by the select layer to determine that there is more data available.
++//	AppWeb does not currently support this method.
++//
++//	The other option for AppWeb is to continue calling read() until
++//	0 bytes are returned, or an error (< 0) is returned.  We rely on this
++//	method to flush both of the incoming buffers.
++//
++int	SSL_read(SSL *ssl, char *b, int len)
++{
++	int		bytes, rc;
++	unsigned char	*buf, error, alertLevel, alertDescription;
++	sslBuf_t  outsock, insock, inbuf;
++
++	if (ssl == NULL) {
++		return -1;
++	}
++	ssl->partial = 0;
++	
++	outsock = ssl->outsock;
++	insock  = ssl->insock;
++	inbuf	= ssl->inbuf;
++
++	buf = (unsigned char *)b;
++/*
++	If inbuf is valid, then we have previously decoded data that must be
++	returned, return as much as possible.  Once all buffered data is
++	returned, free the inbuf.
++*/
++	if (inbuf.buf) {
++		if (inbuf.start < inbuf.end) {
++			bytes = (len < inbuf.end - inbuf.start)?len:inbuf.end - inbuf.start;
++			memcpy(buf, inbuf.start, bytes);
++			inbuf.start += bytes;
++			return len;
++		}
++		free(inbuf.buf);
++		inbuf.buf = NULL;
++	}
++/*
++	Pack the buffered socket data (if any) so that start is at zero.
++*/
++	if (insock.buf < insock.start) {
++		if (insock.start == insock.end) {
++			insock.start = insock.end = insock.buf;
++		} else {
++			memmove(insock.buf, insock.start, insock.end - insock.start);
++			insock.end -= (insock.start - insock.buf);
++			insock.start = insock.buf;
++		}
++	}
++/*
++	Read up to as many bytes as there are remaining in the buffer.  We could
++	Have encrypted data already cached in insock, but might as well read more
++	if we can.
++*/
++	if (insock.end - insock.start < insock.size) {
++		bytes = read(ssl->fdr, (char *)insock.end, 
++			(insock.buf + insock.size) - insock.end);
++		if (bytes <= 0) {
++			return bytes;
++		}
++		insock.end += bytes;
++	}
++/*
++	Define a temporary sslBuf to point into the user's passed in buffer
++	This means we decode the record directly into the callers buffer
++	If the caller's buffer isn't big enough, we end up using a temp buffer.
++	This causes some complications with freeing memory properly on return,
++	but gives a performance boost in the most common case.
++*/
++	inbuf.start = inbuf.end = inbuf.buf = (unsigned char *)buf;
++	inbuf.size = len;
++/*
++	Decode the data we just read from the socket
++*/
++decodeMore:
++	rc = matrixSslDecode(ssl->ssl, &insock, &inbuf, &error, &alertLevel, 
++		&alertDescription);
++	switch (rc) {
++/*
++	Successfully decoded an application data record, and placed in tmp buf
++*/
++	case SSL_PROCESS_DATA:
++/*
++		If the tmp buf is still the caller's buffer, then all the data fit in
++		the caller's buffer and we didn't have to write any of the decoded 
++		data in inbuf.
++*/
++		if (inbuf.buf == buf) {
++			inbuf.buf = NULL;
++			return inbuf.end - inbuf.start;
++		}
++/*
++		Copy as much as we can from the temp buffer into the caller's buffer
++		and leave the remainder in inbuf until the next call to read
++*/
++		// mprAssert(len < inbuf.end - inbuf.start);
++		memcpy(buf, inbuf.start, len);
++		inbuf.start += len;
++		return len;
++/*
++	We've decoded a record that requires a response into tmp
++	If there is no data to be flushed in the out buffer, we can write out
++	the contents of the tmp buffer.  Otherwise, we need to append the data 
++	to the outgoing data buffer and flush it out.
++*/
++	case SSL_SEND_RESPONSE:
++		bytes = write(ssl->fdw, (char *)inbuf.start, 
++			inbuf.end - inbuf.start);
++		inbuf.start += bytes;
++		if (inbuf.start < inbuf.end) {
++			setSocketBlock(ssl->fdw);
++			while (inbuf.start < inbuf.end) {
++				bytes = write(ssl->fdw, (char *)inbuf.start, 
++					inbuf.end - inbuf.start);
++				if (bytes < 0) {
++					goto readError;
++				}
++				inbuf.start += bytes;
++			}
++			setSocketNonblock(ssl->fdw);
++		}
++		inbuf.start = inbuf.end = inbuf.buf;
++		goto decodeMore;
++/*
++	There was an error decoding the data, or encoding the out buffer.
++	There may be a response data in the out buffer, so try to send.
++	We try a single hail-mary send of the data, and then close the socket.
++	Since we're closing on error, we don't worry too much about a clean flush.
++*/
++	case SSL_ERROR:
++		// mprLog(4, "SSL: Closing on protocol error %d\n", error);
++		if (inbuf.start < inbuf.end) {
++			bytes = write(ssl->fdw, (char *)inbuf.start, 
++				inbuf.end - inbuf.start);
++		}
++		goto readError;
++/*
++	We've decoded an alert.  The level and description passed into
++	matrixSslDecode are filled in with the specifics.
++*/
++	case SSL_ALERT:
++		if (alertDescription == SSL_ALERT_CLOSE_NOTIFY) {
++			goto readZero;
++		}
++		// mprLog(4, "SSL: Closing on client alert %d: %d\n",
++		//	alertLevel, alertDescription);
++		goto readError;
++/*
++	We have a partial record, we need to read more data off the socket.
++	If we have a completely full insock buffer, we'll need to grow it
++	here so that we CAN read more data when called the next time.
++*/
++	case SSL_PARTIAL:
++		if (insock.start == insock.buf && insock.end == 
++				(insock.buf + insock.size)) {
++			if (insock.size > SSL_MAX_RECORD_SIZE) {
++				goto readError;
++			}
++			insock.size *= 2;
++			insock.start = insock.buf = 
++				(unsigned char *)realloc(insock.buf, insock.size);
++			insock.end = insock.buf + (insock.size / 2);
++		}
++		ssl->partial = 1;
++		goto readZero;
++/*
++	The out buffer is too small to fit the decoded or response
++	data.  Increase the size of the buffer and call decode again
++*/
++	case SSL_FULL:
++		// mprAssert(inbuf.start == inbuf.end);
++		inbuf.size *= 2;
++		if (inbuf.buf != buf) {
++			free(inbuf.buf);
++		}
++		inbuf.start = inbuf.end = inbuf.buf = 
++			(unsigned char *)malloc(inbuf.size);
++		goto decodeMore;
++	}
++/*
++	We consolidated some of the returns here because we must ensure
++	that inbuf is cleared if pointing at caller's buffer, otherwise
++	it will be freed later on.
++*/
++readZero:
++	if (inbuf.buf == buf) {
++		inbuf.buf = NULL;
++	}
++	return 0;
++readError:
++	// flags |= MPR_SOCKET_EOF;
++	if (inbuf.buf == buf) {
++		inbuf.buf = NULL;
++	}
++	return -1;
++}
++
+--- ucspi-tcp-0.88/Makefile.20040210	2000-03-18 16:18:42.000000000 +0100
++++ ucspi-tcp-0.88/Makefile	2004-02-11 20:09:28.000000000 +0100
+@@ -1,5 +1,14 @@
+ # Don't edit Makefile! Use conf-* for configuration.
+ 
++DEFINES=-DWITH_SSL -DMATRIX_SSL
++MATRIXSSL=MatrixSSL.o
++#add -DWITH_SSL to enable ssl support
++
++# LIBS for additional libraries and INCS for additional includes
++LIBS=-lmatrixssl
++#INCS=-I/usr/local/include
++OPENSSLBIN=openssl
++
+ SHELL=/bin/sh
+ 
+ default: it
+@@ -151,6 +160,10 @@
+ 	> choose
+ 	chmod 755 choose
+ 
++clean: \
++TARGETS
++	rm -f `cat TARGETS`
++
+ commands.o: \
+ compile commands.c buffer.h stralloc.h gen_alloc.h str.h case.h \
+ commands.h
+@@ -741,11 +754,15 @@
+ stralloc.h gen_alloc.h
+ 	./compile tcprulescheck.c
+ 
++MatrixSSL.o: \
++compile MatrixSSL.c MatrixSSL.h
++	./compile MatrixSSL.c
++
+ tcpserver: \
+-load tcpserver.o rules.o remoteinfo.o timeoutconn.o cdb.a dns.a \
++load tcpserver.o rules.o remoteinfo.o timeoutconn.o $(MATRIXSSL) cdb.a dns.a \
+ time.a unix.a byte.a socket.lib
+-	./load tcpserver rules.o remoteinfo.o timeoutconn.o cdb.a \
+-	dns.a time.a unix.a byte.a  `cat socket.lib`
++	./load tcpserver rules.o remoteinfo.o timeoutconn.o $(MATRIXSSL) cdb.a \
++	dns.a time.a unix.a byte.a  $(LIBS) `cat socket.lib`
+ 
+ tcpserver.o: \
+ compile tcpserver.c uint16.h str.h byte.h fmt.h scan.h ip4.h fd.h \
+@@ -753,8 +770,8 @@
+ alloc.h buffer.h error.h strerr.h sgetopt.h subgetopt.h pathexec.h \
+ socket.h uint16.h ndelay.h remoteinfo.h stralloc.h uint16.h rules.h \
+ stralloc.h sig.h dns.h stralloc.h iopause.h taia.h tai.h uint64.h \
+-taia.h
+-	./compile tcpserver.c
++taia.h MatrixSSL.h
++	./compile $(DEFINES) $(INCS) tcpserver.c
+ 
+ time.a: \
+ makelib iopause.o tai_pack.o taia_add.o taia_approx.o taia_frac.o \
+@@ -835,3 +852,18 @@
+ 	| sed s}HOME}"`head -1 conf-home`"}g \
+ 	> who@
+ 	chmod 755 who@
++
++cert:
++	${OPENSSLBIN} req -new -x509 -nodes \
++	-out cert.pem -days 366 \
++	-keyout cert.pem
++
++cert-req:
++	${OPENSSLBIN} req -new -nodes \
++	-out req.pem \
++	-keyout cert.pem
++	@echo
++	@echo "Send req.pem to your CA to obtain signed_req.pem, and do:"
++	@echo "cat signed_req.pem >> `head -1 conf-qmail`/control/cert.pem"
++
++
+--- ucspi-tcp-0.88/tcpserver.c.20040210	2000-03-18 16:18:42.000000000 +0100
++++ ucspi-tcp-0.88/tcpserver.c	2004-02-11 20:09:28.000000000 +0100
+@@ -1,6 +1,11 @@
+ #include <sys/types.h>
+ #include <sys/param.h>
+ #include <netdb.h>
++#ifdef MATRIX_SSL
++#include "MatrixSSL.h"
++#else
++#include <openssl/ssl.h>
++#endif
+ #include "uint16.h"
+ #include "str.h"
+ #include "byte.h"
+@@ -36,6 +41,12 @@
+ int flagremotehost = 1;
+ int flagparanoid = 0;
+ unsigned long timeout = 26;
++#ifdef WITH_SSL
++int flagssl = 0;
++struct stralloc certfile = {0};
++#define CERTFILE "./cert.pem"
++void translate(SSL*, int, int, unsigned int);
++#endif
+ 
+ static stralloc tcpremoteinfo;
+ 
+@@ -238,6 +249,7 @@
+ 
+ void usage(void)
+ {
++#ifndef WITH_SSL
+   strerr_warn1("\
+ tcpserver: usage: tcpserver \
+ [ -1UXpPhHrRoOdDqQv ] \
+@@ -250,6 +262,21 @@
+ [ -l localname ] \
+ [ -t timeout ] \
+ host port program",0);
++#else
++  strerr_warn1("\
++tcpserver: usage: tcpserver \
++[ -1UXpPhHrRoOdDqQsSv ] \
++[ -c limit ] \
++[ -x rules.cdb ] \
++[ -B banner ] \
++[ -g gid ] \
++[ -u uid ] \
++[ -b backlog ] \
++[ -l localname ] \
++[ -t timeout ] \
++[ -n certfile ] \
++host port program",0);
++#endif
+   _exit(100);
+ }
+ 
+@@ -299,8 +326,23 @@
+   unsigned long u;
+   int s;
+   int t;
++#ifdef WITH_SSL
++  int pi2c[2], pi4c[2];
++  SSL *ssl;
++# ifdef MATRIX_SSL
++  sslKeys_t *keys;
++# else
++  BIO *sbio;
++  SSL_CTX *ctx;
+  
++  ctx = NULL;
++# endif
++  if (!stralloc_copys(&certfile, CERTFILE) || !stralloc_0(&certfile) )
++    strerr_die2x(111,FATAL,"out of memory");
++  while ((opt = getopt(argc,argv,"dDvqQhHrRsS1UXx:t:u:g:l:b:B:c:n:pPoO")) != opteof)
++#else
+   while ((opt = getopt(argc,argv,"dDvqQhHrR1UXx:t:u:g:l:b:B:c:pPoO")) != opteof)
++#endif
+     switch(opt) {
+       case 'b': scan_ulong(optarg,&backlog); break;
+       case 'c': scan_ulong(optarg,&limit); break;
+@@ -327,6 +369,14 @@
+       case 'g': scan_ulong(optarg,&gid); break;
+       case '1': flag1 = 1; break;
+       case 'l': localhost = optarg; break;
++#ifdef WITH_SSL
++      case 's': flagssl = 1; break;
++      case 'S': flagssl = 0; break;
++      case 'n': if (!stralloc_copys(&certfile, optarg) ||
++		    !stralloc_0(&certfile) )
++		  strerr_die2x(111,FATAL,"out of memory");
++		break;
++#endif
+       default: usage();
+     }
+   argc -= optind;
+@@ -366,6 +416,27 @@
+     strerr_die3x(111,FATAL,"no IP address for ",hostname);
+   byte_copy(localip,4,addresses.s);
+ 
++#ifdef WITH_SSL
++  if (flagssl == 1) {
++#ifdef MATRIX_SSL
++    matrixSslOpen();
++    keys = matrixSslReadKeys(certfile.s, certfile.s, NULL);
++    if (keys == NULL)
++      strerr_die2x(111,FATAL,"unable to load certificate and/or RSA private key");
++#else
++    /* setup SSL context (load key and cert into ctx) */
++    SSL_library_init();
++    ctx=SSL_CTX_new(SSLv23_server_method());
++    if (!ctx) strerr_die2x(111,FATAL,"unable to create SSL context");
++
++    if(SSL_CTX_use_RSAPrivateKey_file(ctx, certfile.s, SSL_FILETYPE_PEM) != 1)
++      strerr_die2x(111,FATAL,"unable to load RSA private key");
++    if(SSL_CTX_use_certificate_file(ctx, certfile.s, SSL_FILETYPE_PEM) != 1)
++      strerr_die2x(111,FATAL,"unable to load certificate");
++#endif
++  }
++#endif
++  
+   s = socket_tcp();
+   if (s == -1)
+     strerr_die2sys(111,FATAL,"unable to create socket: ");
+@@ -415,6 +486,47 @@
+         sig_unblock(sig_child);
+         sig_uncatch(sig_term);
+         sig_uncatch(sig_pipe);
++#ifdef WITH_SSL
++	if (flagssl == 1) {
++	  if (pipe(pi2c) != 0)
++	    strerr_die2sys(111,DROP,"unable to create pipe: ");
++	  if (pipe(pi4c) != 0)
++	    strerr_die2sys(111,DROP,"unable to create pipe: ");
++	  switch(fork()) {
++	    case 0:
++	      close(0); close(1);
++	      close(pi2c[1]);
++	      close(pi4c[0]);
++	      if ((fd_move(0,pi2c[0]) == -1) || (fd_move(1,pi4c[1]) == -1))
++		strerr_die2sys(111,DROP,"unable to set up descriptors: ");
++	      /* signals are allready set in the parent */
++	      pathexec(argv);
++	      strerr_die4sys(111,DROP,"unable to run ",*argv,": ");
++	    case -1:
++	      strerr_die2sys(111,DROP,"unable to fork: ");
++	    default:
++#ifdef MATRIX_SSL
++	      ssl = SSL_new(keys);
++	      if (!ssl)
++		strerr_die2x(111,DROP,"unable to set up SSL session");
++#else
++	      ssl = SSL_new(ctx);
++	      if (!ssl)
++		strerr_die2x(111,DROP,"unable to set up SSL session");
++
++	      sbio = BIO_new_socket(0,BIO_NOCLOSE);
++	      if (!sbio)
++		strerr_die2x(111,DROP,"unable to set up BIO socket");
++	      SSL_set_bio(ssl,sbio,sbio);
++
++#endif
++	      close(pi2c[0]);
++	      close(pi4c[1]);
++	      translate(ssl, pi2c[1], pi4c[0], 3600);
++	      _exit(0);
++	  }
++	}
++#endif
+         pathexec(argv);
+ 	strerr_die4sys(111,DROP,"unable to run ",*argv,": ");
+       case -1:
+@@ -424,3 +536,111 @@
+     close(t);
+   }
+ }
++
++#ifdef WITH_SSL
++static int allwrite(int fd, char *buf, int len)
++{
++  int w;
++
++  while (len) {
++    w = write(fd,buf,len);
++    if (w == -1) {
++      if (errno == error_intr) continue;
++      return -1; /* note that some data may have been written */
++    }
++    if (w == 0) ; /* luser's fault */
++    buf += w;
++    len -= w;
++  }
++  return 0;
++}
++
++static int allwritessl(SSL* ssl, char *buf, int len)
++{
++  int w;
++
++  while (len) {
++    w = SSL_write(ssl,buf,len);
++    if (w == -1) {
++      if (errno == error_intr) continue;
++      return -1; /* note that some data may have been written */
++    }
++    if (w == 0) ; /* luser's fault */
++    buf += w;
++    len -= w;
++  }
++  return 0;
++}
++
++char tbuf[2048];
++
++void translate(SSL* ssl, int clearout, int clearin, unsigned int iotimeout)
++{
++  struct taia now;
++  struct taia deadline;
++  iopause_fd iop[2];
++  int flagexitasap;
++  int iopl;
++  int sslin;
++  int n, r;
++
++  flagexitasap = 0;
++#ifdef MATRIX_SSL
++  sslin = 0;
++#else
++  sslin = SSL_get_fd(ssl);
++  
++  if (sslin == -1)
++    strerr_die2x(111,DROP,"unable to set up SSL connection"); 
++
++  if (SSL_accept(ssl)<=0)
++    strerr_die2x(111,DROP,"unable to accept SSL connection");
++#endif
++
++  while (!flagexitasap) {
++    taia_now(&now);
++    taia_uint(&deadline,iotimeout);
++    taia_add(&deadline,&now,&deadline);
++
++    /* fill iopause struct */
++    iopl = 2;
++    iop[0].fd = sslin;
++    iop[0].events = IOPAUSE_READ;
++    iop[1].fd = clearin;
++    iop[1].events = IOPAUSE_READ;
++
++    /* do iopause read */
++    iopause(iop,iopl,&deadline,&now);
++    if (iop[0].revents) {
++      /* data on sslin */
++      n = SSL_read(ssl, tbuf, sizeof(tbuf));
++      if ( n < 0 )
++	strerr_die2sys(111,DROP,"unable to read form network: ");
++#ifdef MATRIX_SSL
++      if ( n == 0 && ssl->partial == 0)
++	flagexitasap = 1;
++#else
++      if ( n == 0 )
++	flagexitasap = 1;
++#endif
++      r = allwrite(clearout, tbuf, n);
++      if ( r < 0 )
++	strerr_die2sys(111,DROP,"unable to write to client: ");
++    }
++    if (iop[1].revents) {
++      /* data on clearin */
++      n = read(clearin, tbuf, sizeof(tbuf));
++      if ( n < 0 )
++	strerr_die2sys(111,DROP,"unable to read form client: ");
++      if ( n == 0 )
++	flagexitasap = 1;
++      r = allwritessl(ssl, tbuf, n);
++      if ( r < 0 )
++	strerr_die2sys(111,DROP,"unable to write to network: ");
++    }
++    if (!iop[0].revents && !iop[1].revents)
++      strerr_die2x(0, DROP,"timeout reached without input");
++  }
++}
++#endif
++

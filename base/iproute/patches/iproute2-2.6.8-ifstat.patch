@@ -1,0 +1,19 @@
+--- iproute2-2.6.8/misc/ifstat.c.ifstat	2004-08-23 23:02:40.521622536 +0200
++++ iproute2-2.6.8/misc/ifstat.c	2004-08-23 23:02:19.908756168 +0200
+@@ -548,7 +548,7 @@
+ 
+ static void usage(void)
+ {
+-	fprintf(stderr,
++	fprintf(stderr,"%s",
+ "Usage: ifstat [OPTION] [ PATTERN [ PATTERN ] ]\n"
+ "   -h, --help		this message\n"
+ "   -a, --ignore	ignore history\n"
+@@ -559,7 +559,6 @@
+ "   -s, --noupdate	don;t update history\n"
+ "   -t, --interval=SECS	report average over the last SECS\n"
+ "   -V, --version	output version information\n"
+-"   -z, --zeros		show entries with zero activity\n"
+ "   -e, --errors	show errors\n"
+ "   -z, --zeros		show entries with zero activity\n");
+ 

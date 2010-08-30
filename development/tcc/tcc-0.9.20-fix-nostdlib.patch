@@ -1,0 +1,32 @@
+diff -aur tcc-0.9.20/tcc.c tcc-0.9.20.new/tcc.c
+--- tcc-0.9.20/tcc.c	2004-08-04 21:59:37.297278184 +0200
++++ tcc-0.9.20.new/tcc.c	2004-08-04 21:40:44.701458920 +0200
+@@ -9223,11 +9223,6 @@
+     tcc_define_symbol(s, "__PTRDIFF_TYPE__", "int");
+     tcc_define_symbol(s, "__WCHAR_TYPE__", "int");
+     
+-    /* default library paths */
+-    tcc_add_library_path(s, "/usr/local/lib");
+-    tcc_add_library_path(s, "/usr/lib");
+-    tcc_add_library_path(s, "/lib");
+-
+     /* no section zero */
+     dynarray_add((void ***)&s->sections, &s->nb_sections, NULL);
+ 
+@@ -9515,7 +9510,15 @@
+         put_stabs("", 0, 0, 0, 0);
+     }
+ 
+-    /* add libc crt1/crti objects */
++    /* add default library paths */
++	if (!s->nostdlib)
++	{
++    	tcc_add_library_path(s, "/usr/local/lib");
++    	tcc_add_library_path(s, "/usr/lib");
++    	tcc_add_library_path(s, "/lib");
++	}
++    
++	/* add libc crt1/crti objects */
+     if ((output_type == TCC_OUTPUT_EXE || output_type == TCC_OUTPUT_DLL) &&
+         !s->nostdlib) {
+         if (output_type != TCC_OUTPUT_DLL)

@@ -1,0 +1,15 @@
+workaround for broken strncpy if dietlibc is compiled with
+WANT_FULL_POSIX_COMPAT
+
+diff -up net-snmp-5.4.1/snmplib/snmp_logging.c.logging net-snmp-5.4.1/snmplib/snmp_logging.c
+--- net-snmp-5.4.1/snmplib/snmp_logging.c.logging	2009-03-25 18:00:04.000000000 +0100
++++ net-snmp-5.4.1/snmplib/snmp_logging.c	2009-03-25 18:01:18.000000000 +0100
+@@ -438,7 +438,7 @@ char *
+ snmp_log_syslogname(const char *pstr)
+ {
+   if (pstr)
+-    strncpy (syslogname, pstr, sizeof(syslogname));
++    memcpy (syslogname, pstr, sizeof(syslogname) - 1);
+ 
+   return syslogname;
+ }

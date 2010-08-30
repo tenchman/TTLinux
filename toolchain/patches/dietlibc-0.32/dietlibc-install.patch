@@ -1,0 +1,11 @@
+--- dietlibc-0.32/Makefile.install	2009-06-10 21:21:10.000000000 +0200
++++ dietlibc-0.32/Makefile	2009-06-10 21:25:05.000000000 +0200
+@@ -385,6 +385,8 @@ install-pic:
+ 
+ install-headers:
+ 	for i in `find include -name \*.h`; do install -m 644 -D $$i $(DESTDIR)$(prefix)/$$i; done
++	for i in */syscalls.h; \
++	  do install -m 644 $$i $(DESTDIR)$(prefix)/include/asm/`dirname $$i`-syscalls.h; done
+ 
+ 
+ install: install-bin install-profiling install-pic install-headers

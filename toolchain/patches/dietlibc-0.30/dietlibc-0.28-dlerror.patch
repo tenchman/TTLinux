@@ -1,0 +1,19 @@
+--- dietlibc-0.28/libdl/_dl_open.c.dlerror	2005-10-12 09:39:02.000000000 +0200
++++ dietlibc-0.28/libdl/_dl_open.c	2005-10-12 09:39:18.000000000 +0200
+@@ -6,6 +6,7 @@
+ #endif
+ 
+ #include "_dl_int.h"
++extern char*strdup(const char*s);
+ 
+ #ifdef __DIET_LD_SO__
+ static
+@@ -27,7 +28,7 @@
+     fd=_dl_search(buf,sizeof(buf)-1,filename);
+   }
+   if (fd==-1) {
+-    _dl_error_data=filename;
++    _dl_error_data=strdup(filename);
+     _dl_error=1;
+     return 0;
+   }

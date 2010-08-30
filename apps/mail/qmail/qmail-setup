@@ -1,0 +1,115 @@
+#!/bin/sh
+
+base="/var/qmail"
+
+rm -rf /var/qmail/alias
+
+d() {
+  [ -d $1 ] || mkdir -p $1
+  chown $3 $1
+  chgrp $4 $1
+  chmod $2 $1
+}
+
+sd() {
+  x=0
+  while [ $x -lt 23 ]; do
+    [ -d $1/$x ] || mkdir -p $1/$x
+    chown $3 $1/$x
+    chgrp $4 $1/$x
+    chmod $2 $1/$x
+    x=$(($x + 1))
+  done
+}
+
+checkuid() {
+  file=$base/owners/uid$1
+  if ! [ -e $file ]; then
+    touch $file
+  fi
+  chown $2 $file
+}
+
+checkgid() {
+  file=$base/owners/gid$1
+  if ! [ -e $file ]; then
+    touch $file
+  fi
+  chgrp $2 $file
+}
+
+d $base		      0755 root   qmail
+d $base/users	      0755 root   qmail
+d $base/queue	      0750 qmailq qmail
+d $base/queue/bounce  0700 qmails qmail
+d $base/queue/info    0700 qmails qmail
+sd $base/queue/info   0700 qmails qmail
+d $base/queue/intd    0700 qmailq qmail
+d $base/queue/local   0700 qmails qmail
+sd $base/queue/local  0700 qmails qmail
+d $base/queue/lock    0750 qmailq qmail
+d $base/queue/mess    0750 qmailq qmail
+sd $base/queue/mess   0750 qmailq qmail
+d $base/queue/pid     0700 qmailq qmail
+d $base/queue/remote  0700 qmails qmail
+sd $base/queue/remote 0700 qmails qmail
+d $base/queue/todo    0750 qmailq qmail
+d $base/control       0755 root qmail
+d $base/owners        0755 root qmail
+
+ln -sf /usr/bin/ $base
+if [ -d /etc/qmail/alias ]; then
+  ln -sf /etc/qmail/alias $base
+else
+  d $base/alias        02755 alias  qmail
+fi
+
+checkuid a alias
+checkuid d qmaild
+checkuid l qmaill
+checkuid o root
+checkuid p qmailp
+checkuid q qmailq
+checkuid r qmailr
+checkuid s qmails
+checkgid q qmail
+checkgid n nofiles
+
+echo `hostname` > $base/control/me
+echo `hostname` > $base/control/rcpthosts
+
+touch /var/qmail/queue/lock/sendmutex
+chmod 600 /var/qmail/queue/lock/sendmutex
+chown qmails.qmail /var/qmail/queue/lock/sendmutex
+
+[ -p /var/qmail/queue/lock/trigger ] || {
+  mkfifo -m 622 /var/qmail/queue/lock/trigger
+}
+chown qmails.qmail /var/qmail/queue/lock/trigger
+chmod 622 /var/qmail/queue/lock/trigger
+
+[ -f /var/qmail/queue/lock/tcpto ] || {
+  dd if=/dev/zero of=/var/qmail/queue/lock/tcpto bs=1024 count=1
+}
+chmod 644 /var/qmail/queue/lock/tcpto
+chown qmailr.qmail /var/qmail/queue/lock/tcpto
+
+cd /usr/bin
+chgrp qmail qmail*
+chown qmailq.qmail qmail-queue
+chmod 4711 qmail-queue
+
+[ -x /bin/checkpassword ] && echo /bin/checkpassword > $base/control/chkpass
+[ -x /bin/cmd5checkpw ]   && echo /bin/cmd5checkpw > $base/control/chkpass
+
+chmod 644 $base/control/chkpass
+[ -f $base/control/servercert.pem ] && {
+  cd $base/control/
+  [ -f clientcert.pem ] || ln -sf servercert.pem clientcert.pem
+  chown qmaild.qmail *.pem
+  chmod 640 *.pem
+}
+
+[ ! -e /usr/sbin/sendmail -a -x /usr/bin/qmail-inject ] && {
+  ln -snf /usr/bin/qmail-inject /usr/sbin/sendmail
+}

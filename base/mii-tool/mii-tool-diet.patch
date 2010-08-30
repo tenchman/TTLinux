@@ -1,0 +1,67 @@
+--- mii-tool/Makefile.diet	2000-04-26 00:06:52.000000000 +0200
++++ mii-tool/Makefile	2004-09-28 12:06:32.158921392 +0200
+@@ -1,8 +1,12 @@
++CC=
++
+ all: mii-tool
+ 
+ mii-tool: mii-tool.c mii.h
+-	cc -Wall -o mii-tool mii-tool.c
++	$(CC) -D__KERNEL_STRICT_NAMES -Wall -o mii-tool mii-tool.c
+ 
+ install:
+-	cp mii-tool.8 /usr/man/man8
+-	cp mii-tool /sbin
++	install -d $(DESTDIR)/usr/share/man/man8
++	install -d $(DESTDIR)/sbin
++	install -m 644 mii-tool.8 $(DESTDIR)/usr/share/man/man8
++	install -m 755 mii-tool $(DESTDIR)/sbin
+--- mii-tool/mii-tool.c.diet	2000-08-10 03:04:11.000000000 +0200
++++ mii-tool/mii-tool.c	2004-09-28 11:33:18.430014256 +0200
+@@ -56,7 +56,7 @@
+ 
+ /* Table of known MII's */
+ static struct {
+-    u_short	id1, id2;
++    unsigned short	id1, id2;
+     char	*name;
+ } mii_id[] = {
+     { 0x0022, 0x5610, "AdHoc AH101LF" },
+@@ -140,7 +140,7 @@
+ 
+ const struct {
+     char	*name;
+-    u_short	value;
++    unsigned short	value;
+ } media[] = {
+     /* The order through 100baseT4 matches bits in the BMSR */
+     { "10baseT-HD",	MII_AN_10BASET_HD },
+@@ -382,17 +382,17 @@
+ /*--------------------------------------------------------------------*/
+ 
+ const char *usage =
+-"usage: %s [-VvRrwl] [-A media,... | -F media] [interface ...]
+-       -V, --version               display version information
+-       -v, --verbose               more verbose output
+-       -R, --reset                 reset MII to poweron state
+-       -r, --restart               restart autonegotiation
+-       -w, --watch                 monitor for link status changes
+-       -l, --log                   with -w, write events to syslog
+-       -A, --advertise=media,...   advertise only specified media
+-       -F, --force=media           force specified media technology
+-media: 100baseT4, 100baseTx-FD, 100baseTx-HD, 10baseT-FD, 10baseT-HD,
+-       (to advertise both HD and FD) 100baseTx, 10baseT\n";
++"usage: %s [-VvRrwl] [-A media,... | -F media] [interface ...]\n"
++"       -V, --version               display version information\n"
++"       -v, --verbose               more verbose output\n"
++"       -R, --reset                 reset MII to poweron state\n"
++"       -r, --restart               restart autonegotiation\n"
++"       -w, --watch                 monitor for link status changes\n"
++"       -l, --log                   with -w, write events to syslog\n"
++"       -A, --advertise=media,...   advertise only specified media\n"
++"       -F, --force=media           force specified media technology\n"
++"media: 100baseT4, 100baseTx-FD, 100baseTx-HD, 10baseT-FD, 10baseT-HD,\n"
++"       (to advertise both HD and FD) 100baseTx, 10baseT\n";
+ 
+ int main(int argc, char **argv)
+ {

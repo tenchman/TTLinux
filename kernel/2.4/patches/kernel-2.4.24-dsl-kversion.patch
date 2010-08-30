@@ -1,0 +1,11 @@
+--- linux/fritz-dsl/src.drv/defs.h.kversion	Wed Jan  7 10:05:08 2004
++++ linux/fritz-dsl/src.drv/defs.h	Wed Jan  7 10:04:51 2004
+@@ -81,7 +81,7 @@
+ # define KFREE_SKB(x)	dev_kfree_skb_any(x)
+ #endif
+ 
+-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 5, 0)
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 4, 23)
+ typedef void irqreturn_t;
+ 
+ #define IRQ_NONE

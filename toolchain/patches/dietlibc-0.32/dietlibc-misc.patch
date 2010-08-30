@@ -1,0 +1,94 @@
+--- dietlibc-0.32/Makefile.misc	2008-05-09 22:27:39.000000000 +0200
++++ dietlibc-0.32/Makefile	2009-06-10 21:21:10.000000000 +0200
+@@ -90,11 +90,10 @@ HOME=$(shell pwd)
+ 
+ WHAT=	$(OBJDIR) $(OBJDIR)/start.o $(OBJDIR)/dyn_start.o $(OBJDIR)/dyn_stop.o \
+ 	$(OBJDIR)/dietlibc.a $(OBJDIR)/liblatin1.a \
+-	$(OBJDIR)/libcompat.a $(OBJDIR)/libm.a \
++	$(OBJDIR)/libcompat.a $(OBJDIR)/libm.a $(OBJDIR)/libdl.a \
+ 	$(OBJDIR)/librpc.a $(OBJDIR)/libpthread.a \
+ 	$(OBJDIR)/libcrypt.a \
+-	$(OBJDIR)/diet $(OBJDIR)/diet-i $(OBJDIR)/elftrunc \
+-	$(OBJDIR)/dnsd
++	$(OBJDIR)/diet $(OBJDIR)/diet-i
+ 
+ all: $(WHAT)
+ 
+@@ -141,6 +140,7 @@ CFLAGS = -g
+ COMMENT = :
+ endif
+ CFLAGS += -W -Wall -Wextra -Wchar-subscripts -Wmissing-prototypes -Wmissing-declarations -Wno-switch -Wno-unused -Wredundant-decls
++CFLAGS += $(MORE_CFLAGS) -D__linux__
+ 
+ PWD=$(shell pwd)
+ 
+@@ -272,6 +272,8 @@ DYN_LIBCOMPAT_OBJS = $(patsubst $(OBJDIR
+ 
+ DYN_LIBMATH_OBJS = $(patsubst $(OBJDIR)/%.o,$(PICODIR)/%.o,$(LIBMATHOBJ))
+ 
++DYN_LIBMATH_OBJS = $(patsubst $(OBJDIR)/%.o,$(PICODIR)/%.o,$(LIBMATHOBJ))
++
+ $(PICODIR)/libc.so: $(PICODIR) $(DYN_LIBC_OBJ)
+ 	$(LD_UNSET) $(CROSS)$(CC) -nostdlib -shared -o $@ $(CFLAGS) -fPIC $(DYN_LIBC_OBJ) -lgcc -Wl,-soname=libc.so
+ 
+@@ -291,6 +293,9 @@ $(PICODIR)/libcompat.so: $(DYN_LIBCOMPAT
+ $(PICODIR)/libm.so: $(DYN_LIBMATH_OBJS) dietfeatures.h
+ 	$(LD_UNSET) $(CROSS)$(CC) -nostdlib -shared -o $@ $(CFLAGS) -fPIC $(DYN_LIBMATH_OBJS) -L$(PICODIR) -lc -Wl,-soname=libm.so
+ 
++#$(PICODIR)/libm.so: $(DYN_LIBMATH_OBJS) dietfeatures.h
++#	$(CROSS)$(CC) -nostdlib -shared -o $@ $(CFLAGS) -fPIC $(DYN_LIBMATH_OBJS) -L$(PICODIR) -lc -Wl,-soname=libm.so
++#
+ 
+ $(SYSCALLOBJ): syscalls.h
+ 
+@@ -352,17 +357,16 @@ t:
+ t1:
+ 	$(CROSS)$(CC) -g -o t1 t.c
+ 
+-install-bin: $(OBJDIR)/start.o $(OBJDIR)/dietlibc.a $(OBJDIR)/librpc.a $(OBJDIR)/liblatin1.a $(OBJDIR)/libcompat.a $(OBJDIR)/elftrunc $(OBJDIR)/diet-i
++install-bin: $(OBJDIR)/start.o $(OBJDIR)/dietlibc.a $(OBJDIR)/librpc.a $(OBJDIR)/liblatin1.a $(OBJDIR)/libcompat.a $(OBJDIR)/diet-i
+ 	$(INSTALL) -d $(DESTDIR)$(ILIBDIR) $(DESTDIR)$(MAN1DIR) $(DESTDIR)$(BINDIR)
+ 	$(INSTALL) $(OBJDIR)/start.o $(DESTDIR)$(ILIBDIR)/start.o
+-	$(INSTALL) -m 644 $(OBJDIR)/libm.a $(OBJDIR)/libpthread.a $(OBJDIR)/librpc.a \
+-$(OBJDIR)/liblatin1.a $(OBJDIR)/libcompat.a $(OBJDIR)/libcrypt.a $(DESTDIR)$(ILIBDIR)
++	$(INSTALL) -m 644 $(OBJDIR)/libm.a $(OBJDIR)/libdl.a $(OBJDIR)/libpthread.a $(OBJDIR)/librpc.a \
++	$(OBJDIR)/liblatin1.a $(OBJDIR)/libcompat.a $(OBJDIR)/libcrypt.a $(DESTDIR)$(ILIBDIR)
+ 	$(INSTALL) -m 644 $(OBJDIR)/dietlibc.a $(DESTDIR)$(ILIBDIR)/libc.a
+ ifeq ($(MYARCH),$(ARCH))
+ 	$(INSTALL) $(OBJDIR)/diet-i $(DESTDIR)$(BINDIR)/diet
+ 	-$(INSTALL) $(PICODIR)/diet-dyn-i $(DESTDIR)$(BINDIR)/diet-dyn
+ endif
+-	$(INSTALL) -m 755 $(OBJDIR)/elftrunc $(OBJDIR)/dnsd $(DESTDIR)$(BINDIR)
+ 	$(INSTALL) -m 644 diet.1 $(DESTDIR)$(MAN1DIR)/diet.1
+ 
+ install-profiling:
+--- dietlibc-0.32/lib/__lltostr.c.misc	2001-08-14 18:56:49.000000000 +0200
++++ dietlibc-0.32/lib/__lltostr.c	2009-06-10 21:15:29.000000000 +0200
+@@ -6,6 +6,7 @@ int __lltostr(char *s, int size, unsigne
+ {
+   char *tmp;
+   unsigned int j=0;
++  char A=(UpCase?'A':'a')-'9'-1;
+ 
+   s[--size]=0;
+ 
+@@ -23,7 +24,7 @@ int __lltostr(char *s, int size, unsigne
+   while((tmp>s)&&(i))
+   {
+     tmp--;
+-    if ((*tmp=i%base+'0')>'9') *tmp+=(UpCase?'A':'a')-'9'-1;
++    if ((*tmp=i%base+'0')>'9') *tmp+=A;
+     i=i/base;
+     j++;
+   }
+--- dietlibc-0.32/lib/alloc.c.misc	2008-05-13 22:39:07.000000000 +0200
++++ dietlibc-0.32/lib/alloc.c	2009-06-10 21:15:29.000000000 +0200
+@@ -78,8 +78,6 @@ static size_t REGPARM(1) get_index(size_
+ }
+ 
+ /* small mem */
+-static void __small_free(void*_ptr,size_t _size) REGPARM(2);
+-
+ static void REGPARM(2) __small_free(void*_ptr,size_t _size) {
+   __alloc_t* ptr=BLOCK_START(_ptr);
+   size_t size=_size;

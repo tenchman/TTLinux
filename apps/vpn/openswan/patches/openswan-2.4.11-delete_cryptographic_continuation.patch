@@ -1,0 +1,16 @@
+--- openswan2-2.4.11/programs/pluto/pluto_crypt.c.delete_cryptographic_continuation	2008-05-13 21:01:06.000000000 +0200
++++ openswan2-2.4.11/programs/pluto/pluto_crypt.c	2008-05-13 21:02:52.000000000 +0200
+@@ -440,11 +440,8 @@ void delete_cryptographic_continuation(s
+ 	    cn = cn->pcrc_next;
+ 	}
+ 	
+-	if(cn == NULL) {
+-	    DBG(DBG_CRYPT, DBG_log("no suspended cryptographic state for %lu\n"
+-				   , st->st_serialno));
+-	    return;
+-	}
++	if(cn == NULL)
++	    continue;
+ 
+ 	/* unlink it, and free it */
+ 	*cnp = cn->pcrc_next;

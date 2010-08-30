@@ -1,0 +1,27 @@
+--- openntpd-3.7p1/defines.h.diet	2005-09-02 09:50:00.000000000 +0200
++++ openntpd-3.7p1/defines.h	2005-09-02 09:50:31.000000000 +0200
+@@ -180,9 +180,11 @@
+ #define YYSTYPE_IS_DECLARED 1
+ 
+ #if defined(HAVE_SETEUID) && defined(HAVE_SETREUID)
++# undef seteuid
+ # define seteuid(a)	(setreuid(-1, a))
+ #endif
+ #if defined(HAVE_SETEGID) && defined(HAVE_SETREGID)
++# undef setegid
+ # define setegid(a)	(setregid(-1, a))
+ #endif
+ 
+--- openntpd-3.7p1/buffer.c.diet	2005-09-02 09:52:21.000000000 +0200
++++ openntpd-3.7p1/buffer.c	2005-09-02 09:53:15.000000000 +0200
+@@ -30,6 +30,10 @@
+ 
+ #include "ntpd.h"
+ 
++#ifndef IOV_MAX
++# define IOV_MAX 1024
++#endif
++
+ void	buf_enqueue(struct msgbuf *, struct buf *);
+ void	buf_dequeue(struct msgbuf *, struct buf *);
+ 

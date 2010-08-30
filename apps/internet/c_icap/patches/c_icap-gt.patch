@@ -1,0 +1,156 @@
+--- c_icap-cvs-20070125/include/debug.h.gt	2005-11-21 19:16:24.000000000 +0100
++++ c_icap-cvs-20070125/include/debug.h	2007-02-15 12:52:29.000000000 +0100
+@@ -36,7 +36,14 @@
+ 
+ #else
+  extern void (*__log_error)(void *req, const char *format,... );
+-#define ci_debug_printf(i, args...) if(i<=CI_DEBUG_LEVEL){ if(__log_error) (*__log_error)(NULL,args); if(CI_DEBUG_STDOUT) printf(args);}
++#define ci_debug_printf(i, args...) if (i<=CI_DEBUG_LEVEL){ \
++  if (__log_error)                                          \
++    (*__log_error)(NULL, args);                             \
++  if (CI_DEBUG_STDOUT) {                                    \
++    printf("%d: ", getpid());                               \
++    printf(args);                                           \
++  }                                                         \
++}
+ #endif
+ 
+ 
+--- c_icap-cvs-20070125/modules/sys_logger.c.gt	2007-01-25 16:56:03.000000000 +0100
++++ c_icap-cvs-20070125/modules/sys_logger.c	2007-02-15 14:51:26.000000000 +0100
+@@ -141,7 +141,7 @@
+ 
+ int sys_log_open()
+ {
+-     openlog(log_ident, 0, FACILITY);
++     openlog(log_ident, LOG_PID, FACILITY);
+      return 1;
+ }
+ 
+@@ -156,7 +156,7 @@
+                     char *args, char *status)
+ {
+ 
+-     syslog(ACCESS_PRIORITY, "%s, %s, %s, %s%c%s, %s\n", server, clientname,
++     syslog(ACCESS_PRIORITY, "%s, %s, %s, %s%c%s, %s", server, clientname,
+             method,
+             request,
+             (args == NULL ? ' ' : '?'), (args == NULL ? "" : args), status);
+@@ -167,11 +167,16 @@
+ {
+      char buf[512];
+      char prefix[150];
++     int len;
+ 
+      snprintf(prefix, 149, "%s, %s ", server, format);
+      prefix[149] = '\0';
+-
+-     vsnprintf(buf, 511, (const char *) prefix, ap);
+-     buf[511] = '\0';
++     
++     if ((len = vsnprintf(buf, 511, (const char *) prefix, ap)) > 511)
++          len = 511;
++     buf[len--] = '\0';
++     for (len; len >= 0; len--)
++          if (buf[len] == '\n' || buf[len] == '\n')
++               buf[len] = '\0';
+      syslog(SERVER_PRIORITY, "%s", buf);
+ }
+--- c_icap-cvs-20070125/request_common.c.gt	2007-01-25 16:56:03.000000000 +0100
++++ c_icap-cvs-20070125/request_common.c	2007-02-15 12:52:29.000000000 +0100
+@@ -349,6 +349,8 @@
+ enum chunk_status { READ_CHUNK_DEF = 1, READ_CHUNK_DATA };
+ 
+ 
++// #define RETURN_ERROR return CI_ERROR
++#define RETURN_ERROR { ci_debug_printf(5, "%s line %d: error\n", __FUNCTION__, __LINE__); return CI_ERROR; }
+ /*
+   maybe the wdata must moved to the request_t and write_to_module_pending must replace wdata_len
+ */
+@@ -361,7 +363,7 @@
+      *wdata = NULL;
+      if (req->write_to_module_pending) {
+           /*We must not here if the chunk buffer did not flashed */
+-          return CI_ERROR;
++          RETURN_ERROR;
+      }
+ 
+      while (1) {
+@@ -377,7 +379,7 @@
+                if (tmp == 0 && req->pstrblock_read == end) {    /*Oh .... an error ... */
+                     ci_debug_printf(5, "Parse error:count=%d,start=%c\n",
+                                     tmp, req->pstrblock_read[0]);
+-                    return CI_ERROR;
++                    RETURN_ERROR;
+                }
+                num_len = end - req->pstrblock_read;
+                if (req->pstrblock_read_len - num_len < 2) {
+@@ -395,7 +397,7 @@
+                          }
+ 
+                          if (strncmp(end, "; ieof", 6) != 0)
+-                              return CI_ERROR;
++                              RETURN_ERROR;
+ 
+                          req->eof_received = 1;
+                          return CI_EOF;
+@@ -405,7 +407,7 @@
+                               return CI_NEEDS_MORE;
+                          }
+                          if (strncmp(end, "\r\n\r\n", 4) != 0)
+-                              return CI_ERROR;
++                              RETURN_ERROR;
+ 
+                          req->pstrblock_read = NULL;
+                          req->pstrblock_read_len = 0;
+@@ -414,7 +416,7 @@
+                }
+                else {
+                     if (*end != '\r' || *(end + 1) != '\n') {
+-                         return CI_ERROR;
++                         RETURN_ERROR;
+                     }
+                     read_status = READ_CHUNK_DATA;
+                     req->pstrblock_read = end + 2;
+@@ -985,7 +987,7 @@
+      return CI_OK;
+ }
+ 
+-const char *eof_str = "0\r\n\r\n";
++static const char *eof_str = "0\r\n\r\n";
+ 
+ int client_send_get_data(request_t * req,
+                          int timeout,
+--- c_icap-cvs-20070125/request.c.gt	2007-01-25 16:56:03.000000000 +0100
++++ c_icap-cvs-20070125/request.c	2007-02-15 12:52:29.000000000 +0100
+@@ -446,10 +446,6 @@
+ /****************************************************************/
+ /* New  functions to send responce */
+ 
+-const char *eol_str = "\r\n";
+-const char *eof_str = "0\r\n\r\n";
+-
+-
+ int send_current_block_data(request_t * req)
+ {
+      int bytes;
+@@ -458,7 +454,7 @@
+      if ((bytes =
+           ci_write_nonblock(req->connection->fd, req->pstrblock_responce,
+                             req->remain_send_block_bytes)) < 0) {
+-          ci_debug_printf(5, "Error writing to server (errno:%d)", errno);
++          ci_debug_printf(5, "Error writing to server: %s\n", strerror(errno));
+           return CI_ERROR;
+      }
+      req->pstrblock_responce += bytes;
+--- c_icap-cvs-20070125/log.c.gt	2007-01-25 16:56:02.000000000 +0100
++++ c_icap-cvs-20070125/log.c	2007-02-15 12:52:29.000000000 +0100
+@@ -69,7 +69,7 @@
+                                      (char *) ci_method_string(req->type),
+                                      req->service,
+                                      req->args,
+-                                     (status == CI_OK ? "OK" : "ERROR"));
++                                     (status == CI_ERROR ? "ERROR" : "OK"));
+ }
+ 
+ 

@@ -1,0 +1,13 @@
+diff -up gmp-4.2.1/printf/repl-vsnprintf.c.nognu gmp-4.2.1/printf/repl-vsnprintf.c
+--- gmp-4.2.1/printf/repl-vsnprintf.c.nognu	2006-03-14 16:57:54.000000000 +0100
++++ gmp-4.2.1/printf/repl-vsnprintf.c	2009-02-26 09:42:52.000000000 +0100
+@@ -28,9 +28,6 @@ MA 02110-1301, USA. */
+ 
+ #if ! HAVE_VSNPRINTF   /* only need this file if we don't have vsnprintf */
+ 
+-
+-#define _GNU_SOURCE    /* for strnlen prototype */
+-
+ #if HAVE_STDARG
+ #include <stdarg.h>
+ #else

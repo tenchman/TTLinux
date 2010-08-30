@@ -1,0 +1,14 @@
+--- popt-1.14/popthelp.c.diet	2008-04-17 20:41:08.000000000 +0200
++++ popt-1.14/popthelp.c	2008-04-17 20:42:22.000000000 +0200
+@@ -13,9 +13,10 @@
+ #define        POPT_USE_TIOCGWINSZ
+ #ifdef POPT_USE_TIOCGWINSZ
+ #include <sys/ioctl.h>
++#include <termios.h>			/* winsize */
+ #endif
+ 
+-#define	POPT_WCHAR_HACK
++#undef	POPT_WCHAR_HACK
+ #ifdef 	POPT_WCHAR_HACK
+ #include <wchar.h>			/* for mbsrtowcs */
+ /*@access mbstate_t @*/

@@ -1,0 +1,5 @@
+config CONFIG_LZMA
+  bool "lzma - Average compression ratio is about 30% better than that of gzip"
+  default n
+  help
+    http://tukaani.org/lzma

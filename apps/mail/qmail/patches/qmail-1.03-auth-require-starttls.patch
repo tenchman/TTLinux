@@ -1,0 +1,52 @@
+--- qmail-1.03/qmail-smtpd.c.auth_require_tls	Wed Feb 26 09:33:14 2003
++++ qmail-1.03/qmail-smtpd.c	Wed Feb 26 09:35:32 2003
+@@ -316,15 +316,16 @@
+ void smtp_ehlo(arg) char *arg;
+ {
+   smtp_greet("250-");
+-#ifdef AUTHCRAM
+-  out("\r\n250-AUTH LOGIN CRAM-MD5 PLAIN");
+-  out("\r\n250-AUTH=LOGIN CRAM-MD5 PLAIN");
+-#else
+-  out("\r\n250-AUTH LOGIN PLAIN");
+-  out("\r\n250-AUTH=LOGIN PLAIN");
+-#endif
+ #ifdef TLS
+   if (!ssl) out("\r\n250-STARTTLS");
++  else
++#endif
++#ifdef AUTHCRAM
++  out("\r\n250-AUTH LOGIN CRAM-MD5 PLAIN"
++      "\r\n250-AUTH=LOGIN CRAM-MD5 PLAIN");
++#else
++  out("\r\n250-AUTH LOGIN PLAIN"
++      "\r\n250-AUTH=LOGIN PLAIN");
+ #endif
+   out("\r\n250-PIPELINING\r\n250 8BITMIME\r\n");
+   seenmail = 0; dohelo(arg);
+@@ -690,6 +691,12 @@
+ {
+   int r;
+ 
++#ifdef TLS
++  if (!ssl) {
++    out("530 Must issue a STARTTLS command first (#5.7.0)\r\n");
++    return -1;
++  }
++#endif
+   if (*arg) {
+     if (r = b64decode(arg,str_len(arg),&user) == 1) return err_input();
+   }
+@@ -714,6 +721,12 @@
+ {
+   int r, id = 0;
+ 
++#ifdef TLS
++  if (!ssl) {
++    out("530 Must issue a STARTTLS command first (#5.7.0)\r\n");
++    return -1;
++  }
++#endif
+   if (*arg) {
+     if (r = b64decode(arg,str_len(arg),&slop) == 1) return err_input();
+   }

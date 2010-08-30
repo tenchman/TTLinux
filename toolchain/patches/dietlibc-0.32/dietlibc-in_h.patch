@@ -1,0 +1,30 @@
+--- dietlibc-0.32/include/netinet/in.h.in_h	2008-03-11 20:34:17.000000000 +0100
++++ dietlibc-0.32/include/netinet/in.h	2009-06-10 21:40:47.000000000 +0200
+@@ -41,6 +41,8 @@ enum {
+ #define IPPROTO_AH IPPROTO_AH
+   IPPROTO_COMP   = 108,                /* Compression Header protocol */
+ #define IPPROTO_COMP IPPROTO_COMP
++  IPPROTO_SCTP = 132,           /* Stream Control Transmission Protocol.  */
++#define IPPROTO_SCTP IPPROTO_SCTP
+   IPPROTO_RAW	 = 255,		/* Raw IP packets			*/
+ #define IPPROTO_RAW IPPROTO_RAW
+   IPPROTO_MAX
+@@ -269,11 +271,18 @@ struct in6_flowlabel_req {
+ #define IPV6_MULTICAST_HOPS	18
+ #define IPV6_MULTICAST_LOOP	19
+ #define IPV6_ADD_MEMBERSHIP	20
++#define IPV6_JOIN_GROUP		IPV6_ADD_MEMBERSHIP
+ #define IPV6_DROP_MEMBERSHIP	21
++#define IPV6_LEAVE_GROUP	IPV6_DROP_MEMBERSHIP
+ #define IPV6_ROUTER_ALERT	22
+ #define IPV6_MTU_DISCOVER	23
+ #define IPV6_MTU		24
+ #define IPV6_RECVERR		25
++#define IPV6_V6ONLY             26
++#define IPV6_JOIN_ANYCAST       27
++#define IPV6_LEAVE_ANYCAST      28
++#define IPV6_IPSEC_POLICY       34
++#define IPV6_XFRM_POLICY        35
+ 
+ /* IPV6_MTU_DISCOVER values */
+ #define IPV6_PMTUDISC_DONT		0

@@ -1,0 +1,712 @@
+--- dietlibc-0.30/dietstdio.h.iosubsys	2006-06-01 08:11:34.000000000 +0200
++++ dietlibc-0.30/dietstdio.h	2008-05-16 00:29:21.000000000 +0200
+@@ -1,4 +1,6 @@
+ /* diet stdio */
++#ifndef __DIETSTDIO_H
++#define __DIETSTDIO_H 1
+ 
+ #include <sys/cdefs.h>
+ #include <sys/types.h>
+@@ -78,6 +80,9 @@ FILE* __stdio_init_file(int fd,int close
+ int __stdio_parse_mode(const char *mode);
+ void __stdio_flushall(void);
+ 
++int __stdio_fgetpos(FILE *stream, fpos_t *pos);
++int __stdio_fsetpos(FILE *stream, fpos_t *pos);
++
+ #ifndef __THREAD_INTERNAL_H__
+ int __libc_close(int fd);
+ int __libc_open(const char*fn,int flags,...);
+@@ -91,3 +96,5 @@ FILE *freopen_unlocked(const char *path,
+ 
+ int __stdout_is_tty(void);
+ int __stdin_is_tty(void);
++
++#endif
+--- dietlibc-0.30/libstdio/fflush.c.iosubsys	2008-05-16 21:28:02.000000000 +0200
++++ dietlibc-0.30/libstdio/fflush.c	2008-05-16 21:42:51.000000000 +0200
+@@ -21,7 +21,7 @@ int fflush_unlocked(FILE *stream) {
+     __fflush_stdout();
+     __fflush_stderr();
+     for (res=0, f=__stdio_root; f; f=f->next)
+-      if (fflush(f))
++      if (fflush_unlocked(f))
+ 	res=-1;
+     return res;
+   }
+@@ -33,7 +33,7 @@ int fflush_unlocked(FILE *stream) {
+     }
+     stream->bs=stream->bm=0;
+   } else {
+-    if (stream->bm && write(stream->fd,stream->buf,stream->bm)!=(ssize_t)stream->bm) {
++    if (stream->bm && __libc_write(stream->fd,stream->buf,stream->bm)!=(ssize_t)stream->bm) {
+       stream->flags|=ERRORINDICATOR;
+       return -1;
+     }
+@@ -60,7 +60,7 @@ int __fflush4(FILE *stream,int next) {
+  * This is defined here because of the weak symbol ELF semantics */
+ int __stdio_outs(const char *s,size_t len);
+ int __stdio_outs(const char *s,size_t len) {
+-  return fwrite(s,1,(size_t)len,stdout)==len?1:0;
++  return fwrite_unlocked(s,1,(size_t)len,stdout)==len?1:0;
+ }
+ 
+ link_warning("fflush","warning: your code uses stdio (7+k bloat).")
+--- dietlibc-0.30/libstdio/vprintf.c.iosubsys	2005-09-21 09:33:08.000000000 +0200
++++ dietlibc-0.30/libstdio/vprintf.c	2008-05-16 21:26:55.000000000 +0200
+@@ -4,12 +4,13 @@
+ 
+ int __stdio_outs(const char *s,size_t len) __attribute__((weak));
+ int __stdio_outs(const char *s,size_t len) {
+-  return (write(1,s,len)==(ssize_t)len)?1:0;
++  return (__libc_write(1,s,len)==(ssize_t)len)?1:0;
+ }
+ 
+-int vprintf(const char *format, va_list ap)
++int __vprintf(const char *format, va_list ap)
+ {
+   struct arg_printf _ap = { 0, (int(*)(void*,size_t,void*)) __stdio_outs };
+   return __v_printf(&_ap,format,ap);
+ }
+ 
++int vprintf(const char *format, va_list arg_ptr) __attribute__((weak,alias("__vprintf")));
+--- dietlibc-0.30/libstdio/stdin.c.iosubsys	2008-05-16 21:38:12.000000000 +0200
++++ dietlibc-0.30/libstdio/stdin.c	2008-05-16 21:38:27.000000000 +0200
+@@ -25,5 +25,5 @@ int __stdin_is_tty() {
+ FILE *stdin=&__stdin;
+ 
+ int __fflush_stdin(void) {
+-  return fflush(stdin);
++  return fflush_unlocked(stdin);
+ }
+--- dietlibc-0.30/libstdio/vfprintf.c.iosubsys	2001-07-26 13:31:45.000000000 +0200
++++ dietlibc-0.30/libstdio/vfprintf.c	2008-05-16 00:29:21.000000000 +0200
+@@ -5,11 +5,13 @@
+ #include "dietstdio.h"
+ 
+ static int __fwrite(void*ptr, size_t nmemb, FILE* f) {
+-  return fwrite(ptr,1,nmemb,f);
++  return fwrite_unlocked(ptr,1,nmemb,f);
+ }
+ 
+-int vfprintf(FILE *stream, const char *format, va_list arg_ptr)
++int __vfprintf(FILE *stream, const char *format, va_list arg_ptr)
+ {
+   struct arg_printf ap = { stream, (int(*)(void*,size_t,void*)) __fwrite };
+   return __v_printf(&ap,format,arg_ptr);
+ }
++
++int vfprintf(FILE *stream, const char *format, va_list arg_ptr) __attribute__((weak,alias("__vfprintf")));
+--- dietlibc-0.30/libstdio/fgetpos.c.iosubsys	2001-10-22 22:20:53.000000000 +0200
++++ dietlibc-0.30/libstdio/fgetpos.c	2008-05-16 00:29:21.000000000 +0200
+@@ -1,8 +1,10 @@
++#include "dietstdio.h"
+ #include <stdio.h>
+ 
+-int fgetpos(FILE *stream, fpos_t *pos) {
++int __stdio_fgetpos(FILE *stream, fpos_t *pos) {
+   long l=ftell(stream);
+   if (l==-1) return -1;
+   *pos=l;
+   return 0;
+ }
++int fgetpos(FILE *stream, fpos_t *pos) __attribute__((weak,alias("__stdio_fgetpos")));
+--- dietlibc-0.30/libstdio/stderr.c.iosubsys	2008-05-16 21:38:38.000000000 +0200
++++ dietlibc-0.30/libstdio/stderr.c	2008-05-16 21:38:52.000000000 +0200
+@@ -18,5 +18,5 @@ static FILE __stderr = {
+ FILE *stderr=&__stderr;
+ 
+ int __fflush_stderr(void) {
+-  return fflush(stderr);
++  return fflush_unlocked(stderr);
+ }
+--- dietlibc-0.30/libstdio/fsetpos.c.iosubsys	2001-10-22 22:20:53.000000000 +0200
++++ dietlibc-0.30/libstdio/fsetpos.c	2008-05-16 00:29:21.000000000 +0200
+@@ -1,7 +1,8 @@
+ #include <stdio.h>
+ 
+-int fsetpos(FILE *stream, fpos_t *pos) {
++int __stdio_fsetpos(FILE *stream, fpos_t *pos) {
+   if (fseek(stream,*pos,SEEK_SET)==-1)
+     return -1;
+   return 0;
+ }
++int fsetpos(FILE *stream, fpos_t *pos) __attribute__((weak,alias("__stdio_fsetpos")));
+--- dietlibc-0.30/libstdio/stdout.c.iosubsys	2008-05-16 21:39:29.000000000 +0200
++++ dietlibc-0.30/libstdio/stdout.c	2008-05-16 21:39:44.000000000 +0200
+@@ -19,5 +19,5 @@ static FILE __stdout = {
+ FILE *stdout=&__stdout;
+ 
+ int __fflush_stdout(void) {
+-  return fflush(stdout);
++  return fflush_unlocked(stdout);
+ }
+--- dietlibc-0.30/libstdio/vfdprintf.c.iosubsys	2008-05-16 21:25:52.000000000 +0200
++++ dietlibc-0.30/libstdio/vfdprintf.c	2008-05-16 21:26:07.000000000 +0200
+@@ -5,7 +5,7 @@
+ #include "dietstdio.h"
+ 
+ static int __fwrite(void*ptr, size_t nmemb, int fd) {
+-  return write(fd,ptr,nmemb);
++  return __libc_write(fd,ptr,nmemb);
+ }
+ 
+ int vfdprintf(int fd, const char *format, va_list arg_ptr)
+--- dietlibc-0.30/libstdio/puts.c.iosubsys	2008-05-16 21:44:38.000000000 +0200
++++ dietlibc-0.30/libstdio/puts.c	2008-05-16 21:45:36.000000000 +0200
+@@ -5,7 +5,7 @@
+ 
+ int __stdio_outs(const char *s,size_t len) __attribute__((weak));
+ int __stdio_outs(const char *s,size_t len) {
+-  return (write(1,s,len)==(ssize_t)len)?1:0;
++  return (__libc_write(1,s,len)==(ssize_t)len)?1:0;
+ }
+ 
+ int puts(const char *s) {
+--- dietlibc-0.30/libstdio/fdglue2.c.iosubsys	2004-03-02 22:27:19.000000000 +0100
++++ dietlibc-0.30/libstdio/fdglue2.c	2008-05-16 00:29:21.000000000 +0200
+@@ -10,7 +10,7 @@
+ 
+ extern int __stdio_atexit;
+ 
+-FILE*__stdio_init_file(int fd,int closeonerror,int mode) {
++FILE*__stdio_init_file_nothreads(int fd,int closeonerror,int mode) {
+   FILE *tmp=(FILE*)malloc(sizeof(FILE));
+   if (!tmp) goto err_out;
+   tmp->buf=(char*)malloc(BUFSIZE);
+@@ -46,4 +46,4 @@ err_out:
+   return tmp;
+ }
+ 
+-FILE* __stdio_init_file_nothreads(int fd,int closeonerror,int mode) __attribute__((alias("__stdio_init_file")));
++FILE* __stdio_init_file(int fd,int closeonerror,int mode) __attribute__((weak,alias("__stdio_init_file_nothreads")));
+--- dietlibc-0.30/libpthread/thread_internal.h.iosubsys	2008-05-16 00:29:20.000000000 +0200
++++ dietlibc-0.30/libpthread/thread_internal.h	2008-05-16 00:29:21.000000000 +0200
+@@ -112,6 +112,14 @@ int __pthread_unlock(struct _pthread_fas
+ #define TRYLOCK(td) __pthread_trylock(&((td)->lock))
+ #define UNLOCK(td)  __pthread_unlock(&((td)->lock))
+ 
++#define CHECKSTREAM(__s,__r) \
++  do {			      \
++    if (!__s) {	      \
++      errno = EBADF;	      \
++      return __r;	      \
++    }			      \
++  } while(0)
++
+ int __pthread_mutex_lock(pthread_mutex_t*mutex,_pthread_descr this);
+ int __pthread_mutex_unlock(pthread_mutex_t*mutex,_pthread_descr this);
+ 
+--- dietlibc-0.30/libpthread/pthread_fopen_fclose.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_fopen_fclose.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,33 @@
++#include <pthread.h>
++#include "thread_internal.h"
++#include <dietstdio.h>
++
++static pthread_mutex_t mutex_io=PTHREAD_MUTEX_INITIALIZER;
++
++__attribute__((weak)) FILE *fopen(const char *filename, const char *mode)
++{
++  FILE *f;
++  _pthread_descr this=__thread_self();
++  __pthread_mutex_lock(&mutex_io, this);
++  if ((f = fopen_unlocked(filename, mode)))
++    pthread_mutex_init(&f->m, NULL);
++  __pthread_mutex_unlock(&mutex_io, this);
++  return f;
++}
++
++__attribute__((weak)) int fclose(FILE *stream)
++{
++  int ret;
++  _pthread_descr this;
++
++  CHECKSTREAM(stream,EOF);
++  this=__thread_self();
++  __pthread_mutex_lock(&stream->m, this);
++  __pthread_mutex_lock(&mutex_io, this);
++  /* unlock the stream here, because it will be freed in fclose_unlocked */
++  __pthread_mutex_unlock(&stream->m, this);
++  ret = fclose_unlocked(stream);
++  __pthread_mutex_unlock(&mutex_io, this);
++  return ret;
++}
++
+--- dietlibc-0.30/libpthread/pthread_readdir.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_readdir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,14 @@
++#include <errno.h>
++#include "dietdirent.h"
++#include "thread_internal.h"
++
++__attribute__((weak)) struct dirent* readdir(DIR *d) {
++  struct dirent* dir;
++  _pthread_descr this;
++  CHECKSTREAM(d,NULL);
++  this=__thread_self();
++  __pthread_mutex_lock(&d->m, this);
++  dir = __readdir(d);
++  __pthread_mutex_unlock(&d->m, this);
++  return dir;
++}
+--- dietlibc-0.30/libpthread/pthread_opendir.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_opendir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,10 @@
++#include <pthread.h>
++#include <dietdirent.h>
++
++__attribute__((weak)) DIR* opendir(const char* name) {
++  DIR *dir;
++  if ((dir = __opendir(name)))
++    pthread_mutex_init(&dir->m, NULL);
++  return dir;
++}
++
+--- dietlibc-0.30/libpthread/pthread_rewinddir.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_rewinddir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,11 @@
++#include "dietdirent.h"
++#include "thread_internal.h"
++
++__attribute__((weak)) void rewinddir(DIR *dir) {
++  if (dir) {
++    _pthread_descr this=__thread_self();
++    __pthread_mutex_lock(&dir->m, this);
++    __rewinddir(dir);
++    __pthread_mutex_unlock(&dir->m, this);
++  }
++}
+--- dietlibc-0.30/libpthread/pthread_telldir.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_telldir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,14 @@
++#include <errno.h>
++#include "dietdirent.h"
++#include "thread_internal.h"
++
++__attribute__((weak)) off_t telldir(DIR *dir) {
++  off_t ret;
++  _pthread_descr this;
++  CHECKSTREAM(dir, -1);
++  this=__thread_self();
++  __pthread_mutex_lock(&dir->m, this);
++  ret=__telldir(dir);
++  __pthread_mutex_unlock(&dir->m, this);
++  return ret;
++}
+--- dietlibc-0.30/libpthread/pthread_freopen.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_freopen.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,15 @@
++#include <pthread.h>
++#include "thread_internal.h"
++#include <dietstdio.h>
++
++__attribute__((weak))
++FILE* freopen(const char* filename, const char* mode, FILE* stream)
++{
++  _pthread_descr this;
++  CHECKSTREAM(stream,NULL);
++  this=__thread_self();
++  __pthread_mutex_lock(&stream->m, this);
++  stream = freopen_unlocked(filename, mode, stream);
++  __pthread_mutex_unlock(&stream->m, this);
++  return stream;
++}
+--- dietlibc-0.30/libpthread/pthread_vprintf.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_vprintf.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,8 @@
++#include <stdarg.h>
++#include "dietstdio.h"
++
++int vprintf(const char *format, va_list ap)
++{
++  return vfprintf(stdout, format, ap);
++}
++
+--- dietlibc-0.30/libpthread/pthread_fputs.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_fputs.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,6 @@
++#include <dietstdio.h>
++
++__attribute__((weak)) int fputs(const char *s,FILE *stream)
++{
++  return fwrite(s,strlen(s),1,stream);
++}
+--- dietlibc-0.30/libpthread/pthread_fgetpos.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_fgetpos.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,14 @@
++#include "thread_internal.h"
++#include <dietstdio.h>
++
++__attribute__((weak)) int fgetpos(FILE *stream, fpos_t *pos)
++{
++  int ret;
++  _pthread_descr this;
++  CHECKSTREAM(stream,-1);
++  this=__thread_self();
++  __pthread_mutex_lock(&stream->m, this);
++  ret = __stdio_fgetpos(stream, pos);
++  __pthread_mutex_unlock(&stream->m, this);
++  return ret;
++}
+--- dietlibc-0.30/libpthread/pthread_fread.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_fread.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,13 @@
++#include <pthread.h>
++#include "thread_internal.h"
++#include <dietstdio.h>
++
++__attribute__((weak)) size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
++{
++  CHECKSTREAM(stream,EOF);
++  _pthread_descr this=__thread_self();
++  __pthread_mutex_lock(&stream->m, this);
++  size = fread_unlocked(ptr, size, nmemb, stream);
++  __pthread_mutex_unlock(&stream->m, this);
++  return size;
++}
+--- dietlibc-0.30/libpthread/README.iosubsys	2003-08-18 19:32:52.000000000 +0200
++++ dietlibc-0.30/libpthread/README	2008-05-16 00:29:21.000000000 +0200
+@@ -32,3 +32,18 @@ NOTES:
+ 	- SIGRTMAX   as restart event (join,cond_*wait,...)
+ 	- SIGRTMAX-1 as cancel envent (cancel).
+ 
++THREAD SAFE STDIO:
++	- fseek
++	- rewind (via fseek)
++	- vfprintf
++	- vprintf
++	- printf (via vprintf)
++	- fgets
++	- fputs (via fwrite)
++	- fgetpos
++	- fsetpos
++	- feof
++	- fopen
++	- fclose
++	- fread
++	- fwrite
+--- dietlibc-0.30/libpthread/pthread_fsetpos.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_fsetpos.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,14 @@
++#include "thread_internal.h"
++#include <dietstdio.h>
++
++__attribute__((weak)) int fgetpos(FILE *stream, fpos_t *pos)
++{
++  int ret;
++  _pthread_descr this;
++  CHECKSTREAM(stream,-1);
++  this=__thread_self();
++  __pthread_mutex_lock(&stream->m, this);
++  ret = __stdio_fsetpos(stream, pos);
++  __pthread_mutex_unlock(&stream->m, this);
++  return ret;
++}
+--- dietlibc-0.30/libpthread/pthread_fwrite.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_fwrite.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,13 @@
++#include "thread_internal.h"
++#include <dietstdio.h>
++
++ __attribute__((weak)) size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
++{
++  _pthread_descr this;
++  CHECKSTREAM(stream,EOF);
++  this=__thread_self();
++  __pthread_mutex_lock(&stream->m, this);
++  size = fwrite_unlocked(ptr, size, nmemb, stream);
++  __pthread_mutex_unlock(&stream->m, this);
++  return size;
++}
+--- dietlibc-0.30/libpthread/pthread_clearerr.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_clearerr.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,12 @@
++#include "thread_internal.h"
++#include <dietstdio.h>
++
++__attribute__((weak)) void clearerr(FILE *stream)
++{
++  if (stream) {
++    _pthread_descr this=__thread_self();
++    __pthread_mutex_lock(&stream->m, this);
++    clearerr_unlocked(stream);
++    __pthread_mutex_unlock(&stream->m, this);
++  }
++}
+--- dietlibc-0.30/libpthread/Makefile.iosubsys	2003-08-18 19:32:52.000000000 +0200
++++ dietlibc-0.30/libpthread/Makefile	2008-05-16 00:29:21.000000000 +0200
+@@ -28,7 +28,7 @@ endif
+ CFLAGS += -W -Wall
+ #CFLAGS += -fPIC
+ 
+-CFLAGS += -I. -I.. -I../include -Wall
++CFLAGS += -I. -I.. -isystem../include -Wall
+ 
+ 
+ PWD=$(shell pwd)
+--- dietlibc-0.30/libpthread/pthread_readdir64.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_readdir64.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,14 @@
++#include <errno.h>
++#include "dietdirent.h"
++#include "thread_internal.h"
++
++__attribute__((weak)) struct dirent64* readdir64(DIR *d) {
++  struct dirent64* dir;
++  _pthread_descr this;
++  CHECKSTREAM(d,NULL);
++  this=__thread_self();
++  __pthread_mutex_lock(&d->m, this);
++  dir = __readdir64(d);
++  __pthread_mutex_unlock(&d->m, this);
++  return dir;
++}
+--- dietlibc-0.30/libpthread/pthread_seekdir.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_seekdir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,11 @@
++#include "dietdirent.h"
++#include "thread_internal.h"
++
++__attribute__((weak)) void seekdir(DIR *dir, off_t offset) {
++  if (dir) {
++    _pthread_descr this=__thread_self();
++    __pthread_mutex_lock(&dir->m, this);
++    __seekdir(dir, offset);
++    __pthread_mutex_unlock(&dir->m, this);
++  }
++}
+--- dietlibc-0.30/libpthread/pthread_ferror.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_ferror.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,13 @@
++#include "thread_internal.h"
++#include <dietstdio.h>
++
++__attribute__((weak)) int ferror(FILE *stream)
++{
++  int ret;
++  CHECKSTREAM(stream,0);
++  _pthread_descr this=__thread_self();
++  __pthread_mutex_lock(&stream->m, this);
++  ret = ferror_unlocked(stream);
++  __pthread_mutex_unlock(&stream->m, this);
++  return ret;
++}
+--- dietlibc-0.30/libpthread/pthread_vfprintf.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_vfprintf.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,20 @@
++#include <stdarg.h>
++#include <pthread.h>
++#include "thread_internal.h"
++#include <dietstdio.h>
++
++static int __fwrite(void*ptr, size_t nmemb, FILE* f) {
++    return fwrite_unlocked(ptr,1,nmemb,f);
++}
++
++int vfprintf(FILE *stream, const char *format, va_list arg_ptr)
++{
++  struct arg_printf ap = { stream, (int(*)(void*,size_t,void*)) __fwrite };
++  int ret;
++  CHECKSTREAM(stream,-1);
++  _pthread_descr this=__thread_self();
++  __pthread_mutex_lock(&stream->m, this);
++  ret=__v_printf(&ap,format,arg_ptr);
++  __pthread_mutex_unlock(&stream->m, this);
++  return ret;
++}
+--- dietlibc-0.30/libpthread/pthread_feof.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_feof.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,13 @@
++#include "thread_internal.h"
++#include <dietstdio.h>
++
++__attribute__((weak)) int feof(FILE *stream)
++{
++  int ret;
++  CHECKSTREAM(stream,0);
++  _pthread_descr this=__thread_self();
++  __pthread_mutex_lock(&stream->m, this);
++  ret = feof_unlocked(stream);
++  __pthread_mutex_unlock(&stream->m, this);
++  return ret;
++}
+--- dietlibc-0.30/libpthread/pthread_fgets.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_fgets.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,13 @@
++#include <pthread.h>
++#include "thread_internal.h"
++#include <dietstdio.h>
++
++__attribute__((weak)) char *fgets(char *s, int size, FILE *stream)
++{
++  CHECKSTREAM(stream,NULL);
++  _pthread_descr this=__thread_self();
++  __pthread_mutex_lock(&stream->m, this);
++  s = fgets_unlocked(s, size, stream);
++  __pthread_mutex_unlock(&stream->m, this);
++  return s;
++}
+--- dietlibc-0.30/libpthread/pthread_fseek.c.iosubsys	2008-05-16 00:29:21.000000000 +0200
++++ dietlibc-0.30/libpthread/pthread_fseek.c	2008-05-16 00:29:21.000000000 +0200
+@@ -0,0 +1,14 @@
++#include "thread_internal.h"
++#include <dietstdio.h>
++
++__attribute__((weak)) int fseek(FILE *stream, long offset, int whence)
++{
++  int ret;
++  _pthread_descr this;
++  CHECKSTREAM(stream,-1);
++  this=__thread_self();
++  __pthread_mutex_lock(&stream->m, this);
++  ret = fseek_unlocked(stream, offset, whence);
++  __pthread_mutex_unlock(&stream->m, this);
++  return ret;
++}
+--- dietlibc-0.30/dietdirent.h.iosubsys	2002-07-03 22:33:37.000000000 +0200
++++ dietlibc-0.30/dietdirent.h	2008-05-16 00:29:21.000000000 +0200
+@@ -1,8 +1,32 @@
++#ifndef __DIETDIRENT_H
++#define __DIETDIRENT_H 1
+ #include <sys/shm.h>
++#include <dirent.h>
++#include "dietfeatures.h"
++#ifdef WANT_THREAD_SAFE
++#include <pthread.h>
++#endif
+ 
+ struct __dirstream {
+   int fd;
++#ifdef WANT_THREAD_SAFE
++  char buf[PAGE_SIZE-((sizeof (int)*3)+sizeof(pthread_mutex_t))];
++#else
+   char buf[PAGE_SIZE-(sizeof (int)*3)];
++#endif
+   unsigned int num;
+   unsigned int cur;
++#ifdef WANT_THREAD_SAFE
++  pthread_mutex_t m;
++#endif
+ };				/* stream data from opendir() */
++
++DIR*  __opendir(const char* name);
++int   __closedir(DIR *dir);
++void  __rewinddir(DIR *d);
++void  __seekdir(DIR *d,off_t offset);
++off_t __telldir(DIR *d);
++
++struct dirent*   __readdir(DIR *d);
++struct dirent64* __readdir64(DIR *d);
++#endif
+--- dietlibc-0.30/lib/seekdir.c.iosubsys	2006-04-04 05:47:21.000000000 +0200
++++ dietlibc-0.30/lib/seekdir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -2,9 +2,10 @@
+ #include <unistd.h>
+ #include <dirent.h>
+ 
+-void seekdir(DIR *d,off_t offset) {
++void __seekdir(DIR *d,off_t offset) {
+   if (lseek(d->fd,offset,SEEK_SET) != (off_t)-1) {
+     d->num=d->cur=0;
+     ((struct dirent *)(d->buf))->d_off = offset;
+   }
+ }
++void seekdir(DIR *d,off_t offset) __attribute__((weak, alias("__seekdir")));
+--- dietlibc-0.30/lib/telldir.c.iosubsys	2006-04-04 05:47:21.000000000 +0200
++++ dietlibc-0.30/lib/telldir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -2,9 +2,10 @@
+ #include <unistd.h>
+ #include <dirent.h>
+ 
+-off_t telldir(DIR *d) {
++off_t __telldir(DIR *d) {
+   off_t result = 0;
+   if (lseek(d->fd,0,SEEK_CUR))
+     result=((struct dirent*)(d->buf+d->cur))->d_off;
+   return result;
+ }
++off_t telldir(DIR *d) __attribute__((weak, alias("__telldir")));
+--- dietlibc-0.30/lib/readdir64.c.iosubsys	2004-03-02 22:27:19.000000000 +0100
++++ dietlibc-0.30/lib/readdir64.c	2008-05-16 00:29:21.000000000 +0200
+@@ -12,7 +12,7 @@
+ #endif
+ 
+ #ifndef WANT_LARGEFILE_BACKCOMPAT
+-struct dirent64* readdir64(DIR *d) {
++struct dirent64* __readdir64(DIR *d) {
+   if (!d->num || (d->cur += ((struct dirent64*)(d->buf+d->cur))->d_reclen)>=d->num) {
+     int res=getdents64(d->fd,(struct dirent64*)d->buf, sizeof (d->buf)-1);
+     if (res<=0) return 0;
+@@ -21,7 +21,7 @@ struct dirent64* readdir64(DIR *d) {
+   return (struct dirent64*)(d->buf+d->cur);
+ }
+ #else
+-struct dirent64* readdir64(DIR *d) {
++struct dirent64* __readdir64(DIR *d) {
+ #ifdef __NR_getdents64
+   static int trygetdents64=1;
+ #endif
+@@ -60,3 +60,4 @@ again:
+ #endif
+ }
+ #endif
++struct dirent64* readdir64(DIR *d) __attribute__((weak, alias("__readdir64")));
+--- dietlibc-0.30/lib/opendir.c.iosubsys	2002-07-03 22:33:38.000000000 +0200
++++ dietlibc-0.30/lib/opendir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -5,7 +5,7 @@
+ #include <stdlib.h>
+ #include <fcntl.h>
+ 
+-DIR*  opendir ( const char* name ) {
++DIR* __opendir ( const char* name ) {
+   int   fd = open (name, O_RDONLY | O_DIRECTORY);
+   DIR*  t  = NULL;
+ 
+@@ -24,3 +24,4 @@ lose:
+ 
+   return t;
+ }
++DIR* opendir(const char* name) __attribute__((weak, alias("__opendir")));
+--- dietlibc-0.30/lib/rewinddir.c.iosubsys	2001-02-03 21:41:12.000000000 +0100
++++ dietlibc-0.30/lib/rewinddir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -2,7 +2,8 @@
+ #include <unistd.h>
+ #include <dirent.h>
+ 
+-void rewinddir(DIR *d) {
++void __rewinddir(DIR *d) {
+   if (lseek(d->fd,0,SEEK_SET) != (off_t)-1)
+     d->num=d->cur=0;
+ }
++void rewinddir(DIR *d) __attribute__((weak, alias("__rewinddir")));
+--- dietlibc-0.30/lib/closedir.c.iosubsys	2002-07-03 22:33:37.000000000 +0200
++++ dietlibc-0.30/lib/closedir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -4,8 +4,9 @@
+ #include <dirent.h>
+ #include <stdlib.h>
+ 
+-int closedir (DIR* d) {
++int __closedir (DIR* d) {
+   int res=close(d->fd);
+   munmap (d, PAGE_SIZE);
+   return res;
+ }
++int closedir (DIR* d) __attribute__((weak, alias("__closedir")));
+--- dietlibc-0.30/lib/readdir.c.iosubsys	2002-07-03 22:33:38.000000000 +0200
++++ dietlibc-0.30/lib/readdir.c	2008-05-16 00:29:21.000000000 +0200
+@@ -3,7 +3,7 @@
+ #include <dirent.h>
+ #include <stdlib.h>
+ 
+-struct dirent* readdir(DIR *d) {
++struct dirent* __readdir(DIR *d) {
+   if (!d->num || (d->cur += ((struct dirent*)(d->buf+d->cur))->d_reclen)>=d->num) {
+     int res=getdents(d->fd,(struct dirent*)d->buf,sizeof (d->buf)-1);
+     if (res<=0) return 0;
+@@ -11,3 +11,5 @@ struct dirent* readdir(DIR *d) {
+   }
+   return (struct dirent*)(d->buf+d->cur);
+ }
++
++struct dirent* readdir(DIR *d) __attribute__((weak, alias("__readdir")));

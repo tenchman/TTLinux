@@ -1,0 +1,63 @@
+--- dietlibc-cvs/libdl/_dl_int.h.gcc4	2005-04-29 20:53:19.000000000 +0200
++++ dietlibc-cvs/libdl/_dl_int.h	2005-11-28 11:11:10.000000000 +0100
+@@ -109,12 +109,10 @@
+ #define HASH_CHAIN(p)		((p)+2+HASH_BUCKET_LEN(p))
+ 
+ /* _dl_alloc.c */
+-#if 0
++#ifndef __DIET_LD_SO__
+ extern struct _dl_handle* _dl_root_handle;
+ extern struct _dl_handle* _dl_top_handle;
+ extern struct _dl_handle* _dl_free_list;
+-#endif
+-#ifndef __DIET_LD_SO__
+ void _dl_free_handle(struct _dl_handle* dh);
+ struct _dl_handle* _dl_get_handle();
+ struct _dl_handle* _dl_find_lib(const char* name);
+@@ -132,8 +130,10 @@
+ int _dl_search(char *buf, int len, const char *filename);
+ 
+ /* dlsym.c */
++#ifdef __DIET_LD_SO__
+ void *_dlsym(void*dh,const char*symbol);
+ void *_dl_sym_search_str(struct _dl_handle*h,const char*name);
++#endif
+ void *_dl_sym(struct _dl_handle * h, int symbol);
+ void *_dl_sym_next(struct _dl_handle * h, int symbol);
+ 
+--- dietlibc-cvs/libdl/_dl_load.c.gcc4	2002-08-30 14:25:06.000000000 +0200
++++ dietlibc-cvs/libdl/_dl_load.c	2005-11-28 11:07:28.000000000 +0100
+@@ -4,6 +4,7 @@
+ #include <sys/stat.h>
+ #include <dlfcn.h>
+ #include <elf.h>
++#include <alloca.h>
+ 
+ #include "_dl_int.h"
+ 
+@@ -334,10 +335,11 @@
+   /* do PTL / GOT relocation */
+   if (pltreltype == DT_REL) {
+     Elf_Rel *tmp = jmprel;
++    char * t=(char*)tmp;
+ #ifdef DEBUG
+     pf(__func__": rel got\n");
+ #endif
+-    for (;(char*)tmp<(((char*)jmprel)+pltrelsize);(char*)tmp=((char*)tmp)+sizeof(Elf_Rel)) {
++    for (;t < (((char*)jmprel)+pltrelsize); t = t + sizeof(Elf_Rel)) {
+       if ((flags&RTLD_NOW)) {
+ 	unsigned long sym=(unsigned long)_dl_sym(dh,ELF_R_SYM(tmp->r_info));
+ 	if (sym) *((unsigned long*)(dh->mem_base+tmp->r_offset))=sym;
+@@ -357,10 +359,11 @@
+   }
+   if (pltreltype == DT_RELA) {
+     Elf_Rela *tmp = jmprel;
++    char * t=(char*)tmp;
+ #ifdef DEBUG
+     pf(__func__": rela got\n");
+ #endif
+-    for (;(char*)tmp<(((char*)jmprel)+pltrelsize);(char*)tmp=((char*)tmp)+sizeof(Elf_Rela)) {
++    for (;t < (((char*)jmprel)+pltrelsize); t = t + sizeof(Elf_Rela)) {
+       if ((flags&RTLD_NOW)) {
+ 	unsigned long sym=(unsigned long)_dl_sym(dh,ELF_R_SYM(tmp->r_info));
+ 	if (sym) *((unsigned long*)(dh->mem_base+tmp->r_offset))=sym;

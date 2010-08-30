@@ -1,0 +1,12 @@
+giftoppm was in libgr, but giftopnm is in netpbm
+--- mgetty-1.1.21/fax/faxspool.in.giftopnm	Mon Jul 24 02:48:23 2000
++++ mgetty-1.1.21/fax/faxspool.in	Mon Jul 24 02:48:40 2000
+@@ -174,7 +174,7 @@
+     REDUCE="cat"
+     test X$3 = X-n && REDUCE="pnmscale -yscale 0.5"
+ 
+-    giftoppm $1 |\
++    giftopnm $1 |\
+ 	pnmscale -xysize 1728 2000 |\
+ 	$REDUCE |\
+ 	ppmtopgm |\

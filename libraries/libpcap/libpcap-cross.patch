@@ -1,0 +1,11 @@
+--- libpcap-0.9.5/configure.cross	2008-03-14 00:14:35.000000000 +0100
++++ libpcap-0.9.5/configure	2008-03-14 00:14:21.000000000 +0100
+@@ -5849,7 +5849,7 @@
+  		if test "${ac_cv_linux_vers+set}" = set; then
+   echo $ECHO_N "(cached) $ECHO_C" >&6
+ else
+-  ac_cv_linux_vers=unknown
++  ac_cv_linux_vers=2
+ fi
+ 
+  	else

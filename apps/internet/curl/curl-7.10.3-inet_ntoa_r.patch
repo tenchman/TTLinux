@@ -1,0 +1,53 @@
+--- curl-7.10.3/lib/hostip.c.inet_ntoa_r	Mon Dec 16 12:41:27 2002
++++ curl-7.10.3/lib/hostip.c	Thu Feb  6 15:51:19 2003
+@@ -495,7 +495,7 @@
+   in.s_addr = htonl(num);
+ 
+ #if defined(HAVE_INET_NTOA_R)
+-  inet_ntoa_r(in,addr,addr_len);
++  inet_ntoa_r(in,addr);
+ #else
+   strncpy(addr,inet_ntoa(in),addr_len);
+ #endif
+--- curl-7.10.3/lib/ftp.c.inet_ntoa_r	Tue Jan  7 12:25:44 2003
++++ curl-7.10.3/lib/ftp.c	Thu Feb  6 15:51:19 2003
+@@ -942,7 +942,7 @@
+   infof(conn->data, "Connecting to %s (%s) port %u\n",
+         answer?answer->h_name:newhost,
+ #if defined(HAVE_INET_NTOA_R)
+-        inet_ntoa_r(in, ntoa_buf, sizeof(ntoa_buf)),
++        inet_ntoa_r(in, ntoa_buf),
+ #else
+         inet_ntoa(in),
+ #endif
+@@ -1300,7 +1300,7 @@
+ #ifdef HAVE_INET_NTOA_R
+     /* ignore the return code from inet_ntoa_r() as it is int or
+        char * depending on system */
+-    inet_ntoa_r(in, ntoa_buf, sizeof(ntoa_buf));
++    inet_ntoa_r(in, ntoa_buf);
+     sscanf( ntoa_buf, "%hu.%hu.%hu.%hu",
+             &ip[0], &ip[1], &ip[2], &ip[3]);
+ #else
+--- curl-7.10.3/lib/url.c.inet_ntoa_r	Fri Jan 10 17:19:32 2003
++++ curl-7.10.3/lib/url.c	Thu Feb  6 15:51:19 2003
+@@ -1660,7 +1660,7 @@
+     infof(data, "Connected to %s (%s) port %d\n",
+           hostaddr?hostaddr->h_name:"",
+ #if defined(HAVE_INET_NTOA_R)
+-          inet_ntoa_r(in, ntoa_buf, sizeof(ntoa_buf)),
++          inet_ntoa_r(in, ntoa_buf),
+ #else
+           inet_ntoa(in),
+ #endif
+--- curl-7.10.3/lib/if2ip.c.inet_ntoa_r	Tue Sep  3 13:53:00 2002
++++ curl-7.10.3/lib/if2ip.c	Thu Feb  6 15:51:19 2003
+@@ -109,7 +109,7 @@
+       struct sockaddr_in *s = (struct sockaddr_in *)&req.ifr_dstaddr;
+       memcpy(&in, &(s->sin_addr.s_addr), sizeof(in));
+ #if defined(HAVE_INET_NTOA_R)
+-      ip = inet_ntoa_r(in,buf,buf_size);
++      ip = inet_ntoa_r(in,buf);
+ #else
+       ip = strncpy(buf,inet_ntoa(in),buf_size);
+       ip[buf_size - 1] = 0;

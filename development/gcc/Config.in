@@ -1,0 +1,24 @@
+# vim:set syntax=kconfig:
+config CONFIG_GCC
+  bool "GCC - The GNU Compiler Collection. Includes C/C++ compilers (3.4.x)"
+  default y
+  help
+    The GNU Compiler Collection contains frontends for C, C++, Objective-C,
+    Fortran, Java, and Ada as well as libraries for these languages. It is
+    a full-featured ANSI C compiler with support for K&R C as well. GCC
+    provides many levels of source code error checking traditionally provided
+    by other tools (such as lint), produces debugging information, and can
+    perform many different optimizations to the resulting object code.
+
+    http://gcc.gnu.org/
+
+config CONFIG_GCC_CPLUSPLUS
+    bool "- C++ Support"
+    depends on CONFIG_GCC
+    default y
+
+config CONFIG_GCC_PASCAL
+    bool "- Pascal Support"
+    depends on CONFIG_GCC
+    default n
+

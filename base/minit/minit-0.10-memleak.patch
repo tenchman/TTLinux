@@ -1,0 +1,23 @@
+diff -up minit-0.10/minit.c.memleak minit-0.10/minit.c
+--- minit-0.10/minit.c.memleak	2009-01-13 15:51:03.000000000 +0100
++++ minit-0.10/minit.c	2009-01-13 16:22:31.000000000 +0100
+@@ -156,6 +156,10 @@ int loadservice(char *service) {
+   struct process tmp;
+   int fd;
+   if (*service==0) return -1;
++/*
++  if (service[0] == '/' && strncmp(MINITROOT, service, sizeof(MINITROOT)-1) == 0)
++    service += sizeof(MINITROOT);
++*/
+   fd=findservice(service);
+   if (fd>=0) {
+     checkopts(service, &root[fd], 1);
+@@ -411,6 +415,8 @@ int startservice(int service,int pause,i
+ 	  startservice(Service,0,service);
+       }
+       fchdir(dir);
++      free(deps);
++      free(s);
+     }
+     pid=startnodep(service,pause);
+ 

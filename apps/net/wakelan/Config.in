@@ -1,0 +1,9 @@
+config CONFIG_WAKELAN
+  bool "wakelan - Send a wake-on-lan packet"
+  default n
+  help
+    WakeLan sends a properly formatted UDP packet across the
+    network which will cause a wake-on-lan enabled computer to
+    power on.
+  
+    ftp://metalab.unc.edu/pub/Linux/system/network/misc/

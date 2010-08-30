@@ -1,0 +1,155 @@
+--- axTLS-1.1.0/httpd/main.c.setuid	2007-01-31 22:35:53.000000000 +0100
++++ axTLS-1.1.0/httpd/main.c	2007-02-06 20:40:30.000000000 +0100
+@@ -24,7 +24,7 @@
+ #include <sys/stat.h>
+ #include "axhttp.h"
+ 
+-struct serverstruct *servers;
++struct serverstruct *servers = NULL;
+ struct connstruct *usedconns;
+ struct connstruct *freeconns;
+ char *webroot = CONFIG_HTTP_WEBROOT;
+@@ -75,6 +75,11 @@
+         free(freeconns);
+         freeconns = tp;
+     }
++    
++#if defined(CONFIG_HTTP_HAS_CONFIG)
++    if (webroot != CONFIG_HTTP_WEBROOT)
++      free(webroot);
++#endif
+ 
+     exit(0);
+ }
+@@ -92,18 +97,15 @@
+     int rnum, wnum, active;
+     int webrootlen, i;
+     time_t currtime;
+-
++    int uid = 32767, gid = 32767;
++    int http_port = CONFIG_HTTP_PORT;
++    int http_https_port = CONFIG_HTTP_HTTPS_PORT;
++    char *tmp;
+ #ifdef WIN32
+     WORD wVersionRequested = MAKEWORD(2, 2);
+     WSADATA wsaData;
+     WSAStartup(wVersionRequested,&wsaData);
+ #else
+-    if (getuid() == 0)  /* change our uid if we are root */
+-    {
+-        setgid(32767);
+-        setuid(32767);
+-    }
+-
+     signal(SIGQUIT, die);
+     signal(SIGPIPE, SIG_IGN);
+ #if defined(CONFIG_HTTP_HAS_CGI)
+@@ -115,6 +117,19 @@
+     signal(SIGTERM, die);
+     mime_init();
+ 
++#if defined(CONFIG_HTTP_HAS_CONFIG)
++    if ((tmp = getenv("AXHTTPD_WEBROOT")))
++      webroot = strdup(tmp);
++    if ((tmp = getenv("AXHTTPD_HTTP_PORT")))
++      http_port = atoi(tmp);
++    if ((tmp = getenv("AXHTTPD_HTTPS_PORT")))
++      http_https_port = atoi(tmp);
++    if ((tmp = getenv("AXHTTPD_UID")))
++      uid = atoi(tmp);
++    if ((tmp = getenv("AXHTTPD_GID")))
++      gid = atoi(tmp);
++#endif
++
+     for (i = 0; i < INITIAL_CONNECTION_SLOTS; i++) 
+     {
+         tp = freeconns;
+@@ -135,30 +150,47 @@
+         exit(1);
+     }
+ 
+-    if ((active = openlistener(CONFIG_HTTP_PORT)) == -1) 
++    if (http_port)
+     {
++	if ((active = openlistener(http_port)) == -1) 
++	{
+ #ifdef CONFIG_HTTP_VERBOSE
+-        fprintf(stderr, "ERR: Couldn't bind to port %d\n",
+-                CONFIG_HTTP_PORT);
++	    fprintf(stderr, "ERR: Couldn't bind to port %d\n",
++		    http_port);
+ #endif
+-        exit(1);
++	    exit(1);
++	}
++	addtoservers(active);
+     }
+ 
+-    addtoservers(active);
+-
+-    if ((active = openlistener(CONFIG_HTTP_HTTPS_PORT)) == -1) 
++    if (http_https_port)
+     {
++	if ((active = openlistener(http_https_port)) == -1) 
++	{
+ #ifdef CONFIG_HTTP_VERBOSE
+-        fprintf(stderr, "ERR: Couldn't bind to port %d\n", 
+-                CONFIG_HTTP_HTTPS_PORT);
++	    fprintf(stderr, "ERR: Couldn't bind to port %d\n", 
++		    http_https_port);
+ #endif
+-        exit(1);
+-    }
+-
+-    addtoservers(active);
+-    servers->ssl_ctx = ssl_ctx_new(CONFIG_HTTP_DEFAULT_SSL_OPTIONS, 
++	    exit(1);
++	}
++	addtoservers(active);
++	servers->ssl_ctx = ssl_ctx_new(CONFIG_HTTP_DEFAULT_SSL_OPTIONS, 
+                                 CONFIG_HTTP_SESSION_CACHE_SIZE);
+-    servers->is_ssl = 1;
++	servers->is_ssl = 1;
++    }
++    
++    if (!servers) {
++#ifdef CONFIG_HTTP_VERBOSE
++	fprintf(stderr, "ERR: No server created\n");
++#endif
++	exit(1);
++    }
++    
++    if (getuid() == 0)  /* change our uid if we are root */
++    {
++        setgid(gid);
++        setuid(uid);
++    }
+ 
+ #if defined(CONFIG_HTTP_PERM_CHECK) 
+     procpermcheck(webroot);
+@@ -168,7 +200,7 @@
+ #endif
+ #if defined(CONFIG_HTTP_VERBOSE)
+     printf("axhttpd (%s): listening on ports %d (http) and %d (https)\n", 
+-            ssl_version(), CONFIG_HTTP_PORT, CONFIG_HTTP_HTTPS_PORT);
++            ssl_version(), http_port, http_https_port);
+     TTY_FLUSH();
+ #endif
+ #if defined(CONFIG_HTTP_IS_DAEMON)
+@@ -486,6 +518,7 @@
+     my_addr.sin_addr.s_addr = INADDR_ANY;
+ #else
+     struct sockaddr_in6 my_addr;
++    struct in6_addr anyaddr = IN6ADDR_ANY_INIT;
+ 
+     if ((sd = socket(AF_INET6, SOCK_STREAM, 0)) == -1) 
+         return -1;
+@@ -493,7 +526,7 @@
+     memset(&my_addr, 0, sizeof(my_addr));
+     my_addr.sin6_family = AF_INET6;
+     my_addr.sin6_port = htons(port);
+-    my_addr.sin6_addr.s_addr = INADDR_ANY;
++    my_addr.sin6_addr = anyaddr;
+ #endif
+ 
+     setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &tp, sizeof(tp));

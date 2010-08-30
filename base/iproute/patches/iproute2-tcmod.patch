@@ -1,0 +1,74 @@
+diff -up iproute2-2.6.35/tc/Makefile.tcmod iproute2-2.6.35/tc/Makefile
+--- iproute2-2.6.35/tc/Makefile.tcmod	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/tc/Makefile	2010-08-09 09:51:43.025930695 +0200
+@@ -44,6 +44,7 @@ TCMODULES += em_u32.o
+ TCMODULES += em_meta.o
+ 
+ TCSO :=
++TCSO += $(patsubst %.o, %.so, $(TCMODULES))
+ ifeq ($(TC_CONFIG_ATM),y)
+   TCSO += q_atm.so
+ endif
+@@ -63,7 +64,7 @@ else
+   endif
+ endif
+ 
+-TCOBJ += $(TCMODULES)
++TCOBJ += # $(TCMODULES)
+ LDLIBS += -L. -ltc -lm
+ 
+ ifeq ($(SHARED_LIBS),y)
+diff -up iproute2-2.6.35/tc/q_fifo.c.tcmod iproute2-2.6.35/tc/q_fifo.c
+--- iproute2-2.6.35/tc/q_fifo.c.tcmod	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/tc/q_fifo.c	2010-08-09 09:50:10.566930439 +0200
+@@ -76,6 +76,23 @@ static int fifo_print_opt(struct qdisc_u
+ 	return 0;
+ }
+ 
++static int prio_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt)
++{
++	int i;
++	struct tc_prio_qopt *qopt;
++
++	if (opt == NULL)
++		return 0;
++
++	if (RTA_PAYLOAD(opt)  < sizeof(*qopt))
++		return -1;
++	qopt = RTA_DATA(opt);
++	fprintf(f, "bands %u priomap ", qopt->bands);
++	for (i=0; i<=TC_PRIO_MAX; i++)
++		fprintf(f, " %d", qopt->priomap[i]);
++	return 0;
++}
++
+ 
+ struct qdisc_util bfifo_qdisc_util = {
+ 	.id = "bfifo",
+@@ -95,8 +112,8 @@ struct qdisc_util pfifo_head_drop_qdisc_
+ 	.print_qopt = fifo_print_opt,
+ };
+ 
+-extern int prio_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt);
+ struct qdisc_util pfifo_fast_qdisc_util = {
+ 	.id = "pfifo_fast",
++	.parse_qopt = NULL,
+ 	.print_qopt = prio_print_opt,
+ };
+diff -up iproute2-2.6.35/tc/q_prio.c.tcmod iproute2-2.6.35/tc/q_prio.c
+--- iproute2-2.6.35/tc/q_prio.c.tcmod	2010-08-04 19:45:59.000000000 +0200
++++ iproute2-2.6.35/tc/q_prio.c	2010-08-09 09:50:10.566930439 +0200
+@@ -109,11 +109,11 @@ int prio_print_opt(struct qdisc_util *qu
+ 	fprintf(f, "bands %u priomap ", qopt->bands);
+ 	for (i=0; i<=TC_PRIO_MAX; i++)
+ 		fprintf(f, " %d", qopt->priomap[i]);
+-
++#if 0
+ 	if (tb[TCA_PRIO_MQ])
+ 		fprintf(f, " multiqueue: %s ",
+ 		    *(unsigned char *)RTA_DATA(tb[TCA_PRIO_MQ]) ? "on" : "off");
+-
++#endif
+ 	return 0;
+ }
+ 

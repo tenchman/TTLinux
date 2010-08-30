@@ -1,0 +1,102 @@
+--- lilo-22.7.2/Makefile.diet	2006-08-02 19:41:52.000000000 +0200
++++ lilo-22.7.2/Makefile	2006-08-02 19:41:52.000000000 +0200
+@@ -155,9 +155,9 @@
+ # everything needed to run, just short of installation
+ #
+ all:	lilo bootsect.b diag1.img # OBSOLETE:  $(BOOTS) edit dparam.com activate
+-	if [ -x /usr/bin/bcc -o -x /usr/local/bin/bcc ]; then \
+-		make diagnostic; \
+-		make dosexe; fi
++#	if [ -x /usr/bin/bcc -o -x /usr/local/bin/bcc ]; then \
++#		make diagnostic; \
++#		make dosexe; fi
+ 
+ #
+ # everything above plus the statically linked version
+@@ -410,16 +410,16 @@
+ #  normal install, but doesn't make the diagnostic binaries
+ #
+ install:  all
+-	if [ ! -d $$ROOT$(SBIN_DIR) ]; then mkdir $$ROOT$(SBIN_DIR); fi
+-	if [ ! -d $$ROOT$(CFG_DIR) ]; then mkdir $$ROOT$(CFG_DIR); fi
+-	if [ ! -d $$ROOT$(BOOT_DIR) ]; then mkdir $$ROOT$(BOOT_DIR); fi
++	if [ ! -d $$ROOT$(SBIN_DIR) ]; then mkdir -p $$ROOT$(SBIN_DIR); fi
++	if [ ! -d $$ROOT$(CFG_DIR) ]; then mkdir -p $$ROOT$(CFG_DIR); fi
++	if [ ! -d $$ROOT$(BOOT_DIR) ]; then mkdir -p $$ROOT$(BOOT_DIR); fi
+ 	if [ ! -d $$ROOT$(USRSBIN_DIR) ]; then \
+ 	  mkdir -p $$ROOT$(USRSBIN_DIR); fi
+-	if [ ! -d $$ROOT$(MAN_DIR) ]; then mkdir $$ROOT$(MAN_DIR); fi  
++	if [ ! -d $$ROOT$(MAN_DIR) ]; then mkdir -p $$ROOT$(MAN_DIR); fi  
+ 	if [ ! -d $$ROOT$(MAN_DIR)/man5 ]; then \
+-	  mkdir $$ROOT$(MAN_DIR)/man5; fi  
++	  mkdir -p $$ROOT$(MAN_DIR)/man5; fi  
+ 	if [ ! -d $$ROOT$(MAN_DIR)/man8 ]; then \
+-	  mkdir $$ROOT$(MAN_DIR)/man8; fi  
++	  mkdir -p $$ROOT$(MAN_DIR)/man8; fi  
+ 	if [ -f diag1.img ]; then \
+ 	  cp -f diag1.img $$ROOT$(BOOT_DIR); fi
+ 	if [ -f diag2.img ]; then \
+--- lilo-22.7.2/partition.c.diet	2006-08-02 19:49:40.000000000 +0200
++++ lilo-22.7.2/partition.c	2006-08-02 19:50:57.000000000 +0200
+@@ -31,6 +31,7 @@
+ #include "boot.h"
+ #include "loader.h"
+ 
++#ifndef __dietlibc__
+ #if __GLIBC__ < 2 || __GLIBC_MINOR__ < 1
+ #if defined(_syscall5) && defined(__NR__llseek)
+        
+@@ -54,6 +55,7 @@
+ # define lseek64 lseek
+ #endif
+ #endif
++#endif
+ 
+ static
+ int anywhere(void *buf, char *str)
+--- lilo-22.7.2/partition.h.diet	2006-08-02 19:45:34.000000000 +0200
++++ lilo-22.7.2/partition.h	2006-08-02 19:46:27.000000000 +0200
+@@ -30,6 +30,7 @@
+ 
+ #define LLSECTORSIZE ((long long)SECTOR_SIZE)
+ 
++#ifndef __dietlibc__
+ #if __GLIBC__ < 2 || __GLIBC_MINOR__ < 1
+ typedef long long lloff_t;
+ 
+@@ -37,6 +38,7 @@
+        lloff_t lseek64(unsigned int fd, lloff_t offs, unsigned int whence);
+ #endif
+ #endif
++#endif
+ 
+ struct partition {
+ 	unsigned char boot_ind;		/* 0x80 - active */
+--- lilo-22.7.2/lilo.c.diet	2006-08-02 19:46:56.000000000 +0200
++++ lilo-22.7.2/lilo.c	2006-08-02 19:48:07.000000000 +0200
+@@ -758,7 +758,11 @@
+ }
+ #endif
+ 		printf("\nCFLAGS = " CFLAGS "\n");
++#ifdef __dietlibc__
++		printf("\ndietlibc\n");
++#else
+ 		printf("\nglibc version %d.%d\n", __GLIBC__, __GLIBC_MINOR__);
++#endif
+ 		printf("Kernel Headers included from  %d.%d.%d\n",
+ 			LINUX_VERSION_CODE>>16,
+ 			LINUX_VERSION_CODE>>8 & 255,
+--- lilo-22.7.2/config.h.diet	2006-08-02 19:42:37.000000000 +0200
++++ lilo-22.7.2/config.h	2006-08-02 19:45:08.000000000 +0200
+@@ -14,9 +14,11 @@
+ #define CONFIG_H
+ 
+ #if !__MSDOS__
++#if !defined(__dietlibc__)
+ #if !defined(__GLIBC__) || (__GLIBC__ < 2) || \
+ 	 !defined(__GLIBC_MINOR__) || (__GLIBC_MINOR__ < 1)
+ # warning "glibc version 2.1 or later is recommended"
++#endif
+ #endif /* !__MSDOS__ */
+ 
+ #define TMP_DEV     "/tmp/dev.%d" /* temporary devices are created here */

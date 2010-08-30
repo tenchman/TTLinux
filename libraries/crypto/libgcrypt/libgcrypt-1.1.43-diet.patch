@@ -1,0 +1,22 @@
+--- libgcrypt-1.1.43/src/ath.h.diet	2003-08-28 16:03:25.000000000 +0200
++++ libgcrypt-1.1.43/src/ath.h	2003-10-02 19:29:49.000000000 +0200
+@@ -22,6 +22,8 @@
+ #define ATH_H
+ 
+ #include <sys/types.h>
++#include <sys/select.h>
++#include <sys/time.h>
+ #include <sys/socket.h>
+ 
+ 
+--- libgcrypt-1.1.43/src/libgcrypt-config.in.diet	2003-10-02 19:37:18.000000000 +0200
++++ libgcrypt-1.1.43/src/libgcrypt-config.in	2003-10-02 19:39:09.000000000 +0200
+@@ -18,7 +18,7 @@
+ gpg_error_cflags="@GPG_ERROR_CFLAGS@"
+ 
+ # LIBS values.
+-libs="@LIBGCRYPT_CONFIG_LIBS@"
++libs="@LIBGCRYPT_CONFIG_LIBS@ @GPG_ERROR_LIBS@"
+ libs_pthread="@LIBGCRYPT_CONFIG_LIBS_PTHREAD@"
+ libs_pth="@LIBGCRYPT_CONFIG_LIBS_PTH@"
+ 

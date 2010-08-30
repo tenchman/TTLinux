@@ -1,0 +1,11 @@
+# vim:set syntax=kconfig:
+config CONFIG_OCFS2
+  select CONFIG_E2FSPROGS
+  bool "ocfs2-tools - OCFS2 userland tools. (Oracle Cluster FileSystem)"
+  select CONFIG_LIBCOMERR
+  default n
+  help
+    OCFS2 is a general purpose extent based shared disk cluster file
+    system with many similarities to ext3.
+
+    http://oss.oracle.com/projects/ocfs2-tools/

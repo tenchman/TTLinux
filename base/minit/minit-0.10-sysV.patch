@@ -1,0 +1,277 @@
+--- minit-0.10/minit.c.sysV	2006-08-17 09:38:28.000000000 +0200
++++ minit-0.10/minit.c	2006-08-17 09:38:28.000000000 +0200
+@@ -123,6 +123,33 @@
+   return maxprocess;
+ }
+ 
++int checkopts(char *service, struct process *srv, int ret) {
++  int fd;
++
++  
++  if (!service || !srv) return -1;
++
++  if (ret && (chdir(MINITROOT) || chdir(service))) return -1;
++  fd=open("respawn",O_RDONLY);
++  if (fd>=0) {
++    srv->respawn=1;
++    close(fd);
++  } else
++    srv->respawn=0;
++  fd=open("sysV",O_RDONLY);
++  if (fd>=0) {
++    srv->sysV=1;
++    srv->respawn=0;	/* reset respawn flag */
++    close(fd);
++  } else
++    srv->sysV=0;
++
++  if(ret)
++    chdir(MINITROOT);
++
++  return 0;
++}
++
+ /* load a service into the process data structure and return index or -1
+  * if failed */
+ int loadservice(char *service) {
+@@ -130,16 +157,15 @@
+   int fd;
+   if (*service==0) return -1;
+   fd=findservice(service);
+-  if (fd>=0) return fd;
++  if (fd>=0) {
++    checkopts(service, &root[fd], 1);
++    return fd;
++  }
+   if (chdir(MINITROOT) || chdir(service)) return -1;
+   if (!(tmp.name=strdup(service))) return -1;
+   tmp.pid=0;
+-  fd=open("respawn",O_RDONLY);
+-  if (fd>=0) {
+-    tmp.respawn=1;
+-    close(fd);
+-  } else
+-    tmp.respawn=0;
++  checkopts(service, &tmp, 0);
++
+   tmp.startedat=0;
+   tmp.circular=0;
+   tmp.__stdin=0; tmp.__stdout=1;
+@@ -214,6 +240,7 @@
+   char *s=0;
+   int argc;
+   char *argv0=0;
++  int logfd;
+ again:
+   switch (p=fork()) {
+   case (pid_t)-1:
+@@ -240,6 +267,10 @@
+     if (!openreadclose("params",&s,&len)) {
+       argv=split(s,'\n',&argc,2,1);
+       if (argv[argc-1]) argv[argc-1]=0; else argv[argc]=0;
++    } else if (root[service].sysV) {
++      argv=(char**)alloca(3*sizeof(char*));
++      argv[1] = (root[service].pid == 0) ? "start" : "stop";
++      argv[2]=0;
+     } else {
+       argv=(char**)alloca(2*sizeof(char*));
+       argv[1]=0;
+@@ -270,6 +301,7 @@
+       int i;
+       for (i=3; i<1024; ++i) close(i);
+     }
++      
+     execve(argv0,argv,environ);
+     _exit(1);	
+   default:
+@@ -280,6 +312,9 @@
+       p2=waitpid(p,0,0);
+       return 1;
+     }
++    if(root[service].sysV)	/* return dummy pid */
++      return 1;
++
+     return p;
+   }
+ }
+@@ -312,6 +347,20 @@
+   return rc;
+ }
+ 
++int shutdownsysV(int service) {
++  int fd, rc = 0;
++
++  if (service<0) return 0;
++  if (chdir(MINITROOT) || chdir(root[service].name)) return -1;
++
++  rc = forkandexec(0,service);
++  root[service].pid = 0;
++
++  chdir(MINITROOT);
++
++  return rc;
++}
++
+ int startservice(int service,int pause,int father) {
+   int dir=-1;
+   unsigned long len;
+@@ -618,7 +667,8 @@
+ 	    root[idx].respawn=0;
+ 	    goto ok;
+ 	  case 'R':
+-	    root[idx].respawn=1;
++	    if(!root[idx].sysV)
++	      root[idx].respawn=1;
+ 	    goto ok;
+ 	  case 'C':
+ 	    if (kill(root[idx].pid,0)) {	/* check if still active */
+@@ -639,6 +689,16 @@
+ 	    }
+ 	    root[idx].pid=tmp;
+ 	    goto ok;
++	  case 'V':	/* shutdown sysV services */
++	    idx=loadservice(buf+1);
++	    char *res = "0";
++	    if (idx<0) goto error;
++	    if(root[idx].sysV) {
++	      if(shutdownsysV(idx) == 1)
++	        res = "1";
++	    }
++	    write(outfd, res, 1);
++            break;
+ 	  case 's':
+ 	    idx=loadservice(buf+1);
+ 	    if (idx<0) goto error;
+@@ -654,6 +714,9 @@
+ ok:
+ 	    write(outfd,"1",1);
+ 	    break;
++	  case 't':	/* service type (1 = sysV; 0 otherwise) */
++	    write(outfd,buf,fmt_ulong(buf,root[idx].sysV ? 1 : 0));
++	    break;
+ 	  case 'u':
+ 	    write(outfd,buf,fmt_ulong(buf,time(0)-root[idx].startedat));
+ 	    break;
+--- minit-0.10/shutdown.c.sysV	2006-08-17 09:38:28.000000000 +0200
++++ minit-0.10/shutdown.c	2006-08-17 09:38:28.000000000 +0200
+@@ -127,6 +127,18 @@
+   return 0;
+ }
+ 
++int shutdown_hook(char *service) {
++  char rpath[1024];
++
++  if (!service || !*service) return 0;
++  strcpy(rpath, MINITROOT);
++  strcat(rpath,"/");
++  strcat(rpath,service);
++  strcat(rpath,"/run");
++
++  return exec_cmd(rpath, "run", (char *) 0);
++}
++
+ int minit_shutdown(int level) {
+   int retval;
+   char *pipeinpath = NULL, *pipeoutpath = NULL;
+@@ -144,6 +156,10 @@
+     }  
+   }
+ 
++  /* execute run link in reboot */
++  if(shutdown_hook(level?"halt":"reboot") != 0)
++    __write2("failed to execute shutdown hook\n");
++
+   retval=minit_serviceDown(level?"halt":"reboot");
+   close(infd); close(outfd);
+   return retval;
+--- minit-0.10/minit.h.sysV	2006-08-17 09:38:28.000000000 +0200
++++ minit-0.10/minit.h	2006-08-17 09:38:28.000000000 +0200
+@@ -7,6 +7,7 @@
+ /*  char **argv; */
+   pid_t pid;
+   char respawn;
++  char sysV;
+   char circular;
+   time_t startedat;
+   int father;	/* the service who started me or -1 if I was started directly */
+--- minit-0.10/msvc.c.sysV	2006-08-17 09:38:28.000000000 +0200
++++ minit-0.10/msvc.c	2006-08-17 09:45:47.000000000 +0200
+@@ -43,6 +43,25 @@
+   return atoi(buf);
+ }
+ 
++/* get service type information */
++pid_t __servicetype(char *service) {
++  int len;
++  buf[0]='t';
++  len=addreadwrite(service);
++  if (len<0) return 0;
++  buf[len]=0;
++  return atoi(buf);
++}
++
++int killsysV(char *service) {
++  int len;
++  buf[0]='V';
++  len=addreadwrite(service);
++  if (len<0) return 0;
++  buf[len]=0;
++  return atoi(buf);
++}
++
+ /* return nonzero if error */
+ int respawn(char *service,int yesno) {
+   int len;
+@@ -174,6 +193,8 @@
+ 	" -u\tup; start service with respawn\n"
+ 	" -o\tonce; start service without respawn\n"
+ 	" -d\tdown; disable respawn, stop service\n"
++	" -r\tdown; stop service, start service without respawn\n"
++	" -R\tdown; stop service, start service with respawn\n"
+ 	" -p\tpause; send SIGSTOP\n"
+ 	" -c\tcontinue; send SIGCONT\n"
+ 	" -h\thangup; send SIGHUP\n"
+@@ -242,7 +263,10 @@
+ 	case 'g':
+ 	  for (i=2; i<argc; ++i) {
+ 	    pid=__readpid(argv[i]);
+-	    if (pid<2) {
++	    if(__servicetype(argv[i]) == 1) {	/* sysV services */
++	      carp(argv[i],pid==1? ": service is running" : ": service terminated");
++	      if(!pid) ret = 1;
++	    } else if (pid<2) {
+ 	      carp(argv[i],pid==1?": service terminated":": no such service");
+ 	      ret=1;
+ 	    } else {
+@@ -267,21 +291,26 @@
+ 	      ret=1;
+ 	    }
+ 	  break;
++	case 'r':	/* restart once */
++	case 'R':	/* restart respawn */
+ 	case 'd':
+ 	  for (i=2; i<argc; ++i) {
+ 	    pid=__readpid(argv[i]);
+ 	    if (pid==0) {
+ 	      carp(argv[i],": no such service");
+ 	      ret=1;
+-	    } else if (pid==1)
+-	      continue;
+-	    else
++	    } else if (pid==1) {
++	      if(killsysV(argv[i]) != 1)
++	        carp("Could not stop ", argv[i]);
++	    } else
+ 	      respawn(argv[i],0) || kill(pid,SIGTERM) || kill(pid,SIGCONT);
+ 	  }
+-	  break;
++	  if((argv[1][1]) == 'd')	/* omit break in case of restart */
++	    break;
+ 	case 'u':
++	  ret = 0;	/* reinit retval for restart command */
+ 	  for (i=2; i<argc; ++i)
+-	    if (startservice(argv[i]) || respawn(argv[i],1)) {
++	    if (startservice(argv[i])) {
+ 	      carp("Could not start ",argv[i]);
+ 	      ret=1;
+ 	    }

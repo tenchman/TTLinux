@@ -1,0 +1,33 @@
+--- cyassl-1.2.0/Makefile.in.install	2009-11-02 21:06:24.000000000 +0100
++++ cyassl-1.2.0/Makefile.in	2010-01-05 20:01:26.000000000 +0100
+@@ -640,18 +640,20 @@ basic:
+ 	cd src; make; cd ../testsuite; make; cd ../
+ 
+ openssl-links:
+-	cd lib; ln -s ../src/.libs/libcyassl.a libcrypto.a; \
+-    ln -s ../src/.libs/libcyassl.a libssl.a; \
+-    ln -s ../src/.libs/libcyassl.a libcyassl.a; cd ../
++	cd lib; \
++	ln -s ../src/.libs/libcyassl.a libcrypto.a; \
++	ln -s ../src/.libs/libcyassl.a libssl.a; \
++	ln -s ../src/.libs/libcyassl.a libcyassl.a; cd ../
+ 
+ install:
+-	mkdir /usr/local/cyassl; \
+-    mkdir /usr/local/cyassl/include; \
+-    mkdir /usr/local/cyassl/include/openssl; \
+-    cp include/openssl/*.h /usr/local/cyassl/include/openssl; \
+-    make openssl-links; \
+-    mkdir /usr/local/cyassl/lib; \
+-    cp lib/*.a /usr/local/cyassl/lib
++	mkdir -p $(DESTDIR)$(pkgincludedir)/openssl; \
++    	cp include/openssl/*.h $(DESTDIR)$(pkgincludedir)/openssl; \
++    	mkdir $(DESTDIR)$(pkglibdir); \
++    	cp src/.libs/*.a $(DESTDIR)$(pkglibdir)
++	pushd $(DESTDIR)$(pkglibdir); \
++	  ln -s libcyassl.a libcrypto.a; \
++	  ln -s libcyassl.a libssl.a; \
++	popd
+ # Tell versions [3.59,3.63) of GNU make to not export all variables.
+ # Otherwise a system limit (for SysV at least) may be exceeded.
+ .NOEXPORT:

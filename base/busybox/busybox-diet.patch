@@ -1,0 +1,132 @@
+diff -up busybox-1.13.4/coreutils/stat.c.diet busybox-1.13.4/coreutils/stat.c
+--- busybox-1.13.4/coreutils/stat.c.diet	2008-11-09 18:28:07.000000000 +0100
++++ busybox-1.13.4/coreutils/stat.c	2009-06-03 12:34:34.000000000 +0200
+@@ -41,9 +41,15 @@ static const char *file_type(const struc
+ 	if (S_ISFIFO(st->st_mode)) return "fifo";
+ 	if (S_ISLNK(st->st_mode))  return "symbolic link";
+ 	if (S_ISSOCK(st->st_mode)) return "socket";
++#ifdef S_TYPEISMQ
+ 	if (S_TYPEISMQ(st))        return "message queue";
++#endif
++#ifdef S_TYPEISSEM
+ 	if (S_TYPEISSEM(st))       return "semaphore";
++#endif
++#ifdef S_TYPEISSHM
+ 	if (S_TYPEISSHM(st))       return "shared memory object";
++#endif
+ #ifdef S_TYPEISTMO
+ 	if (S_TYPEISTMO(st))       return "typed memory object";
+ #endif
+diff -up busybox-1.13.4/include/libbb.h.diet busybox-1.13.4/include/libbb.h
+--- busybox-1.13.4/include/libbb.h.diet	2009-04-15 02:09:42.000000000 +0200
++++ busybox-1.13.4/include/libbb.h	2009-06-03 12:36:32.000000000 +0200
+@@ -34,6 +34,7 @@
+ #include <sys/types.h>
+ #include <sys/wait.h>
+ #include <termios.h>
++#include <netinet/in.h>
+ #include <time.h>
+ #include <unistd.h>
+ #include <utime.h>
+@@ -78,8 +79,8 @@
+ /* Some libc's forget to declare these, do it ourself */
+ 
+ extern char **environ;
+-#if defined(__GLIBC__) && __GLIBC__ < 2
+-int vdprintf(int d, const char *format, va_list ap);
++#if (defined(__GLIBC__) && __GLIBC__ < 2) || defined(__dietlibc__)
++int vdprintf(int d, const char *format, va_list ap) FAST_FUNC;
+ #endif
+ /* klogctl is in libc's klog.h, but we cheat and not #include that */
+ int klogctl(int type, char *b, int len);
+@@ -646,7 +647,7 @@ void qsort_string_vector(char **sv, unsi
+  * On other errors complains [perror("poll")] and returns.
+  * Warning! May take (much) longer than timeout_ms to return!
+  * If this is a problem, use bare poll and open-code EINTR/ENOMEM handling */
+-int safe_poll(struct pollfd *ufds, nfds_t nfds, int timeout_ms) FAST_FUNC;
++int safe_poll(struct pollfd *ufds, unsigned int nfds, int timeout_ms) FAST_FUNC;
+ 
+ char *safe_gethostname(void) FAST_FUNC;
+ char *safe_getdomainname(void) FAST_FUNC;
+diff -up busybox-1.13.4/libbb/safe_poll.c.diet busybox-1.13.4/libbb/safe_poll.c
+--- busybox-1.13.4/libbb/safe_poll.c.diet	2008-11-09 18:28:09.000000000 +0100
++++ busybox-1.13.4/libbb/safe_poll.c	2009-06-03 12:34:34.000000000 +0200
+@@ -12,7 +12,7 @@
+ /* Wrapper which restarts poll on EINTR or ENOMEM.
+  * On other errors does perror("poll") and returns.
+  * Warning! May take longer than timeout_ms to return! */
+-int FAST_FUNC safe_poll(struct pollfd *ufds, nfds_t nfds, int timeout)
++int FAST_FUNC safe_poll(struct pollfd *ufds, unsigned int nfds, int timeout)
+ {
+ 	while (1) {
+ 		int n = poll(ufds, nfds, timeout);
+diff -up busybox-1.13.4/libbb/setup_environment.c.diet busybox-1.13.4/libbb/setup_environment.c
+--- busybox-1.13.4/libbb/setup_environment.c.diet	2008-11-09 18:28:09.000000000 +0100
++++ busybox-1.13.4/libbb/setup_environment.c	2009-06-03 12:34:34.000000000 +0200
+@@ -29,6 +29,7 @@
+  */
+ 
+ #include "libbb.h"
++extern char** environ;
+ 
+ void FAST_FUNC setup_environment(const char *shell, int clear_env, int change_env, const struct passwd *pw)
+ {
+@@ -45,7 +46,7 @@ void FAST_FUNC setup_environment(const c
+ 		/* Leave TERM unchanged. Set HOME, SHELL, USER, LOGNAME, PATH.
+ 		   Unset all other environment variables.  */
+ 		term = getenv("TERM");
+-		clearenv();
++		if (environ) environ[0] = NULL;
+ 		if (term)
+ 			xsetenv("TERM", term);
+ 		xsetenv("PATH", (pw->pw_uid ? bb_default_path : bb_default_root_path));
+diff -up busybox-1.13.4/libbb/vdprintf.c.diet busybox-1.13.4/libbb/vdprintf.c
+--- busybox-1.13.4/libbb/vdprintf.c.diet	2008-11-09 18:28:09.000000000 +0100
++++ busybox-1.13.4/libbb/vdprintf.c	2009-06-03 12:34:34.000000000 +0200
+@@ -9,7 +9,7 @@
+ 
+ #include "libbb.h"
+ 
+-#if defined(__GLIBC__) && __GLIBC__ < 2
++#if (defined(__GLIBC__) && (__GLIBC__ < 2)) || defined(__dietlibc__)
+ int FAST_FUNC vdprintf(int d, const char *format, va_list ap)
+ {
+ 	char buf[BUF_SIZE];
+diff -up busybox-1.13.4/libpwdgrp/pwd_grp.c.diet busybox-1.13.4/libpwdgrp/pwd_grp.c
+--- busybox-1.13.4/libpwdgrp/pwd_grp.c.diet	2008-11-09 18:28:19.000000000 +0100
++++ busybox-1.13.4/libpwdgrp/pwd_grp.c	2009-06-03 12:34:34.000000000 +0200
+@@ -21,6 +21,7 @@
+ #include "libbb.h"
+ #include <features.h>
+ #include <assert.h>
++#include <shadow.h>
+ 
+ #ifndef _PATH_SHADOW
+ #define	_PATH_SHADOW	"/etc/shadow"
+@@ -128,6 +129,7 @@ static struct statics *get_S(void)
+  */
+ /**********************************************************************/
+ 
++#ifndef __dietlibc__
+ int fgetpwent_r(FILE *__restrict stream, struct passwd *__restrict resultbuf,
+ 				char *__restrict buffer, size_t buflen,
+ 				struct passwd **__restrict result)
+@@ -143,6 +145,7 @@ int fgetpwent_r(FILE *__restrict stream,
+ 
+ 	return rv;
+ }
++#endif
+ 
+ int fgetgrent_r(FILE *__restrict stream, struct group *__restrict resultbuf,
+ 				char *__restrict buffer, size_t buflen,
+diff -up busybox-1.13.4/networking/arping.c.diet busybox-1.13.4/networking/arping.c
+--- busybox-1.13.4/networking/arping.c.diet	2008-12-31 04:06:45.000000000 +0100
++++ busybox-1.13.4/networking/arping.c	2009-06-03 12:34:34.000000000 +0200
+@@ -10,6 +10,7 @@
+ 
+ #include <arpa/inet.h>
+ #include <net/if.h>
++#include <net/if_arp.h>
+ #include <netinet/ether.h>
+ #include <netpacket/packet.h>
+ 

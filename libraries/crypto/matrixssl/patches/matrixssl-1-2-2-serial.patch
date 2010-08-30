@@ -1,0 +1,20 @@
+--- matrixssl-1-2-2/src/crypto/peersec/asn1.c.serial	2004-10-19 10:58:05.637258392 +0200
++++ matrixssl-1-2-2/src/crypto/peersec/asn1.c	2004-10-19 11:07:13.530965888 +0200
+@@ -57,6 +57,7 @@
+ 						   DNattributes_t *attribs);
+ #endif /* USE_X509 */
+ 
++#define ATTRIB_SERIAL_NUMBER	5
+ #define ATTRIB_COUNTRY_NAME		6
+ #define ATTRIB_LOCALITY			7
+ #define ATTRIB_ORGANIZATION		10
+@@ -645,6 +646,9 @@
+ 				}
+ 				attribs->commonName = stringOut;
+ 				break;
++			case ATTRIB_SERIAL_NUMBER:
++				psFree(stringOut);
++				break;
+ /*
+ 			Not a MUST support
+ */

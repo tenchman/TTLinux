@@ -1,0 +1,13 @@
+Eek!  We don't create a phone group by default.  Use the uucp group, which
+owns the serial ports.
+--- mgetty-1.1.25/voice/voice.conf-dist.voiceconfig	Tue Mar 20 18:24:12 2001
++++ mgetty-1.1.25/voice/voice.conf-dist	Tue Mar 20 18:24:20 2001
+@@ -51,7 +51,7 @@
+ #
+ 
+ phone_owner root
+-phone_group phone
++phone_group uucp
+ phone_mode 0660
+ 
+ #

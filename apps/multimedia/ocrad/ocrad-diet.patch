@@ -1,0 +1,11 @@
+--- ocrad-0.14/rational.cc.diet	2006-02-16 12:10:01.000000000 +0100
++++ ocrad-0.14/rational.cc	2006-02-16 12:10:19.000000000 +0100
+@@ -209,7 +209,7 @@
+   bool trunc = false;
+   if( prec < 0 ) { trunc = true; prec = -prec; }
+ 
+-  index += std::snprintf( buf, bufsize, "%*d", iwidth, num / den );
++  index += snprintf( buf, bufsize, "%*d", iwidth, num / den );
+   long long rest = std::abs( num ) % den;
+   if( index < bufsize - 1 && prec > 0 && ( rest > 0 || !trunc ) )
+     {

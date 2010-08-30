@@ -1,0 +1,5 @@
+config CONFIG_BZIP2
+  bool "bzip2 - A high-quality data compressor"
+  default n
+  help
+    http://www.bzip.org/

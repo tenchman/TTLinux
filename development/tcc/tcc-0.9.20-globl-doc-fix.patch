@@ -1,0 +1,24 @@
+diff -Naur tcc-0.9.20.orig/tcc-doc.html tcc-0.9.20/tcc-doc.html
+--- tcc-0.9.20.orig/tcc-doc.html	2003-10-05 12:23:48.000000000 +0200
++++ tcc-0.9.20/tcc-doc.html	2004-08-05 14:21:28.996627088 +0200
+@@ -784,7 +784,7 @@
+ 
+ <LI>.string string
+ 
+-<LI>.global symbol
++<LI>.globl symbol
+ 
+ <LI>.section section
+ 
+diff -Naur tcc-0.9.20.orig/tcc-doc.texi tcc-0.9.20/tcc-doc.texi
+--- tcc-0.9.20.orig/tcc-doc.texi	2003-10-05 12:23:48.000000000 +0200
++++ tcc-0.9.20/tcc-doc.texi	2004-08-05 14:21:40.715845496 +0200
+@@ -604,7 +604,7 @@
+ @item .int value1[,value2...]
+ @item .long value1[,value2...]
+ @item .string string
+address@hidden .global symbol
+address@hidden .globl symbol
+ @item .section section
+ @item .text
+ @item .data

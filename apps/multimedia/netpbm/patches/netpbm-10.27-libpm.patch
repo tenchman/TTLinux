@@ -1,0 +1,19 @@
+--- netpbm-10.27/lib/libpm.c.bmptopnm	2005-05-09 09:00:44.695880392 +0200
++++ netpbm-10.27/lib/libpm.c	2005-05-09 09:04:51.783317392 +0200
+@@ -964,6 +964,7 @@ pm_readbigshort(FILE *  const ifP, 
+     if (c == EOF)
+         abortWithReadError(ifP);
+     s = (c & 0xff) << 8;
++
+     c = getc(ifP);
+     if (c == EOF)
+         abortWithReadError(ifP);
+@@ -1043,6 +1044,8 @@ pm_readlittleshort(FILE *  const ifP, 
+     if (c == EOF)
+         abortWithReadError(ifP);
+     s = c & 0xff;
++
++    c = getc(ifP);
+     if (c == EOF)
+         abortWithReadError(ifP);
+     s |= (c & 0xff) << 8;

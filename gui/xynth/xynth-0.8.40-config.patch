@@ -1,0 +1,20 @@
+--- xynth-0.8.40/Makefile.cfg.config	2006-09-06 12:48:59.000000000 +0200
++++ xynth-0.8.40/Makefile.cfg	2007-05-02 20:23:31.000000000 +0200
+@@ -33,7 +33,7 @@
+ VIDEO_VESA      = Y
+ VIDEO_SVGALib   = N
+ VIDEO_FBDev     = Y
+-VIDEO_SDL       = Y
++VIDEO_SDL       = N
+ VIDEO_PSPDEV    = N
+ VIDEO_GDI       = N
+ VIDEO_GP2X      = N
+@@ -93,7 +93,7 @@
+ DEMO_MINES      = Y
+ DEMO_WIDGET     = Y
+ 
+-CFLAGS += -Wall -Wparentheses -pipe -fsigned-char -DREENTRANT
++CFLAGS += -Wall -Wparentheses -pipe -fsigned-char -D_REENTRANT
+ 
+ # Debug
+ CFLAGS += -g

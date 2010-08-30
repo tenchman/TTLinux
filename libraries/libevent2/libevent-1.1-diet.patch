@@ -1,0 +1,295 @@
+--- libevent-1.1b/test/bench.c.diet	2006-08-10 03:01:13.000000000 +0200
++++ libevent-1.1b/test/bench.c	2006-08-13 19:27:34.000000000 +0200
+@@ -64,7 +64,7 @@
+ read_cb(int fd, short which, void *arg)
+ {
+ 	int idx = (int) arg, widx = idx + 1;
+-	u_char ch;
++	unsigned char ch;
+ 
+ 	count += read(fd, &ch, sizeof(ch));
+ 	if (writes) {
+--- libevent-1.1b/log.c.diet	2006-08-10 03:01:14.000000000 +0200
++++ libevent-1.1b/log.c	2006-08-13 19:27:34.000000000 +0200
+@@ -57,12 +57,17 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <stdarg.h>
++#include <unistd.h>
+ #include <string.h>
+ #include <errno.h>
+ #include "event.h"
+ 
+ #include "log.h"
+ 
++#ifdef __dietlibc__
++extern size_t small_vsnprintf(char *str, size_t size, const char *format, va_list ap);
++#endif
++
+ static void _warn_helper(int severity, int log_errno, const char *fmt,
+                          va_list ap);
+ static void event_log(int severity, const char *msg);
+@@ -73,11 +78,15 @@
+ 	int r;
+ 	if (size == 0)
+ 		return -1;
++#ifdef __dietlibc__
++	r = small_vsnprintf(str, size, format, args);
++#else
+ #ifdef WIN32
+ 	r = _vsnprintf(str, size, format, args);
+ #else
+ 	r = vsnprintf(str, size, format, args);
+ #endif
++#endif
+ 	str[size-1] = '\0';
+ 	if (r < 0 || ((size_t)r) >= size) {
+ 		/* different platforms behave differently on overflow;
+@@ -197,6 +206,8 @@
+ 		log_fn(severity, msg);
+ 	else {
+ 		const char *severity_str;
++		char buf[ strlen(msg) + 10 ];
++
+ 		switch (severity) {
+ 		case _EVENT_LOG_DEBUG:
+ 			severity_str = "debug";
+@@ -214,6 +225,11 @@
+ 			severity_str = "???";
+ 			break;
+ 		}
+-		(void)fprintf(stderr, "[%s] %s\n", severity_str, msg);
++		strcpy(buf, "[");
++		strcat(buf, severity_str);
++		strcat(buf, "] ");
++		strcat(buf, msg);
++		strcat(buf, "\n");
++		write(2, buf, strlen(buf));
+ 	}
+ }
+--- libevent-1.1b/buffer.c.diet	2006-08-10 04:01:40.000000000 +0200
++++ libevent-1.1b/buffer.c	2006-08-13 19:33:10.000000000 +0200
+@@ -125,6 +125,7 @@
+ 	return (res);
+ }
+ 
++#ifndef NO_PRINTF
+ int
+ evbuffer_add_vprintf(struct evbuffer *buf, const char *fmt, va_list ap)
+ {
+@@ -170,6 +171,7 @@
+ 
+ 	return (res);
+ }
++#endif
+ 
+ /* Reads data from an event buffer and drains the bytes read */
+ 
+@@ -194,10 +196,10 @@
+ char *
+ evbuffer_readline(struct evbuffer *buffer)
+ {
+-	u_char *data = EVBUFFER_DATA(buffer);
++	unsigned char *data = EVBUFFER_DATA(buffer);
+ 	size_t len = EVBUFFER_LENGTH(buffer);
+ 	char *line;
+-	u_int i;
++	unsigned int i;
+ 
+ 	for (i = 0; i < len; i++) {
+ 		if (data[i] == '\r' || data[i] == '\n')
+@@ -208,7 +210,8 @@
+ 		return (NULL);
+ 
+ 	if ((line = malloc(i + 1)) == NULL) {
+-		fprintf(stderr, "%s: out of memory\n", __func__);
++		write(2, __func__, strlen(__func__));
++		write(2, ": out of memory\n", 16);
+ 		evbuffer_drain(buffer, i);
+ 		return (NULL);
+ 	}
+@@ -334,7 +337,7 @@
+ int
+ evbuffer_read(struct evbuffer *buf, int fd, int howmuch)
+ {
+-	u_char *p;
++	unsigned char *p;
+ 	size_t oldoff = buf->off;
+ 	int n = EVBUFFER_MAX_READ;
+ #ifdef WIN32
+@@ -419,12 +422,12 @@
+ 	return (n);
+ }
+ 
+-u_char *
+-evbuffer_find(struct evbuffer *buffer, const u_char *what, size_t len)
++unsigned char *
++evbuffer_find(struct evbuffer *buffer, const unsigned char *what, size_t len)
+ {
+ 	size_t remain = buffer->off;
+-	u_char *search = buffer->buffer;
+-	u_char *p;
++	unsigned char *search = buffer->buffer;
++	unsigned char *p;
+ 
+ 	while ((p = memchr(search, *what, remain)) != NULL && remain >= len) {
+ 		if (memcmp(p, what, len) == 0)
+--- libevent-1.1b/configure.in.diet	2006-08-10 04:05:17.000000000 +0200
++++ libevent-1.1b/configure.in	2006-08-13 19:27:34.000000000 +0200
+@@ -117,7 +117,7 @@
+ AC_HEADER_TIME
+ 
+ dnl Checks for library functions.
+-AC_CHECK_FUNCS(gettimeofday vasprintf fcntl)
++AC_CHECK_FUNCS(gettimeofday vasprintf fcntl _itoa __ltostr)
+ 
+ AC_MSG_CHECKING(for F_SETFD in fcntl.h)
+ AC_EGREP_CPP(yes,
+--- libevent-1.1b/sample/time-test.c.diet	2006-08-10 03:01:13.000000000 +0200
++++ libevent-1.1b/sample/time-test.c	2006-08-13 19:27:34.000000000 +0200
+@@ -27,6 +27,8 @@
+ 
+ #include <event.h>
+ 
++# define timerclear(tvp)        ((tvp)->tv_sec = (tvp)->tv_usec = 0)
++
+ int lasttime;
+ 
+ void
+--- libevent-1.1b/Makefile.am.diet	2006-08-10 04:16:35.000000000 +0200
++++ libevent-1.1b/Makefile.am	2006-08-13 19:27:34.000000000 +0200
+@@ -20,7 +20,7 @@
+ 
+ lib_LTLIBRARIES = libevent.la
+ 
+-libevent_la_SOURCES = event.c buffer.c evbuffer.c log.c
++libevent_la_SOURCES = event.c buffer.c evbuffer.c log.c smallprintf.c
+ libevent_la_LIBADD = @LTLIBOBJS@
+ libevent_la_LDFLAGS = -release @VERSION@ -version-info 1:2:0
+ 
+--- /dev/null	2000-10-22 01:01:00.000000000 +0200
++++ libevent-1.1b/smallprintf.c	2006-08-13 19:27:34.000000000 +0200
+@@ -0,0 +1,101 @@
++#include <string.h>
++#include <stdarg.h>
++
++static char buf[33];
++
++#if defined(__dietlibc__)
++extern int __ltostr(char *s, unsigned int size, unsigned long i, unsigned int base, int UpCase);
++# define itoa(value, string, radix) \
++  __ltostr(string, 32, (unsigned long)value, radix, 0)
++#else
++extern char *_itoa(int value, char * string, int radix);
++# define itoa((int)value, string, radix) \
++  _itoa(value, string, radix)
++#endif
++
++static inline size_t fmtstr(char *dst, char *src, size_t offset, size_t max)
++{
++  ssize_t avail = max - offset;
++  ssize_t len = strlen(src);
++  if (avail > 0) 
++    memcpy(dst + offset, src, avail);
++  return len;
++}
++
++static inline size_t fmtptr(char *str, void *p, size_t offset, size_t max)
++{
++  char hex8[] = "0x00000000";
++  int len;
++  itoa((int)p, buf, 16);
++  len = strlen(buf);
++  memcpy(hex8 + (10 - len), buf, len);
++  return fmtstr(str, hex8, offset, max);
++}
++
++size_t small_vsnprintf(char *str, size_t size, const char *format, va_list ap)
++{
++  size_t len = 0;
++  char *fmtstart = (char *) format;
++  char *fmtpos = fmtstart, *c;
++  int i; void *p;
++
++  while (*format) {
++    if (*format == '%') {
++
++      if (fmtpos != fmtstart) {
++	memcpy(str + len, fmtstart, fmtpos - fmtstart);
++	len += fmtpos - fmtstart;
++      }
++
++      ++format;
++      switch (*format) {
++      case 'd':
++	i = va_arg(ap, int);
++	itoa(i, buf, 10);
++	len += fmtstr(str, buf, len, size);
++	break;
++      case 'x':
++	i = va_arg(ap, int);
++	itoa(i, buf, 16);
++	len += fmtstr(str, buf, len, size);
++	break;
++      case 's':
++	c = va_arg(ap, char *);
++	if (!c)
++	  c = "(null)";
++	len += fmtstr(str, c, len, size);
++	break;
++      case 'p':
++	p = va_arg(ap, void *);
++	len += fmtptr(str, p, len, size);
++      default:
++	/* unsupported modifier */
++	break;
++      }
++      ++format;
++      fmtstart = fmtpos = (char *) format;
++      continue;
++    }
++    ++fmtpos;
++    ++format;
++  }
++
++  if (fmtpos != fmtstart) {
++    memcpy(str + len, fmtstart, fmtpos - fmtstart);
++    len += fmtpos - fmtstart;
++  }
++
++  return len;
++}
++
++size_t small_snprintf(char *str, size_t size, const char *format, ...)
++{
++  va_list ap;
++  int retval;
++ 
++  va_start(ap, format);
++  retval = small_vsnprintf(str, size, format, ap);                                                    
++  va_end(ap);
++ 
++  return retval;
++}
+--- libevent-1.1b/event.h.diet	2006-08-10 04:04:07.000000000 +0200
++++ libevent-1.1b/event.h	2006-08-13 19:27:34.000000000 +0200
+@@ -193,8 +193,8 @@
+ /* These functions deal with buffering input and output */
+ 
+ struct evbuffer {
+-	u_char *buffer;
+-	u_char *orig_buffer;
++	unsigned char *buffer;
++	unsigned char *orig_buffer;
+ 
+ 	size_t misalign;
+ 	size_t totallen;
+@@ -270,7 +270,7 @@
+ void evbuffer_drain(struct evbuffer *, size_t);
+ int evbuffer_write(struct evbuffer *, int);
+ int evbuffer_read(struct evbuffer *, int, int);
+-u_char *evbuffer_find(struct evbuffer *, const u_char *, size_t);
++unsigned char *evbuffer_find(struct evbuffer *, const unsigned char *, size_t);
+ void evbuffer_setcb(struct evbuffer *, void (*)(struct evbuffer *, size_t, size_t, void *), void *);
+ 
+ #ifdef __cplusplus

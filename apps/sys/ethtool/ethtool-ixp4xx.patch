@@ -1,0 +1,302 @@
+--- ethtool-6/aclocal.m4.ixp4xx	2007-07-26 19:40:38.000000000 +0200
++++ ethtool-6/aclocal.m4	2008-08-25 16:49:04.000000000 +0200
+@@ -132,7 +132,6 @@ fi])])
+ # C support machinery.  Also note that it means that autoscan, seeing
+ # CC etc. in the Makefile, will ask for an AC_PROG_CC use...
+ 
+-
+ # _AM_DEPENDENCIES(NAME)
+ # ----------------------
+ # See how the compiler implements dependency checking.
+@@ -877,3 +876,99 @@ AC_SUBST([am__tar])
+ AC_SUBST([am__untar])
+ ]) # _AM_PROG_TAR
+ 
++# Check how to create a tarball.                            -*- Autoconf -*-
++
++# Copyright (C) 2004, 2005  Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
++
++# serial 2
++
++# _AM_PROG_TAR(FORMAT)
++# --------------------
++# Check how to create a tarball in format FORMAT.
++# FORMAT should be one of `v7', `ustar', or `pax'.
++#
++# Substitute a variable $(am__tar) that is a command
++# writing to stdout a FORMAT-tarball containing the directory
++# $tardir.
++#     tardir=directory && $(am__tar) > result.tar
++#
++# Substitute a variable $(am__untar) that extract such
++# a tarball read from stdin.
++#     $(am__untar) < result.tar
++AC_DEFUN([_AM_PROG_TAR],
++[# Always define AMTAR for backward compatibility.
++AM_MISSING_PROG([AMTAR], [tar])
++m4_if([$1], [v7],
++     [am__tar='${AMTAR} chof - "$$tardir"'; am__untar='${AMTAR} xf -'],
++     [m4_case([$1], [ustar],, [pax],,
++              [m4_fatal([Unknown tar format])])
++AC_MSG_CHECKING([how to create a $1 tar archive])
++# Loop over all known methods to create a tar archive until one works.
++_am_tools='gnutar m4_if([$1], [ustar], [plaintar]) pax cpio none'
++_am_tools=${am_cv_prog_tar_$1-$_am_tools}
++# Do not fold the above two line into one, because Tru64 sh and
++# Solaris sh will not grok spaces in the rhs of `-'.
++for _am_tool in $_am_tools
++do
++  case $_am_tool in
++  gnutar)
++    for _am_tar in tar gnutar gtar;
++    do
++      AM_RUN_LOG([$_am_tar --version]) && break
++    done
++    am__tar="$_am_tar --format=m4_if([$1], [pax], [posix], [$1]) -chf - "'"$$tardir"'
++    am__tar_="$_am_tar --format=m4_if([$1], [pax], [posix], [$1]) -chf - "'"$tardir"'
++    am__untar="$_am_tar -xf -"
++    ;;
++  plaintar)
++    # Must skip GNU tar: if it does not support --format= it doesn't create
++    # ustar tarball either.
++    (tar --version) >/dev/null 2>&1 && continue
++    am__tar='tar chf - "$$tardir"'
++    am__tar_='tar chf - "$tardir"'
++    am__untar='tar xf -'
++    ;;
++  pax)
++    am__tar='pax -L -x $1 -w "$$tardir"'
++    am__tar_='pax -L -x $1 -w "$tardir"'
++    am__untar='pax -r'
++    ;;
++  cpio)
++    am__tar='find "$$tardir" -print | cpio -o -H $1 -L'
++    am__tar_='find "$tardir" -print | cpio -o -H $1 -L'
++    am__untar='cpio -i -H $1 -d'
++    ;;
++  none)
++    am__tar=false
++    am__tar_=false
++    am__untar=false
++    ;;
++  esac
++
++  # If the value was cached, stop now.  We just wanted to have am__tar
++  # and am__untar set.
++  test -n "${am_cv_prog_tar_$1}" && break
++
++  # tar/untar a dummy directory, and stop if the command works
++  rm -rf conftest.dir
++  mkdir conftest.dir
++  echo GrepMe > conftest.dir/file
++  AM_RUN_LOG([tardir=conftest.dir && eval $am__tar_ >conftest.tar])
++  rm -rf conftest.dir
++  if test -s conftest.tar; then
++    AM_RUN_LOG([$am__untar <conftest.tar])
++    grep GrepMe conftest.dir/file >/dev/null 2>&1 && break
++  fi
++done
++rm -rf conftest.dir
++
++AC_CACHE_VAL([am_cv_prog_tar_$1], [am_cv_prog_tar_$1=$_am_tool])
++AC_MSG_RESULT([$am_cv_prog_tar_$1])])
++AC_SUBST([am__tar])
++AC_SUBST([am__untar])
++]) # _AM_PROG_TAR
++
+--- ethtool-6/ethtool.c.ixp4xx	2008-08-25 16:49:04.000000000 +0200
++++ ethtool-6/ethtool.c	2008-08-25 16:52:47.000000000 +0200
+@@ -1009,6 +1009,7 @@ static struct {
+ 	{ "amd8111e", amd8111e_dump_regs },
+ 	{ "pcnet32", pcnet32_dump_regs },
+ 	{ "fec_8xx", fec_8xx_dump_regs },
++ 	{ "ixp4xx_mac", ixp4xx_dump_regs },
+ 	{ "ibm_emac", ibm_emac_dump_regs },
+ 	{ "tg3", tg3_dump_regs },
+ 	{ "skge", skge_dump_regs },
+--- ethtool-6/ethtool-util.h.ixp4xx	2008-08-25 16:49:04.000000000 +0200
++++ ethtool-6/ethtool-util.h	2008-08-25 16:49:32.000000000 +0200
+@@ -69,4 +69,6 @@ int vioc_dump_regs(struct ethtool_drvinf
+ /* SMSC LAN911x/LAN921x embedded ethernet controller */
+ int smsc911x_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs);
+ 
++/* Intel IXP4xx internal MAC */
++int ixp4xx_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs);
+ #endif
+--- ethtool-6/ixp4xx.c.ixp4xx	2008-08-25 16:49:32.000000000 +0200
++++ ethtool-6/ixp4xx.c	2008-08-25 16:49:32.000000000 +0200
+@@ -0,0 +1,131 @@
++/*
++ * Copyright (c) 2006 Christian Hohnstaed <chohnstaedt@innominate.com>
++ * This file is released under the GPLv2
++ */
++
++#include <stdio.h>
++#include "ethtool-util.h"
++
++#ifndef BIT
++#define BIT(x) (1<<x)
++#endif
++
++#define TX_CNTRL1_TX_EN         BIT(0)
++#define TX_CNTRL1_DUPLEX        BIT(1)
++#define TX_CNTRL1_RETRY         BIT(2)
++#define TX_CNTRL1_PAD_EN        BIT(3)
++#define TX_CNTRL1_FCS_EN        BIT(4)
++#define TX_CNTRL1_2DEFER        BIT(5)
++#define TX_CNTRL1_RMII          BIT(6)
++
++/* TX Control Register 2 */
++#define TX_CNTRL2_RETRIES_MASK  0xf
++
++/* RX Control Register 1 */
++#define RX_CNTRL1_RX_EN         BIT(0)
++#define RX_CNTRL1_PADSTRIP_EN   BIT(1)
++#define RX_CNTRL1_CRC_EN        BIT(2)
++#define RX_CNTRL1_PAUSE_EN      BIT(3)
++#define RX_CNTRL1_LOOP_EN       BIT(4)
++#define RX_CNTRL1_ADDR_FLTR_EN  BIT(5)
++#define RX_CNTRL1_RX_RUNT_EN    BIT(6)
++#define RX_CNTRL1_BCAST_DIS     BIT(7)
++
++/* Core Control Register */
++#define CORE_RESET              BIT(0)
++#define CORE_RX_FIFO_FLUSH      BIT(1)
++#define CORE_TX_FIFO_FLUSH      BIT(2)
++#define CORE_SEND_JAM           BIT(3)
++#define CORE_MDC_EN             BIT(4)
++
++#define MAC "%02x:%02x:%02x:%02x:%02x:%02x"
++#define MAC_DATA(d) (d)[0], (d)[1], (d)[2], (d)[3], (d)[4], (d)[5]
++
++int ixp4xx_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
++{
++	u8 *data = regs->data;
++
++	fprintf(stdout,
++		"TXctrl:          0x%02x:0x%02x\n"
++		"    Enable:      %s\n"
++		"    Duplex:      %s\n"
++		"    Retry:       %s (%d)\n"
++		"    Padding:     %s\n"
++		"    Frame check: %s\n"
++		"    TX deferral: %s\n"
++		"    Connection:  %s\n"
++		"\n",
++		data[0], data[1],
++		data[0] & TX_CNTRL1_TX_EN   ? "yes"      : "no",
++		data[0] & TX_CNTRL1_DUPLEX  ? "half"     : "full",
++		data[0] & TX_CNTRL1_RETRY   ? "enabled"  : "disabled",
++		data[1] & TX_CNTRL2_RETRIES_MASK,
++		data[0] & TX_CNTRL1_PAD_EN  ? "enabled"  : "disabled",
++		data[0] & TX_CNTRL1_FCS_EN  ? "enabled"  : "disabled",
++		data[0] & TX_CNTRL1_2DEFER  ? "two-part" : "one-part",
++		data[0] & TX_CNTRL1_RMII    ? "RMII"     : "Full MII"
++	);
++
++	fprintf(stdout,
++		"RXctrl:          0x%02x\n"
++		"    Enable:      %s\n"
++		"    Pad strip:   %s\n"
++		"    CRC check:   %s\n"
++		"    Pause:       %s\n"
++		"    Loop:        %s\n"
++		"    Promiscous:  %s\n"
++		"    Runt frames: %s\n"
++		"    Broadcast:   %s\n"
++		"\n",
++		data[2],
++		data[2] & RX_CNTRL1_RX_EN        ? "yes"      : "no",
++		data[2] & RX_CNTRL1_PADSTRIP_EN  ? "enabled"  : "disabled",
++		data[2] & RX_CNTRL1_CRC_EN       ? "enabled"  : "disabled",
++		data[2] & RX_CNTRL1_PAUSE_EN     ? "enabled"  : "disabled",
++		data[2] & RX_CNTRL1_LOOP_EN      ? "enabled"  : "disabled",
++		data[2] & RX_CNTRL1_ADDR_FLTR_EN ? "disabled" : "enabled",
++		data[2] & RX_CNTRL1_RX_RUNT_EN   ? "forward"  : "discard",
++		data[2] & RX_CNTRL1_BCAST_DIS    ? "disabled" : "enabled"
++	);
++	fprintf(stdout,
++		"Core control:    0x%02x\n"
++		"    Core state:  %s\n"
++		"    RX fifo:     %s\n"
++		"    TX fifo:     %s\n"
++		"    Send jam:    %s\n"
++		"    MDC clock    %s\n"
++		"\n",
++		data[32],
++		data[32] & CORE_RESET          ? "reset"  : "normal operation",
++		data[32] & CORE_RX_FIFO_FLUSH  ? "flush"  : "ok",
++		data[32] & CORE_TX_FIFO_FLUSH  ? "flush"  : "ok",
++		data[32] & CORE_SEND_JAM       ? "yes"    : "no",
++		data[32] & CORE_MDC_EN         ? "output" : "input"
++	);
++	fprintf(stdout,
++		"MAC addresses: \n"
++		"  Multicast mask:     " MAC "\n"
++		"  Multicast address:  " MAC "\n"
++		"  Unicast address:    " MAC "\n"
++		"\n",
++		MAC_DATA(data+13), MAC_DATA(data+19), MAC_DATA(data+26)
++	);
++	fprintf(stdout,
++		"Random seed:      0x%02x\n"
++		"Threshold empty:   %3d\n"
++		"Threshold full:    %3d\n"
++		"TX buffer size:    %3d\n"
++		"TX deferral:       %3d\n"
++		"RX deferral:       %3d\n"
++		"TX two deferral 1: %3d\n"
++		"TX two deferral 2: %3d\n"
++		"Slot time:         %3d\n"
++		"Internal clock:    %3d\n"
++		"\n",
++		data[4], data[5], data[6], data[7], data[8], data[9],
++		data[10], data[11], data[12], data[25]
++	);
++
++	return 0;
++}
++
+--- ethtool-6/Makefile.am.ixp4xx	2007-07-26 19:21:56.000000000 +0200
++++ ethtool-6/Makefile.am	2008-08-25 16:51:57.000000000 +0200
+@@ -8,7 +8,7 @@ ethtool_SOURCES = ethtool.c ethtool-copy
+ 		  amd8111e.c de2104x.c e100.c e1000.c		\
+ 		  fec_8xx.c ibm_emac.c ixgb.c natsemi.c		\
+ 		  pcnet32.c realtek.c tg3.c marvell.c vioc.c	\
+-		  smsc911x.c
++		  smsc911x.c ixp4xx.c
+ 
+ dist-hook:
+ 	cp $(top_srcdir)/ethtool.spec $(distdir)
+--- ethtool-6/Makefile.in.ixp4xx	2007-07-26 19:42:02.000000000 +0200
++++ ethtool-6/Makefile.in	2008-08-25 16:55:04.000000000 +0200
+@@ -54,7 +54,7 @@ sbinPROGRAMS_INSTALL = $(INSTALL_PROGRAM
+ PROGRAMS = $(sbin_PROGRAMS)
+ am_ethtool_OBJECTS = ethtool.$(OBJEXT) amd8111e.$(OBJEXT) \
+ 	de2104x.$(OBJEXT) e100.$(OBJEXT) e1000.$(OBJEXT) \
+-	fec_8xx.$(OBJEXT) ibm_emac.$(OBJEXT) ixgb.$(OBJEXT) \
++	ixp4xx.$(OBJEXT) fec_8xx.$(OBJEXT) ibm_emac.$(OBJEXT) ixgb.$(OBJEXT) \
+ 	natsemi.$(OBJEXT) pcnet32.$(OBJEXT) realtek.$(OBJEXT) \
+ 	tg3.$(OBJEXT) marvell.$(OBJEXT) vioc.$(OBJEXT) \
+ 	smsc911x.$(OBJEXT)
+@@ -164,7 +164,7 @@ man_MANS = ethtool.8
+ EXTRA_DIST = ethtool.8 ethtool.spec.in aclocal.m4 ChangeLog autogen.sh
+ ethtool_SOURCES = ethtool.c ethtool-copy.h ethtool-util.h	\
+ 		  amd8111e.c de2104x.c e100.c e1000.c		\
+-		  fec_8xx.c ibm_emac.c ixgb.c natsemi.c		\
++		  ixp4xx.c fec_8xx.c ibm_emac.c ixgb.c natsemi.c		\
+ 		  pcnet32.c realtek.c tg3.c marvell.c vioc.c	\
+ 		  smsc911x.c
+ 
+@@ -264,6 +264,7 @@ distclean-compile:
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/e1000.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ethtool.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fec_8xx.Po@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ixp4xx.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ibm_emac.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ixgb.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/marvell.Po@am__quote@

@@ -1,0 +1,11 @@
+--- dietlibc-cvs/lib/__fstatfs64.c.fstatfs64	2005-11-26 20:57:53.000000000 +0100
++++ dietlibc-cvs/lib/__fstatfs64.c	2005-11-26 20:58:01.000000000 +0100
+@@ -17,7 +17,7 @@
+   }
+   return 0;
+ #else
+-  return __dietlibc_fstatfs64(fd,sizeof(*__buf),buf);
++  return __dietlibc_fstatfs64(fd,sizeof(*__buf),__buf);
+ #endif
+ }
+ #endif

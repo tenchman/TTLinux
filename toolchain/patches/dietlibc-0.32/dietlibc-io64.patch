@@ -1,0 +1,36 @@
+--- dietlibc-0.32/libstdio/fopen64.c.io64	2009-06-10 22:11:53.000000000 +0200
++++ dietlibc-0.32/libstdio/fopen64.c	2009-06-10 22:11:53.000000000 +0200
+@@ -0,0 +1,22 @@
++#include <sys/types.h>
++#include <dietstdio.h>
++#include <unistd.h>
++
++#ifndef __NO_STAT64
++extern int __stdio_atexit;
++
++/* this is needed so the libpthread wrapper can initialize the mutex,
++ * not to lock it */
++
++FILE *fopen64_unlocked(const char *path, const char *mode) {
++  int f=0;	/* O_RDONLY, O_WRONLY or O_RDWR */
++  int fd;
++
++  f=__stdio_parse_mode(mode);
++  if ((fd=__libc_open64(path,f,0666))<0)
++    return 0;
++  return __stdio_init_file(fd,1,f);
++}
++
++FILE *fopen64(const char *path, const char *mode) __attribute__((weak,alias("fopen64_unlocked")));
++#endif
+--- dietlibc-0.32/include/stdio.h.io64	2009-06-10 21:48:47.000000000 +0200
++++ dietlibc-0.32/include/stdio.h	2009-06-10 22:11:53.000000000 +0200
+@@ -98,6 +98,8 @@ int fseeko64(FILE *stream, loff_t offset
+ int fseeko64_unlocked(FILE *stream, loff_t offset, int whence) __THROW;
+ loff_t ftello64(FILE *stream) __THROW;
+ loff_t ftello64_unlocked(FILE *stream) __THROW;
++FILE *fopen64(const char *path, const char *mode) __THROW;
++FILE *fopen64_unlocked(const char *path, const char *mode) __THROW;
+ 
+ #if defined _FILE_OFFSET_BITS && _FILE_OFFSET_BITS == 64
+ #define off_t loff_t

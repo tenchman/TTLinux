@@ -1,0 +1,12 @@
+diff -up ocfs2-tools-1.2.7/ocfs2cdsl/ocfs2cdsl.c.realpath ocfs2-tools-1.2.7/ocfs2cdsl/ocfs2cdsl.c
+--- ocfs2-tools-1.2.7/ocfs2cdsl/ocfs2cdsl.c.realpath	2008-03-10 15:07:23.000000000 +0100
++++ ocfs2-tools-1.2.7/ocfs2cdsl/ocfs2cdsl.c	2008-03-10 15:07:52.000000000 +0100
+@@ -321,7 +321,7 @@ get_state(int argc, char **argv)
+ 	filename = argv[optind++];
+ 
+ 	tmp = g_path_get_dirname(filename);
+-	dirname = canonicalize_file_name(tmp);
++	dirname = realpath(tmp, NULL);
+ 	g_free(tmp);
+ 
+ 	if (dirname == NULL) {

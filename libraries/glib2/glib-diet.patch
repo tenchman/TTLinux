@@ -1,0 +1,11 @@
+--- glib-2.13.7/glib/gstrfuncs.c.diet	2007-09-06 20:11:28.000000000 +0200
++++ glib-2.13.7/glib/gstrfuncs.c	2007-09-06 20:11:50.000000000 +0200
+@@ -1323,7 +1323,7 @@
+ #ifdef HAVE_STRSIGNAL
+   const char *msg_locale;
+   
+-#if defined(G_OS_BEOS) || defined(G_WITH_CYGWIN)
++#if defined(G_OS_BEOS) || defined(G_WITH_CYGWIN) || defined(__dietlibc__)
+ extern const char *strsignal(int);
+ #else
+   /* this is declared differently (const) in string.h on BeOS */

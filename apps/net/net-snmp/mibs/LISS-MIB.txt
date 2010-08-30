@@ -1,0 +1,382 @@
+-- -*- asn1 -*-
+-- $Id: LISS-MIB.txt 1192 2007-11-22 12:25:43Z manfred $ --
+LISS-MIB DEFINITIONS ::= BEGIN
+
+IMPORTS
+    TimeTicks,
+    OBJECT-TYPE,
+    MODULE-IDENTITY,
+    Integer32
+    FROM SNMPv2-SMI
+
+    MODULE-COMPLIANCE,
+    OBJECT-GROUP
+    FROM SNMPv2-CONF
+
+    PhysAddress
+    FROM SNMPv2-TC
+
+    telcoTechMIB
+    FROM TELCO-TECH-MIB
+    ;
+
+
+    --
+    -- A brief description and update information about this mib.
+    --
+    lissMIB MODULE-IDENTITY
+    LAST-UPDATED "200710021200Z"            -- 02 October 2007, high noon
+    ORGANIZATION "TELCO TECH GmbH"
+    CONTACT-INFO "postal:
+    Potsdamer Str. 18a
+    Teltow
+
+    email:    support@telco-tech.de
+    "
+    DESCRIPTION  "The MIB module for the TELCO TECH LiSS(TM) network security devices.
+    "
+    REVISION     "200710021200Z"            -- 02 October 2007, high noon
+    DESCRIPTION  "Initial release."
+    -- leave room for the RFC 4181 recommended OIDs
+    ::= { telcoTechMIB 3 }
+
+    -- Recommended OIDs from RFC 4181 appendix D
+    lissNotifications OBJECT IDENTIFIER ::= { lissMIB 0 }
+    lissObjects       OBJECT IDENTIFIER ::= { lissMIB 1 }
+    lissConformance   OBJECT IDENTIFIER ::= { lissMIB 2 }
+    lissCompliances   OBJECT IDENTIFIER ::= { lissConformance 1 }
+    lissGroups        OBJECT IDENTIFIER ::= { lissConformance 2 }
+
+    -- a subtree for objects that can change device configuration
+    lissConfig        OBJECT IDENTIFIER ::= { lissObjects 1 }
+    -- a subtree for objects that can perform actions
+    lissControl       OBJECT IDENTIFIER ::= { lissObjects 2 }
+    -- a subtree for objects returning device status information
+    lissStatus        OBJECT IDENTIFIER ::= { lissObjects 3 }
+
+    --
+    -- LiSS Control Objects
+    --
+    lissShutdownReason  OBJECT-TYPE
+    SYNTAX INTEGER {
+        other(1),
+        administrative(2),
+        firmware(3)
+    }
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION "
+    Reason for the next scheduled shutdown:
+    1) some other reason than the following
+    2) any shutdown that was initiated by a system administrator, either
+       directly or indirectly, and for which there is no more specific entry
+		   below
+    3) any shutdown which is necessary because a firmware package has been
+       installed or is to be uninstalled or similar.
+    "
+    ::= { lissControl 1 }
+
+
+    lissShutdownType  OBJECT-TYPE
+    SYNTAX INTEGER {
+        other(1),
+        reboot(2),
+        halt(3),
+        poweroff(4)
+    }
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION "
+    Type of shutdown, describes the action to perform after a scheduled shutdown:
+    1) something other than the following
+    2) reboot
+    3) nothing
+    4) turn the system power off, if possible.
+    "
+    ::= { lissControl 2 }
+
+
+    lissNextShutdown  OBJECT-TYPE
+    SYNTAX      TimeTicks
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION "
+    Date for the next scheduled shutdown in hundredth of seconds since the
+    current epoch.
+    "
+    ::= { lissControl 3 }
+
+    --
+    -- LiSS Status Objects
+    --
+
+    lissVersion OBJECT IDENTIFIER ::= { lissStatus 1 }
+
+    -- The subtree defining the version number parts
+    lissVersionMajor OBJECT-TYPE
+    SYNTAX INTEGER {
+        unknown(1),
+        series(3)
+    }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "
+    The major (most significant) version number part.
+    "
+    ::= { lissVersion 1 }
+
+    lissVersionMinor OBJECT-TYPE
+    SYNTAX Integer32 (1..999)
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "
+    The minor version number part.
+    "
+    ::= { lissVersion 2 }
+
+    lissVersionPatch OBJECT-TYPE
+    SYNTAX Integer32 (1..999)
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "
+    The least significant version number part.
+    "
+    ::= { lissVersion 3 }
+
+    lissVersionState OBJECT-TYPE
+    SYNTAX INTEGER {
+      other(1),
+      alpha(8),
+      beta(9),
+      prerelease(10),
+      release(11)
+    }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "
+    The release status. As the SNMP representation cannot use the same
+    values the LiSS(TM) build system uses the indexes are selected from
+    a completely distinct set of numbers, leaving some space for future
+    additions.
+    "
+    ::= { lissVersion 4 }
+    -- end version number subtree
+
+    lissSerialNumber OBJECT-TYPE
+    SYNTAX      PhysAddress
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "
+    Serial number of the LiSS(TM) device.
+    "
+    ::= { lissStatus 2 }
+
+		lissNetStats OBJECT IDENTIFIER ::= { lissStatus 3 }
+
+    lissRouteCacheLineCount OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "
+    The number of entries in the routing cache.
+
+		The value may be -1 if the correct value cannot be determined.
+    "
+    ::= { lissNetStats 1 }
+
+    lissArpCacheLineCount OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "
+    The number of entries in the arp cache.
+
+		The value may be -1 if the correct value cannot be determined.
+    "
+    ::= { lissNetStats 2 }
+
+    lissConntrackTableLineCount OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "
+    The number of entries in the routing cache.
+
+		The value may be -1 if the correct value cannot be determined.
+    "
+    ::= { lissNetStats 3 }
+
+    --
+    -- MIB Compliance statements.
+    --
+
+    lissFullCompliance MODULE-COMPLIANCE
+    STATUS      current
+    DESCRIPTION "
+    When this MIB is implemented with support for read-write including the
+    LiSS(TM) Configuration Group, then such an implementation can claim
+    full compliance. Such devices can then be both monitored, remote controlled
+    and configured with this MIB.
+    "
+    MODULE -- This module
+    MANDATORY-GROUPS { lissConfigGroup, lissControlGroup, lissStatusGroup }
+
+
+    GROUP lissConfigGroup
+    DESCRIPTION "
+    This group is mandatory for fully compliant LiSS(TM) devices.
+    "
+
+    GROUP lissControlGroup
+    DESCRIPTION "
+    This group is mandatory for fully compliant LiSS(TM) devices.
+    "
+
+    GROUP lissStatusGroup
+    DESCRIPTION "
+    This group is mandatory for fully compliant LiSS(TM) devices.
+    "
+
+    ::= { lissCompliances 1 }
+
+    --
+    -- Read-Write Compliance
+    --
+
+    lissReadWriteCompliance MODULE-COMPLIANCE
+    STATUS current
+    DESCRIPTION "
+    When this MIB is implemented with support for read-write, then
+    such an implementation can claim full compliance. Such devices
+    can then be both monitored and configured with this MIB.
+    "
+    MODULE -- This module
+    MANDATORY-GROUPS { lissControlGroup, lissStatusGroup }
+
+
+    GROUP lissConfigGroup
+    DESCRIPTION "
+    This group is not required for LiSS(TM) devices with read-write compliance.
+    "
+
+    GROUP lissControlGroup
+    DESCRIPTION "
+    This group is mandatory for LiSS(TM) devices with read-write compliance.
+    "
+
+    GROUP lissStatusGroup
+    DESCRIPTION "
+    This group is mandatory for LiSS(TM) devices with read-write compliance.
+    "
+
+    OBJECT lissShutdownReason
+    MIN-ACCESS  read-only
+    DESCRIPTION
+       "Write access is not required for read-only compliance."
+
+    OBJECT lissShutdownType
+    MIN-ACCESS  read-only
+    DESCRIPTION
+       "Write access is not required for read-only compliance."
+
+    OBJECT lissNextShutdown
+    MIN-ACCESS  read-only
+    DESCRIPTION
+       "Write access is not required for read-only compliance."
+
+    ::= { lissCompliances 2 }
+
+    --
+    -- Read-Only Compliance
+    --
+
+    lissReadOnlyCompliance MODULE-COMPLIANCE
+    STATUS  current
+    DESCRIPTION "
+    When this MIB is implemented without support for read-write
+    (i.e. in read-only mode), then such an implementation can claim
+    read-only compliance. Such a device can then be monitored but can
+    not be configured with this MIB.
+    "
+    MODULE -- This Module
+    MANDATORY-GROUPS { lissStatusGroup }
+
+    GROUP lissConfigGroup
+    DESCRIPTION "
+    This group is not required for LiSS(TM) devices with read-only compliance.
+    "
+
+    GROUP lissControlGroup
+    DESCRIPTION "
+    This group is not required for LiSS(TM) devices with read-only compliance.
+    "
+
+    GROUP lissStatusGroup
+    DESCRIPTION "
+    This group is mandatory for LiSS(TM) devices with read-only compliance.
+    "
+
+    OBJECT lissShutdownReason
+    MIN-ACCESS  read-only
+    DESCRIPTION
+       "Write access is not required."
+
+    OBJECT lissShutdownType
+    MIN-ACCESS  read-only
+    DESCRIPTION
+       "Write access is not required."
+
+    OBJECT lissNextShutdown
+    MIN-ACCESS  read-only
+    DESCRIPTION
+       "Write access is not required."
+
+    ::= { lissCompliances 3 }
+
+
+    -- There are no objects for this group yet --
+    lissConfigGroup OBJECT-GROUP
+    OBJECTS {
+        lissNextShutdown
+    }
+    STATUS  current
+    DESCRIPTION "
+    The LiSS Config Group defines the MIB objects can change configuration on
+    the device.
+    "
+
+    ::= { lissGroups 1 }
+
+    lissControlGroup OBJECT-GROUP
+    OBJECTS {
+        lissShutdownReason,
+        lissShutdownType,
+        lissNextShutdown
+    }
+    STATUS  current
+    DESCRIPTION "
+    The LiSS Control Group defines the MIB objects that can perform actions on
+    the device.
+    "
+
+    ::= { lissGroups 2 }
+
+    lissStatusGroup OBJECT-GROUP
+    OBJECTS {
+        lissSerialNumber,
+        lissVersionMajor,
+        lissVersionMinor,
+        lissVersionPatch,
+        lissVersionState,
+        lissRouteCacheLineCount,
+        lissArpCacheLineCount,
+        lissConntrackTableLineCount
+    }
+    STATUS  current
+    DESCRIPTION "
+    The LiSS Status Group defines the MIB objects that return device statuses.
+    "
+    
+    ::= { lissGroups 3 }
+
+END

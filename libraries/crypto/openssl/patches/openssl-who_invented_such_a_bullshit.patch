@@ -1,0 +1,63 @@
+diff -up openssl-0.9.8k/Configure.who_invented_such_a_bullshit openssl-0.9.8k/Configure
+--- openssl-0.9.8k/Configure.who_invented_such_a_bullshit	2009-02-16 09:44:22.000000000 +0100
++++ openssl-0.9.8k/Configure	2009-11-25 14:26:12.000000000 +0100
+@@ -330,6 +330,7 @@ my %table=(
+ #### IA-32 targets...
+ "linux-ia32-icc",	"icc:-DL_ENDIAN -DTERMIO -O2 -no_cpprt::-D_REENTRANT::-ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn:linux-shared:-KPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
+ "linux-elf",	"gcc:-DL_ENDIAN -DTERMIO -O3 -fomit-frame-pointer -Wall::-D_REENTRANT::-ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
++"linux-elf-armeb","gcc:-DTERMIO -DB_ENDIAN -O3 -fomit-frame-pointer -Wall::-D_REENTRANT::-ldl:BN_LLONG::::::::::dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
+ "linux-aout",	"gcc:-DL_ENDIAN -DTERMIO -O3 -fomit-frame-pointer -march=i486 -Wall::(unknown):::BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_out_asm}",
+ ####
+ "linux-generic64","gcc:-DTERMIO -O3 -Wall::-D_REENTRANT::-ldl:SIXTY_FOUR_BIT_LONG RC4_CHAR RC4_CHUNK DES_INT DES_UNROLL BF_PTR:${no_asm}:dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
+@@ -952,7 +953,7 @@ print "Configuring for $target\n";
+ &usage if (!defined($table{$target}));
+ 
+ my @fields = split(/\s*:\s*/,$table{$target} . ":" x 30 , -1);
+-my $cc = $fields[$idx_cc];
++my $cc = "xxARCHCCxx";
+ # Allow environment CC to override compiler...
+ if($ENV{CC}) {
+     $cc = $ENV{CC};
+@@ -1046,8 +1047,10 @@ foreach (sort (keys %disabled))
+ 				{ $no_krb5 = 1; }
+ 			else
+ 				{
+-				push @skip, $algo;
+-				print " (skip dir)";
++				if ($algo ne "pkcs12") {
++					  push @skip,$algo;
++					  print " (skip dir)";
++				}
+ 
+ 				$depflags .= " -DOPENSSL_NO_$ALGO";
+ 				}
+@@ -1468,7 +1471,7 @@ while (<IN>)
+ 	s/^OPTIONS=.*$/OPTIONS=$options/;
+ 	s/^CONFIGURE_ARGS=.*$/CONFIGURE_ARGS=$argvstring/;
+ 	s/^CC=.*$/CC= $cc/;
+-	s/^MAKEDEPPROG=.*$/MAKEDEPPROG= $cc/ if $cc eq "gcc";
++	s/^MAKEDEPPROG=.*$/MAKEDEPPROG= $cc/ if $cc eq "xxARCHCCxx";
+ 	s/^CFLAG=.*$/CFLAG= $cflags/;
+ 	s/^DEPFLAG=.*$/DEPFLAG=$depflags/;
+ 	s/^PEX_LIBS=.*$/PEX_LIBS= $prelflags/;
+diff -up openssl-0.9.8k/util/domd.who_invented_such_a_bullshit openssl-0.9.8k/util/domd
+--- openssl-0.9.8k/util/domd.who_invented_such_a_bullshit	2009-01-21 22:44:52.000000000 +0100
++++ openssl-0.9.8k/util/domd	2009-11-25 14:27:11.000000000 +0100
+@@ -14,7 +14,7 @@ if [ "$MAKEDEPEND" = "" ]; then MAKEDEPE
+ cp Makefile Makefile.save
+ # fake the presence of Kerberos
+ touch $TOP/krb5.h
+-if [ "$MAKEDEPEND" = "gcc" ]; then
++if [ "$MAKEDEPEND" = "xxARCHCCxx" ]; then
+     args=""
+     while [ $# -gt 0 ]; do
+ 	if [ "$1" != "--" ]; then args="$args $1"; fi
+@@ -22,7 +22,7 @@ if [ "$MAKEDEPEND" = "gcc" ]; then
+     done
+     sed -e '/^# DO NOT DELETE.*/,$d' < Makefile > Makefile.tmp
+     echo '# DO NOT DELETE THIS LINE -- make depend depends on it.' >> Makefile.tmp
+-    ${CC:-gcc} -D OPENSSL_DOING_MAKEDEPEND -M $args >> Makefile.tmp
++    ${MAKEDEPEND} -D OPENSSL_DOING_MAKEDEPEND -M $args >> Makefile.tmp
+     ${PERL} $TOP/util/clean-depend.pl < Makefile.tmp > Makefile.new
+     rm -f Makefile.tmp
+ else

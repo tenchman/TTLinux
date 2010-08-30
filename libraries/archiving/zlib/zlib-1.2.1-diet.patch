@@ -1,0 +1,84 @@
+--- zlib-1.2.1/minigzip.c.diet	2003-11-05 00:19:25.000000000 +0100
++++ zlib-1.2.1/minigzip.c	2004-04-28 07:57:44.156043008 +0200
+@@ -137,7 +137,7 @@
+     int len;
+     int err;
+     int ifd = fileno(in);
+-    caddr_t buf;    /* mmap'ed buffer for the entire input file */
++    char * buf;    /* mmap'ed buffer for the entire input file */
+     off_t buf_len;  /* length of the input file */
+     struct stat sb;
+ 
+@@ -147,8 +147,8 @@
+     if (buf_len <= 0) return Z_ERRNO;
+ 
+     /* Now do the actual mmap: */
+-    buf = mmap((caddr_t) 0, buf_len, PROT_READ, MAP_SHARED, ifd, (off_t)0);
+-    if (buf == (caddr_t)(-1)) return Z_ERRNO;
++    buf = mmap((char *) 0, buf_len, PROT_READ, MAP_SHARED, ifd, (off_t)0);
++    if (buf == (char *)(-1)) return Z_ERRNO;
+ 
+     /* Compress the whole file at once: */
+     len = gzwrite(out, (char *)buf, (unsigned)buf_len);
+--- zlib-1.2.1/Makefile.in.diet	2003-11-09 03:29:23.000000000 +0100
++++ zlib-1.2.1/Makefile.in	2004-04-28 07:59:49.625968680 +0200
+@@ -77,8 +77,8 @@
+ 	mv _match.o match.o
+ 	rm -f _match.s
+ 
+-$(SHAREDLIBV): $(OBJS)
+-	$(LDSHARED) -o $@ $(OBJS)
++$(SHAREDLIBV): $(OBJS) $(OBJA)
++	$(LDSHARED) -o $@ $(OBJS) $(OBJA)
+ 	rm -f $(SHAREDLIB) $(SHAREDLIBM)
+ 	ln -s $@ $(SHAREDLIB)
+ 	ln -s $@ $(SHAREDLIBM)
+@@ -90,23 +90,22 @@
+ 	$(CC) $(CFLAGS) -o $@ minigzip.o $(LDFLAGS)
+ 
+ install: $(LIBS)
+-	-@if [ ! -d $(exec_prefix) ]; then mkdir -p $(exec_prefix); fi
+-	-@if [ ! -d $(includedir)  ]; then mkdir -p $(includedir); fi
+-	-@if [ ! -d $(libdir)      ]; then mkdir -p $(libdir); fi
+-	-@if [ ! -d $(man3dir)     ]; then mkdir -p $(man3dir); fi
+-	cp zlib.h zconf.h $(includedir)
+-	chmod 644 $(includedir)/zlib.h $(includedir)/zconf.h
+-	cp $(LIBS) $(libdir)
+-	cd $(libdir); chmod 755 $(LIBS)
+-	-@(cd $(libdir); $(RANLIB) libz.a || true) >/dev/null 2>&1
+-	cd $(libdir); if test -f $(SHAREDLIBV); then \
++	-@if [ ! -d $(DESTDIR)$(exec_prefix) ]; then mkdir -p $(DESTDIR)$(exec_prefix); fi
++	-@if [ ! -d $(DESTDIR)$(includedir)  ]; then mkdir -p $(DESTDIR)$(includedir); fi
++	-@if [ ! -d $(DESTDIR)$(libdir)      ]; then mkdir -p $(DESTDIR)$(libdir); fi
++	-@if [ ! -d $(DESTDIR)$(man3dir)     ]; then mkdir -p $(DESTDIR)$(man3dir); fi
++	cp zlib.h zconf.h $(DESTDIR)$(includedir)
++	chmod 644 $(DESTDIR)$(includedir)/zlib.h $(DESTDIR)$(includedir)/zconf.h
++	cp $(LIBS) $(DESTDIR)$(libdir)
++	cd $(DESTDIR)$(libdir); chmod 755 $(LIBS)
++	-@(cd $(DESTDIR)$(libdir); $(RANLIB) libz.a || true) >/dev/null 2>&1
++	cd $(DESTDIR)$(libdir); if test -f $(SHAREDLIBV); then \
+ 	  rm -f $(SHAREDLIB) $(SHAREDLIBM); \
+ 	  ln -s $(SHAREDLIBV) $(SHAREDLIB); \
+ 	  ln -s $(SHAREDLIBV) $(SHAREDLIBM); \
+-	  (ldconfig || true)  >/dev/null 2>&1; \
+ 	fi
+-	cp zlib.3 $(man3dir)
+-	chmod 644 $(man3dir)/zlib.3
++	cp zlib.3 $(DESTDIR)$(man3dir)
++	chmod 644 $(DESTDIR)$(man3dir)/zlib.3
+ # The ranlib in install is needed on NeXTSTEP which checks file times
+ # ldconfig is for Linux
+ 
+--- zlib-1.2.1/configure.diet	2003-11-17 04:50:39.000000000 +0100
++++ zlib-1.2.1/configure	2004-04-28 07:57:44.144044832 +0200
+@@ -399,8 +399,8 @@
+ #include <sys/types.h>
+ #include <sys/mman.h>
+ #include <sys/stat.h>
+-caddr_t hello() {
+-  return mmap((caddr_t)0, (off_t)0, PROT_READ, MAP_SHARED, 0, (off_t)0);
++char * hello() {
++  return mmap((char *)0, (off_t)0, PROT_READ, MAP_SHARED, 0, (off_t)0);
+ }
+ EOF
+ if test "`($CC -c $CFLAGS $test.c) 2>&1`" = ""; then

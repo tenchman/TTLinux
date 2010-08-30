@@ -1,0 +1,11 @@
+--- busybox-1.8.2/include/platform.h.endian	2008-04-01 15:05:32.000000000 +0200
++++ busybox-1.8.2/include/platform.h	2008-04-01 15:04:28.000000000 +0200
+@@ -183,7 +183,7 @@ __extension__ typedef unsigned long long
+ #define HAVE_STDINT_H
+ #else
+ /* Largest integral types.  */
+-#if __BIG_ENDIAN__
++#if BB_BIG_ENDIAN
+ typedef long                intmax_t;
+ typedef unsigned long       uintmax_t;
+ #else

@@ -1,0 +1,527 @@
+--- dietlibc-0.30/wmemmove.c.widechar	2008-04-29 21:19:52.000000000 +0200
++++ dietlibc-0.30/wmemmove.c	2008-04-29 21:22:05.000000000 +0200
+@@ -0,0 +1,5 @@
++#include <wchar.h>
++
++wchar_t *wmemmove(wchar_t *d, const wchar_t *s, size_t n) {
++  return (wchar_t *)memmove(d, s, n*sizeof(wchar_t));
++}
+--- dietlibc-0.30/lib/wcsncpy.c.widechar	2008-04-29 20:58:35.000000000 +0200
++++ dietlibc-0.30/lib/wcsncpy.c	2008-04-29 20:58:20.000000000 +0200
+@@ -0,0 +1,8 @@
++#include <wchar.h>
++
++wchar_t* wcsncpy(wchar_t *__restrict__ dest, const wchar_t *__restrict__ src,size_t n) {
++  wchar_t* orig=dest;
++  for (; dest<orig+n && (*dest=*src); ++src,++dest) ;
++  for (; dest<orig+n; ++dest) *dest=0;
++  return orig;
++}
+--- dietlibc-0.30/lib/btowc.c.widechar	2008-04-29 21:40:31.000000000 +0200
++++ dietlibc-0.30/lib/btowc.c	2008-04-29 21:40:21.000000000 +0200
+@@ -0,0 +1,10 @@
++#include <wchar.h>
++#include <stdio.h>
++
++wint_t btowc(int c) {
++  wchar_t wc;
++  if (mbtowc(&pwc, &c, 1) != 1 || c == EOF)
++    return WEOF;
++  else
++    return (wint_t)wc;
++}
+--- dietlibc-0.30/lib/wcwidth.c.widechar	2008-04-29 21:01:53.000000000 +0200
++++ dietlibc-0.30/lib/wcwidth.c	2008-04-29 21:01:42.000000000 +0200
+@@ -0,0 +1,8 @@
++#define _XOPEN_SOURCE
++#include <wchar.h>
++
++int wcwidth(wchar_t c) {
++  if (!c) return 0;
++  if (c<' ') return -1;
++  return 1;
++}
+--- dietlibc-0.30/lib/wctob.c.widechar	2008-04-29 21:24:20.000000000 +0200
++++ dietlibc-0.30/lib/wctob.c	2008-04-29 21:32:33.000000000 +0200
+@@ -0,0 +1,9 @@
++#include <stdio.h>
++#include <wchar.h>
++
++int wctob(wint_t c)
++{
++  if (wctomb(&wc, c) != 1 || wc == EOF)
++    return WEOF;
++  return (int)wc;
++}
+--- dietlibc-0.30/lib/wcsstr.c.widechar	2008-04-29 20:59:19.000000000 +0200
++++ dietlibc-0.30/lib/wcsstr.c	2008-04-29 20:59:01.000000000 +0200
+@@ -0,0 +1,11 @@
++#include <wchar.h>
++
++wchar_t *wcsstr(const wchar_t *haystack, const wchar_t *needle) {
++  size_t i,j;
++  for (i=0; haystack[i]; ++i) {
++    for (j=0; haystack[i+j]==needle[j]; ++j) ;
++    if (!needle[j]) return (wchar_t*)haystack+i;
++  }
++  return 0;
++}
++
+--- dietlibc-0.30/lib/wcsncat.c.widechar	2008-04-29 20:57:42.000000000 +0200
++++ dietlibc-0.30/lib/wcsncat.c	2008-04-29 20:57:30.000000000 +0200
+@@ -0,0 +1,10 @@
++#include <wchar.h>
++
++wchar_t* wcsncat(wchar_t *__restrict__ dest, const wchar_t *__restrict__ src,size_t n) {
++  wchar_t* orig=dest;
++  size_t i;
++  while (*dest) ++dest;
++  for (i=0; i<n && src[i]; ++i) dest[i]=src[i];
++  dest[i]=0;
++  return orig;
++}
+--- dietlibc-0.30/lib/iswctype.c.widechar	2008-04-29 17:54:13.000000000 +0200
++++ dietlibc-0.30/lib/iswctype.c	2008-04-29 17:54:13.000000000 +0200
+@@ -0,0 +1,40 @@
++#include <ctype.h>
++#include <wctype.h>
++#include "iswbits.h"
++
++int iswctype(wint_t c, wctype_t desc)
++{
++  switch (desc)
++    {
++    case wctype_alnum:
++      return iswalnum (c);
++    case wctype_alpha:
++      return iswalpha (c);
++    case wctype_blank:
++      return iswblank (c);
++    case wctype_cntrl:
++      return iswcntrl (c);
++    case wctype_digit:
++      return iswdigit (c);
++    case wctype_graph:
++      return iswgraph (c);
++    case wctype_lower:
++      return iswlower (c);
++    case wctype_print:
++      return iswprint (c);
++    case wctype_punct:
++      return iswpunct (c);
++    case wctype_space:
++      return iswspace (c);
++    case wctype_upper:
++      return iswupper (c);
++    case wctype_xdigit:
++      return iswxdigit (c);
++    default:
++      ;
++    }
++
++  /* otherwise unknown */
++  return 0;
++}
++
+--- dietlibc-0.30/lib/wcrtomb.c.widechar	2008-04-29 20:54:54.000000000 +0200
++++ dietlibc-0.30/lib/wcrtomb.c	2008-04-29 20:54:40.000000000 +0200
+@@ -0,0 +1,32 @@
++#include <wchar.h>
++#include "dietlocale.h"
++
++static mbstate_t internal;
++
++size_t wcrtomb(char *s, wchar_t wc, mbstate_t *ps) {
++  if (!ps) ps=&internal;
++  switch (lc_ctype) {
++  case CT_8BIT:
++    if (!s) return 0;
++    *s=wc;
++    return 1;
++  case CT_UTF8:
++    if (!s) return (wc>=0x80);
++    {
++      unsigned int bits,j,k;
++      if (wc>=0x04000000) { bits=30; *s=0xFC; j=6; } else
++      if (wc>=0x00200000) { bits=24; *s=0xF8; j=5; } else
++      if (wc>=0x00010000) { bits=18; *s=0xF0; j=4; } else
++      if (wc>=0x00000800) { bits=12; *s=0xE0; j=3; } else
++      if (wc>=0x00000080) { bits=6; *s=0xC0; j=2; } else
++			{ *s=wc; return 1; }
++      *s |= (unsigned char)(wc>>bits);
++      for (k=1; k<j; ++k) {
++	bits-=6;
++	s[k]=0x80+((wc>>bits)&0x3f);
++      }
++      return k;
++    }
++  }
++  return 0;
++}
+--- dietlibc-0.30/libugly/wmemchr.c.widechar	2008-04-29 17:54:13.000000000 +0200
++++ dietlibc-0.30/libugly/wmemchr.c	2008-04-29 17:54:13.000000000 +0200
+@@ -0,0 +1,14 @@
++#include <wchar.h>
++
++wchar_t *wmemchr(const wchar_t *s, wchar_t c, size_t n)
++{
++  size_t i;
++  for (i = 0; i < n; i++) {
++    if (*s == c) {
++      return (wchar_t *) s;
++    }
++    s++;
++  }
++  return NULL;
++}
++
+--- dietlibc-0.30/libugly/wmemcmp.c.widechar	2008-04-29 17:54:13.000000000 +0200
++++ dietlibc-0.30/libugly/wmemcmp.c	2008-04-29 17:54:13.000000000 +0200
+@@ -0,0 +1,10 @@
++#include <wchar.h>
++
++int wmemcmp(const wchar_t *s1, const wchar_t *s2, size_t n) {
++  size_t i;
++  for (i=0; i<n; ++i) {
++    wint_t x=s1[i]-s2[i];
++    if (x) return x;
++  }
++  return 0;
++}
+--- dietlibc-0.30/libugly/wmemcpy.c.widechar	2008-04-29 17:54:13.000000000 +0200
++++ dietlibc-0.30/libugly/wmemcpy.c	2008-04-29 17:54:13.000000000 +0200
+@@ -0,0 +1,8 @@
++#include <wchar.h>
++
++wchar_t *wmemcpy(wchar_t *dest, const wchar_t *src, size_t n) {
++  size_t i;
++  for (i=0; i<n; ++i)
++    dest[i]=src[i];
++  return dest;
++}
+--- dietlibc-0.30/libugly/wmemset.c.widechar	2008-04-29 17:54:13.000000000 +0200
++++ dietlibc-0.30/libugly/wmemset.c	2008-04-29 17:54:13.000000000 +0200
+@@ -0,0 +1,7 @@
++#include <wchar.h>
++
++wchar_t *wmemset(wchar_t *wcs, wchar_t wc, size_t n) {
++  size_t i;
++  for (i=0; i<n; ++i) wcs[i]=wc;
++  return wcs;
++}
+--- dietlibc-0.30/include/wctype.h.widechar	2005-07-15 20:34:03.000000000 +0200
++++ dietlibc-0.30/include/wctype.h	2008-04-29 17:54:13.000000000 +0200
+@@ -6,6 +6,48 @@
+ 
+ typedef const int32_t* wctrans_t;
+ 
++#  include <endian.h>
++#  if __BYTE_ORDER == __BIG_ENDIAN
++#   define _ISwbit(bit) (1 << (bit))
++#  else /* __BYTE_ORDER == __LITTLE_ENDIAN */
++#   define _ISwbit(bit) \
++          ((bit) < 8 ? (int) ((1UL << (bit)) << 24)       \
++	  : ((bit) < 16 ? (int) ((1UL << (bit)) << 8)     \
++	    : ((bit) < 24 ? (int) ((1UL << (bit)) >> 8)   \
++	      : (int) ((1UL << (bit)) >> 24))))
++#  endif
++
++enum
++{
++  __ISwupper = 0,                       /* UPPERCASE.  */
++  __ISwlower = 1,                       /* lowercase.  */
++  __ISwalpha = 2,                       /* Alphabetic.  */
++  __ISwdigit = 3,                       /* Numeric.  */
++  __ISwxdigit = 4,                      /* Hexadecimal numeric.  */
++  __ISwspace = 5,                       /* Whitespace.  */
++  __ISwprint = 6,                       /* Printing.  */
++  __ISwgraph = 7,                       /* Graphical.  */
++  __ISwblank = 8,                       /* Blank (usually SPC and TAB).  */
++  __ISwcntrl = 9,                       /* Control character.  */
++  __ISwpunct = 10,                      /* Punctuation.  */
++  __ISwalnum = 11,                      /* Alphanumeric.  */
++
++  _ISwupper = _ISwbit (__ISwupper),     /* UPPERCASE.  */
++  _ISwlower = _ISwbit (__ISwlower),     /* lowercase.  */
++  _ISwalpha = _ISwbit (__ISwalpha),     /* Alphabetic.  */
++  _ISwdigit = _ISwbit (__ISwdigit),     /* Numeric.  */
++  _ISwxdigit = _ISwbit (__ISwxdigit),   /* Hexadecimal numeric.  */
++  _ISwspace = _ISwbit (__ISwspace),     /* Whitespace.  */
++  _ISwprint = _ISwbit (__ISwprint),     /* Printing.  */
++  _ISwgraph = _ISwbit (__ISwgraph),     /* Graphical.  */
++  _ISwblank = _ISwbit (__ISwblank),     /* Blank (usually SPC and TAB).  */
++  _ISwcntrl = _ISwbit (__ISwcntrl),     /* Control character.  */
++  _ISwpunct = _ISwbit (__ISwpunct),     /* Punctuation.  */
++  _ISwalnum = _ISwbit (__ISwalnum)      /* Alphanumeric.  */
++};
++
++__BEGIN_DECLS
++
+ int iswalnum(wint_t) __THROW __attribute__ ((__const__));
+ int iswalpha(wint_t) __THROW __attribute__ ((__const__));
+ int iswblank(wint_t) __THROW __attribute__ ((__const__));
+@@ -25,4 +67,6 @@ wint_t towupper(wint_t) __THROW;
+ wctrans_t wctrans(const char *) __THROW;
+ wctype_t wctype(const char *) __THROW;
+ 
++__END_DECLS
++
+ #endif
+--- /dev/null	2000-10-22 01:01:00.000000000 +0200
++++ dietlibc-stage1/lib/mbrlen.c	2006-10-26 20:07:18.000000000 +0200
+@@ -0,0 +1,8 @@
++#include <wchar.h>
++
++static mbstate_t internal;
++
++size_t mbrlen (const char *s, size_t n, mbstate_t *ps)
++{
++    return mbrtowc (NULL, s, n, ps ? ps : &internal);
++}
+--- /dev/null	2000-10-22 01:01:00.000000000 +0200
++++ dietlibc-stage1/lib/mblen.c	2006-10-26 20:07:18.000000000 +0200
+@@ -0,0 +1,10 @@
++#include <stdlib.h>
++
++int mblen(const char *s, size_t n)
++{
++  if (s == NULL || *s == '\0')
++    return 0;
++  if (n == 0)
++    return -1;
++  return 1;
++}
+--- /dev/null	2000-10-22 01:01:00.000000000 +0200
++++ dietlibc-stage1/lib/iswbits.h	2006-10-26 20:07:17.000000000 +0200
+@@ -0,0 +1,67 @@
++/* Copyright (C) 1999 Free Software Foundation, Inc.
++   This file is part of the GNU UTF-8 Library.
++
++   The GNU UTF-8 Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Library General Public License as
++   published by the Free Software Foundation; either version 2 of the
++   License, or (at your option) any later version.
++
++   The GNU UTF-8 Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Library General Public License for more details.
++
++   You should have received a copy of the GNU Library General Public
++   License along with the GNU UTF-8 Library; see the file COPYING.LIB.  If not,
++   write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
++   Boston, MA 02111-1307, USA.  */
++
++/* How the 12 character attributes are encoded in 8 bits: Every attribute is
++   represented by an "include bitmask" and an "exclude bitmask".
++    Attribute     bit/formula          comment
++     upper        bit               implies towlower(x) != x == towupper(x)
++     lower        bit               implies towlower(x) == x != towupper(x)
++     alpha        bit               superset of upper || lower
++     digit        xdigit && !alpha  '0'..'9' and more
++     xdigit       bit               '0'..'9','a'..'f','A'..'F' and more
++     space        bit               ' ', '\f', '\n', '\r', '\t', '\v'
++     print        bit
++     graph        print && !space
++     blank        bit               ' ', '\t'
++     cntrl        bit               0x00..0x1F,0x7F
++     punct        print && !(alpha || xdigit || space)
++     alnum        alpha || xdigit
++*/
++
++#define iswmask(number,incl,excl)  ((incl) | ((excl) << 8) | ((number) << 16))
++#define wmask_incl(mask)  (mask) & 0xFF
++#define wmask_excl(mask)  ((mask) >> 8) & 0xFF
++#define wmask_number(mask)  ((mask) >> 16)
++
++#define upper    1
++#define lower    2
++#define alpha    4
++#define digit    0
++#define xdigit   8
++#define space   16
++#define print   32
++#define graph    0
++#define blank   64
++#define cntrl  128
++#define punct    0
++#define alnum    0
++
++#define wctype_upper  iswmask(0, upper,0)
++#define wctype_lower  iswmask(1, lower,0)
++#define wctype_alpha  iswmask(2, alpha,0)
++#define wctype_digit  iswmask(3, xdigit,alpha)
++#define wctype_xdigit iswmask(4, xdigit,0)
++#define wctype_space  iswmask(5, space,0)
++#define wctype_print  iswmask(6, print,0)
++#define wctype_graph  iswmask(7, print,space)
++#define wctype_blank  iswmask(8, blank,0)
++#define wctype_cntrl  iswmask(9, cntrl,0)
++#define wctype_punct  iswmask(10, print,alpha|xdigit|space)
++#define wctype_alnum  iswmask(11, alpha|xdigit,0)
++
++extern const unsigned char * const attribute_table[0x1100];
+--- /dev/null	2000-10-22 01:01:00.000000000 +0200
++++ dietlibc-stage1/lib/mbrtowc.c	2006-10-26 20:07:18.000000000 +0200
+@@ -0,0 +1,23 @@
++#include <wchar.h>
++#include <stdlib.h>
++#include <stdio.h>
++#include <errno.h>
++#include <string.h>
++
++size_t mbrtowc(wchar_t *pwc, const char *s, size_t n, mbstate_t *ps)
++{
++  int retval = 0;
++
++  if (s == NULL)
++    retval = mbtowc(NULL, "", 1);
++  else
++    retval = mbtowc(pwc, s, n);
++
++  if (retval == -1)
++    {
++      ps->count = 0;
++      return (size_t)(-1);
++    }
++  else
++    return (size_t)retval;
++}
+--- /dev/null	2000-10-22 01:01:00.000000000 +0200
++++ dietlibc-stage1/lib/mbtowc.c	2006-10-26 20:07:18.000000000 +0200
+@@ -0,0 +1,13 @@
++#include <stdlib.h>
++#include <wchar.h>
++
++int mbtowc(wchar_t *pwc, const char *s, size_t n)
++{
++  if (s == NULL)
++    return 0;
++  if (n == 0)
++    return -1;
++  if (pwc)
++    *pwc = (wchar_t) *s;
++  return (*s != '\0');
++}
+--- /dev/null	2000-10-22 01:01:00.000000000 +0200
++++ dietlibc-stage1/lib/wctomb.c	2006-10-26 20:07:18.000000000 +0200
+@@ -0,0 +1,9 @@
++#include <stdlib.h>
++
++int wctomb(char *s, wchar_t wchar)
++{
++  if (s == NULL)
++    return 0;
++  *s = (char) wchar;
++  return 1;
++}
+--- /dev/null	2000-10-22 01:01:00.000000000 +0200
++++ dietlibc-stage1/lib/mbrtowcs.c	2006-10-26 20:07:18.000000000 +0200
+@@ -0,0 +1,8 @@
++#include <stdlib.h>
++#include <wchar.h>
++
++size_t mbrtowcs(wchar_t *__pwcs, const char *__s, size_t __n)
++{
++  return mbtowc(__pwcs, __s, __n);
++}
++
+--- /dev/null	2000-10-22 01:01:00.000000000 +0200
++++ dietlibc-stage1/lib/wctype.c	2006-10-26 20:07:18.000000000 +0200
+@@ -0,0 +1,52 @@
++/* Copyright (C) 1999 Free Software Foundation, Inc.
++   This file is part of the GNU UTF-8 Library.
++
++   The GNU UTF-8 Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Library General Public License as
++   published by the Free Software Foundation; either version 2 of the
++   License, or (at your option) any later version.
++
++   The GNU UTF-8 Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Library General Public License for more details.
++
++   You should have received a copy of the GNU Library General Public
++   License along with the GNU UTF-8 Library; see the file COPYING.LIB.  If not,
++   write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
++   Boston, MA 02111-1307, USA.  */
++
++#include <wctype.h>
++
++#include <string.h>
++#include "iswbits.h"
++
++struct ctype_property {
++  const char* property;
++  wctype_t ctype;
++};
++
++static struct ctype_property all_properties[] = {
++  { "upper", wctype_upper },
++  { "lower", wctype_lower },
++  { "alpha", wctype_alpha },
++  { "digit", wctype_digit },
++  { "xdigit", wctype_xdigit },
++  { "space", wctype_space },
++  { "print", wctype_print },
++  { "graph", wctype_graph },
++  { "blank", wctype_blank },
++  { "cntrl", wctype_cntrl },
++  { "punct", wctype_punct },
++  { "alnum", wctype_alnum }
++};
++
++wctype_t wctype (const char* property)
++{
++  struct ctype_property * ptr = &all_properties[0];
++  size_t count = sizeof(all_properties) / sizeof(all_properties[0]);
++  for (; count > 0; ptr++, count--)
++    if (!strcmp(ptr->property, property))
++      return ptr->ctype;
++  return 0;
++}
+--- /dev/null	2000-10-22 01:01:00.000000000 +0200
++++ dietlibc-stage1/lib/mbstowcs.c	2006-10-26 20:07:18.000000000 +0200
+@@ -0,0 +1,15 @@
++#include <stdlib.h>
++
++size_t mbstowcs(wchar_t *pwcs, const char *s, size_t n)
++{
++  int count = 0;
++
++  if (n != 0) {
++    do {
++      if ((*pwcs++ = (wchar_t) *s++) == 0)
++        break;
++      count++;
++    } while (--n != 0);
++  }
++  return count;
++}
+--- /dev/null	2000-10-22 01:01:00.000000000 +0200
++++ dietlibc-stage1/lib/mbsinit.c	2006-10-26 20:07:18.000000000 +0200
+@@ -0,0 +1,6 @@
++#include <wchar.h>
++
++int mbsinit(const mbstate_t *ps)
++{
++  return (ps->count == 0);
++}
+--- /dev/null	2000-10-22 01:01:00.000000000 +0200
++++ dietlibc-stage1/lib/wcstombs.c	2006-10-26 20:07:18.000000000 +0200
+@@ -0,0 +1,14 @@
++#include <stdlib.h>
++
++size_t wcstombs(char *s, const wchar_t *pwcs, size_t n)
++{
++  int count = 0;
++  if (n != 0) {
++    do {
++      if ((*s++ = (char) *pwcs++) == 0)
++	break;
++      count++;
++    } while (--n != 0);
++  }
++  return count;
++}

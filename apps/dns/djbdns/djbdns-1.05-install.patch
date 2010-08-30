@@ -1,0 +1,11 @@
+--- djbdns-1.05/hier.c.install	2005-10-30 09:33:08.000000000 +0100
++++ djbdns-1.05/hier.c	2005-10-30 09:33:34.000000000 +0100
+@@ -2,7 +2,7 @@
+ 
+ void hier()
+ {
+-  c("/","etc","dnsroots.global",-1,-1,0644);
++  c(auto_home,"etc","dnsroots.global",-1,-1,0644);
+ 
+   h(auto_home,-1,-1,02755);
+   d(auto_home,"bin",-1,-1,02755);

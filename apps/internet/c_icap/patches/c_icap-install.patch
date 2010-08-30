@@ -1,0 +1,31 @@
+--- c_icap-180407/Makefile.am.install	2007-07-05 20:52:56.000000000 +0200
++++ c_icap-180407/Makefile.am	2007-07-05 20:54:08.000000000 +0200
+@@ -62,17 +62,17 @@
+ #sysconf_DATA = c-icap.conf c-icap.magic
+ 
+ install-data-local:
+-	$(mkinstalldirs) $(CONFIGDIR);
+-	$(mkinstalldirs)  $(LOGDIR); 
+-	$(mkinstalldirs)  $(SOCKDIR);
+-	chgrp nobody $(LOGDIR)
+-	chmod 775 $(LOGDIR)
+-	chgrp nobody $(SOCKDIR)
+-	chmod 775 $(SOCKDIR)
+-	$(INSTALL) c-icap.conf $(CONFIGDIR)/c-icap.conf.default
+-	$(INSTALL) c-icap.magic $(CONFIGDIR)/c-icap.magic.default
+-	if test ! -f $(CONFIGDIR)/c-icap.conf; then  $(INSTALL) c-icap.conf $(CONFIGDIR)/c-icap.conf; fi
+-	if test ! -f $(CONFIGDIR)/c-icap.magic; then $(INSTALL) c-icap.magic $(CONFIGDIR)/c-icap.magic; fi
++	mkdir -p $(DESTDIR)$(CONFIGDIR)
++	mkdir -p $(DESTDIR)$(LOGDIR)
++	mkdir -p $(DESTDIR)$(SOCKDIR)
++	chgrp nobody $(DESTDIR)$(LOGDIR)
++	chmod 775 $(DESTDIR)$(LOGDIR)
++	chgrp nobody $(DESTDIR)$(SOCKDIR)
++	chmod 775 $(DESTDIR)$(SOCKDIR)
++	$(INSTALL) c-icap.conf $(DESTDIR)$(CONFIGDIR)/c-icap.conf.default
++	$(INSTALL) c-icap.magic $(DESTDIR)$(CONFIGDIR)/c-icap.magic.default
++	if test ! -f $(DESTDIR)$(CONFIGDIR)/c-icap.conf; then  $(INSTALL) c-icap.conf $(DESTDIR)$(CONFIGDIR)/c-icap.conf; fi
++	if test ! -f $(DESTDIR)$(CONFIGDIR)/c-icap.magic; then $(INSTALL) c-icap.magic $(DESTDIR)$(CONFIGDIR)/c-icap.magic; fi
+ 
+ EXTRA_DIST= RECONF INSTALL.txt config-w32.h makefile.w32 c-icap.conf c_icap_dll.mak c-icap.conf.in c-icap.magic  c_icap.mak c_icap.def \
+              contrib/get_file.pl contrib/convert_old_magic.pl \

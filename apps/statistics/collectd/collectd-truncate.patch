@@ -1,0 +1,11 @@
+diff -up ./src/utils_tail.c.truncate ./src/utils_tail.c
+--- ./src/utils_tail.c.truncate	2009-07-11 13:20:47.000000000 +0200
++++ ./src/utils_tail.c	2009-11-19 09:02:52.000000000 +0100
+@@ -240,6 +240,6 @@ int cu_tail_read (cu_tail_t *obj, char *
+ 			break;
+ 		}
+ 	}
+-
++       truncate(obj->file, 0);
+ 	return status;
+ } /* int cu_tail_read */

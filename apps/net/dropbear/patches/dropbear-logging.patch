@@ -1,0 +1,20 @@
+--- dropbear-0.49/svr-session.c.logging	2007-05-04 00:15:35.000000000 +0200
++++ dropbear-0.49/svr-session.c	2007-05-04 00:17:44.000000000 +0200
+@@ -181,6 +181,7 @@
+ 
+ 	if (!svr_opts.usingsyslog || havetrace)
+ 	{
++#if 0
+ 		struct tm * local_tm = NULL;
+ 		timesec = time(NULL);
+ 		local_tm = localtime(&timesec);
+@@ -192,6 +193,9 @@
+ 			snprintf(datestr, sizeof(datestr), "%d", timesec);
+ 		}
+ 		fprintf(stderr, "[%d] %s %s\n", getpid(), datestr, printbuf);
++#else
++		fprintf(stderr, "[%d] %s\n", getpid(), printbuf);
++#endif
+ 	}
+ }
+ 

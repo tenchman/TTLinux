@@ -1,0 +1,85 @@
+diff -up gpm-1.20.1/src/gpm.c.diet gpm-1.20.1/src/gpm.c
+--- gpm-1.20.1/src/gpm.c.diet	2002-12-24 23:57:16.000000000 +0100
++++ gpm-1.20.1/src/gpm.c	2009-01-14 10:11:21.000000000 +0100
+@@ -29,7 +29,7 @@
+ #include <signal.h>        /* SIGPIPE */
+ #include <time.h>          /* time() */
+ #include <sys/param.h>
+-#include <sys/fcntl.h>     /* O_RDONLY */
++#include <fcntl.h>     /* O_RDONLY */
+ #include <sys/wait.h>      /* wait()   */
+ #include <sys/stat.h>      /* mkdir()  */
+ #include <sys/time.h>      /* timeval */
+@@ -56,6 +56,7 @@
+ extern int errno;
+ 
+ static void gpm_killed(int);
++struct options option;        /* one should be enough for us */
+ 
+ /*
+  * all the values duplicated for dual-mouse operation are
+diff -up gpm-1.20.1/src/headers/gpmInt.h.diet gpm-1.20.1/src/headers/gpmInt.h
+--- gpm-1.20.1/src/headers/gpmInt.h.diet	2002-12-24 23:57:16.000000000 +0100
++++ gpm-1.20.1/src/headers/gpmInt.h	2009-01-14 10:11:21.000000000 +0100
+@@ -227,7 +227,7 @@ struct options {
+ };
+ 
+ /* global variables */
+-struct options option;        /* one should be enough for us */
++extern struct options option;        /* one should be enough for us */
+ 
+ /* new variables </CLEAN> */
+ 
+diff -up gpm-1.20.1/src/lib/liblow.c.diet gpm-1.20.1/src/lib/liblow.c
+--- gpm-1.20.1/src/lib/liblow.c.diet	2002-12-24 23:57:16.000000000 +0100
++++ gpm-1.20.1/src/lib/liblow.c	2009-01-14 10:11:21.000000000 +0100
+@@ -33,7 +33,7 @@
+ #include <sys/types.h>     /* socket() */
+ #include <sys/socket.h>    /* socket() */
+ #include <sys/un.h>        /* struct sockaddr_un */
+-#include <sys/fcntl.h>     /* O_RDONLY */
++#include <fcntl.h>     /* O_RDONLY */
+ #include <sys/stat.h>      /* stat() */
+ 
+ #ifdef  SIGTSTP         /* true if BSD system */
+@@ -53,6 +53,7 @@
+ #define min(a,b) ((a)<(b) ? (a) : (b))
+ #define max(a,b) ((a)>(b) ? (a) : (b))
+ #endif
++struct options option;        /* one should be enough for us */
+ 
+ /*....................................... Stack struct */
+ typedef struct Gpm_Stst {
+diff -up gpm-1.20.1/src/Makefile.in.diet gpm-1.20.1/src/Makefile.in
+--- gpm-1.20.1/src/Makefile.in.diet	2002-12-24 23:57:16.000000000 +0100
++++ gpm-1.20.1/src/Makefile.in	2009-01-14 10:11:21.000000000 +0100
+@@ -145,7 +145,7 @@ prog/gpm-root: prog/gpm-root.c
+ 
+ prog/mouse-test:	mice.o twiddler.o synaptics.o
+ 
+-$(PROG):	lib/libgpm.so lib/@SHLIB@ lib/libgpm.a
++$(PROG):	lib/libgpm.a
+ 
+ # Subdirectory lib/
+ lib/libgpm.a:	$(LOBJ)
+diff -up gpm-1.20.1/src/prog/gpm-root.y.diet gpm-1.20.1/src/prog/gpm-root.y
+--- gpm-1.20.1/src/prog/gpm-root.y.diet	2002-12-24 23:57:16.000000000 +0100
++++ gpm-1.20.1/src/prog/gpm-root.y	2009-01-14 10:13:56.000000000 +0100
+@@ -44,7 +44,7 @@
+ #include <sys/stat.h>       /* fstat() */
+ #include <sys/utsname.h>    /* uname() */
+ #include <termios.h>        /* winsize */
+-#include <linux/limits.h>   /* OPEN_MAX */
++#include <limits.h>	    /* OPEN_MAX */
+ #include <linux/vt.h>       /* VT_ACTIVATE */
+ #include <linux/keyboard.h> /* K_SHIFT */
+ #include <utmp.h>         
+@@ -1197,7 +1197,7 @@ int main(int argc, char **argv)
+ #if defined(__GLIBC__)
+    __sigemptyset(&childaction.sa_mask);
+ #else /* __GLIBC__ */
+-   childaction.sa_mask=0;
++   sigemptyset(&childaction.sa_mask);
+ #endif /* __GLIBC__ */
+    childaction.sa_flags=SA_INTERRUPT; /* need to break the select() call */
+    sigaction(SIGCHLD,&childaction,NULL);

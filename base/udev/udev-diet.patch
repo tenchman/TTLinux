@@ -1,0 +1,11 @@
+diff -up udev-106/udev_sysdeps.h.diet udev-106/udev_sysdeps.h
+--- udev-106/udev_sysdeps.h.diet	2008-03-18 12:28:45.000000000 +0100
++++ udev-106/udev_sysdeps.h	2008-03-18 12:29:55.000000000 +0100
+@@ -109,6 +109,7 @@ static inline int inotify_add_watch(int 
+ #else
+ /* needed until /usr/include/sys/inotify.h is working */
+ #ifndef __GLIBC__
++#include <asm/types.h>
+ #include <sys/inotify.h>
+ #else
+ static inline int inotify_init(void)

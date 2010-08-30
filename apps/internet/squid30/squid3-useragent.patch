@@ -1,0 +1,14 @@
+--- squid-3.0.PRE6/src/ICAP/ICAPModXact.cc.useragent	2007-05-09 17:52:35.000000000 +0200
++++ squid-3.0.PRE6/src/ICAP/ICAPModXact.cc	2007-07-19 20:01:56.000000000 +0200
+@@ -1038,6 +1038,11 @@ void ICAPModXact::makeRequestHeaders(Mem
+         if (request->client_addr.s_addr != any_addr.s_addr &&
+             request->client_addr.s_addr != no_addr.s_addr)
+             buf.Printf("X-Client-IP: %s\r\n", inet_ntoa(request->client_addr));
++    
++    const char *str;
++    if ((str = request->header.getStr(HDR_USER_AGENT))) {
++      buf.Printf("X-Client-User-Agent: %s\r\n", str);
++    }
+ 
+     if (TheICAPConfig.send_client_username && request)
+         makeUsernameHeader(request, buf);

@@ -1,0 +1,115 @@
+--- openssl-0.9.7m/apps/apps.c.nopkcs12	2005-07-01 18:13:06.000000000 +0200
++++ openssl-0.9.7m/apps/apps.c	2007-03-29 22:00:23.000000000 +0200
+@@ -806,11 +806,17 @@
+ 		x=PEM_read_bio_X509_AUX(cert,NULL,
+ 			(pem_password_cb *)password_callback, NULL);
+ 	else if (format == FORMAT_PKCS12)
++#ifndef OPENSSL_NO_PKCS12
+ 		{
+ 		if (!load_pkcs12(err, cert,cert_descrip, NULL, NULL,
+ 					NULL, &x, NULL))
+ 			goto end;
+ 		}
++#else
++		{
++		BIO_printf(err,"The PKCS #12 format is not supported.\n");
++		}
++#endif
+ 	else	{
+ 		BIO_printf(err,"bad input format specified for %s\n",
+ 			cert_descrip);
+@@ -887,12 +893,18 @@
+ 		pkey = load_netscape_key(err, key, file, key_descrip, format);
+ #endif
+ 	else if (format == FORMAT_PKCS12)
++#ifndef OPENSSL_NO_PKCS12
+ 		{
+ 		if (!load_pkcs12(err, key, key_descrip,
+ 				(pem_password_cb *)password_callback, &cb_data,
+ 				&pkey, NULL, NULL))
+ 			goto end;
+ 		}
++#else
++		{
++		BIO_printf(err,"The PKCS #12 format is not supported.\n");
++		}
++#endif
+ 	else
+ 		{
+ 		BIO_printf(err,"bad input format specified for key file\n");
+--- openssl-0.9.7m/crypto/evp/c_allc.c.nopkcs12	2004-05-11 14:45:23.000000000 +0200
++++ openssl-0.9.7m/crypto/evp/c_allc.c	2007-03-29 22:00:23.000000000 +0200
+@@ -183,6 +183,8 @@
+ 	EVP_add_cipher_alias(SN_aes_256_cbc,"AES256");
+ 	EVP_add_cipher_alias(SN_aes_256_cbc,"aes256");
+ #endif
++#ifndef OPENSSL_NO_PKCS12
+ 	PKCS12_PBE_add();
++#endif
+ 	PKCS5_PBE_add();
+ 	}
+--- openssl-0.9.7m/crypto/pkcs12/Makefile.nopkcs12	2006-02-04 02:50:26.000000000 +0100
++++ openssl-0.9.7m/crypto/pkcs12/Makefile	2007-03-29 22:00:23.000000000 +0200
+@@ -22,12 +22,18 @@
+ APPS=
+ 
+ LIB=$(TOP)/libcrypto.a
++NO_PKCS12=$(filter -DOPENSSL_NO_PKCS12,$(CFLAG))
++ifeq (-DOPENSSL_NO_PKCS12,$(NO_PKCS12))
++LIBSRC= p12_p8e.c p12_p8d.c p12_decr.c
++LIBOBJ= p12_p8e.o p12_p8d.o p12_decr.o
++else
+ LIBSRC= p12_add.c p12_asn.c p12_attr.c p12_crpt.c p12_crt.c p12_decr.c \
+ 	p12_init.c p12_key.c p12_kiss.c p12_mutl.c\
+ 	p12_utl.c p12_npas.c pk12err.c p12_p8d.c p12_p8e.c
+ LIBOBJ= p12_add.o p12_asn.o p12_attr.o p12_crpt.o p12_crt.o p12_decr.o \
+ 	p12_init.o p12_key.o p12_kiss.o p12_mutl.o\
+ 	p12_utl.o p12_npas.o pk12err.o p12_p8d.o p12_p8e.o
++endif
+ 
+ SRC= $(LIBSRC)
+ 
+--- openssl-0.9.7m/Configure.nopkcs12	2007-03-29 22:00:24.000000000 +0200
++++ openssl-0.9.7m/Configure	2007-03-29 22:00:24.000000000 +0200
+@@ -142,8 +142,8 @@
+ "debug-ben-strict",	"gcc:-DBN_DEBUG -DREF_CHECK -DCONF_DEBUG -DBN_CTX_DEBUG -DCRYPTO_MDEBUG -DCONST_STRICT -O2 -Wall -Wshadow -Werror -Wpointer-arith -Wcast-qual -Wwrite-strings -pipe::(unknown)::::::",
+ "debug-ben-fips-debug","gcc:-DBN_DEBUG -DREF_CHECK -DCONF_DEBUG -DBN_CTX_DEBUG -DCRYPTO_MDEBUG -DPEDANTIC -DDEBUG_SAFESTACK -DOPENSSL_FIPS -g3 -O2 -pedantic -Wall -Wshadow -Werror -pipe::(unknown)::::asm/bn86-elf.o asm/co86-elf.o",
+ "debug-rse","cc:-DTERMIOS -DL_ENDIAN -pipe -O -g -ggdb3 -Wall::(unknown):::BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}",
+-"debug-bodo",	"gcc:-DL_ENDIAN -DBN_DEBUG -DREF_CHECK -DCONF_DEBUG -DBN_CTX_DEBUG -DBIO_PAIR_DEBUG -DPEDANTIC -g -m486 -pedantic -Wshadow -Wall::-D_REENTRANT:::BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}",
+-"debug-ulf",	"gcc:-DL_ENDIAN -DREF_CHECK -DCONF_DEBUG -DBN_DEBUG -DBN_CTX_DEBUG -DCRYPTO_MDEBUG_ALL -g -O2 -m486 -Wall -Werror -Wshadow -pipe::-D_REENTRANT:::${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}",
++"debug-bodo",	"gcc:-DL_ENDIAN -DBN_DEBUG -DREF_CHECK -DCONF_DEBUG -DBN_CTX_DEBUG -DBIO_PAIR_DEBUG -DPEDANTIC -g -march=i486 -pedantic -Wshadow -Wall::-D_REENTRANT:::BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}",
++"debug-ulf",	"gcc:-DL_ENDIAN -DREF_CHECK -DCONF_DEBUG -DBN_DEBUG -DBN_CTX_DEBUG -DCRYPTO_MDEBUG_ALL -g -O2 -march=i486 -Wall -Werror -Wshadow -pipe::-D_REENTRANT:::${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}",
+ "debug-steve",	"gcc:-DL_ENDIAN -DREF_CHECK -DCONF_DEBUG -DBN_CTX_DEBUG -DDEBUG_SAFESTACK -DCRYPTO_MDEBUG_ALL -DPEDANTIC -g -march=i486 -pedantic -Wno-long-long -Wall -Werror -Wshadow -pipe::-D_REENTRANT::-ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn",
+ "debug-steve-linux-pseudo64",	"gcc:-DL_ENDIAN -DREF_CHECK -DCONF_DEBUG -DBN_CTX_DEBUG -DDEBUG_SAFESTACK -DCRYPTO_MDEBUG_ALL -DOPENSSL_NO_ASM -g -march=i486 -Wall -Werror -Wshadow -pipe::-D_REENTRANT::-rdynamic -ldl:SIXTY_FOUR_BIT::dlfcn",
+ "debug-levitte-linux-elf","gcc:-DLEVITTE_DEBUG -DREF_CHECK -DCONF_DEBUG -DBN_CTX_DEBUG -DCRYPTO_MDEBUG -DL_ENDIAN -DTERMIO -D_POSIX_SOURCE -DPEDANTIC -ggdb -g3 -march=i486 -pedantic -ansi -Wall -Wshadow -Wcast-align -Wmissing-prototypes -Wno-long-long -pipe::-D_REENTRANT::-ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
+@@ -392,15 +392,15 @@
+ 
+ # The intel boxes :-), It would be worth seeing if bsdi-gcc can use the
+ # bn86-elf.o file file since it is hand tweaked assembler.
+-"linux-elf",	"gcc:-DL_ENDIAN -DTERMIO -O3 -fomit-frame-pointer -m486 -Wall::-D_REENTRANT::-ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
++"linux-elf",	"gcc:-DL_ENDIAN -DTERMIO -O3 -fomit-frame-pointer -march=i486 -Wall::-D_REENTRANT::-ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
+ "linux-pentium",	"gcc:-DL_ENDIAN -DTERMIO -O3 -fomit-frame-pointer -march=pentium -Wall::-D_REENTRANT::-ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
+ "linux-ppro",	"gcc:-DL_ENDIAN -DTERMIO -O3 -fomit-frame-pointer -march=pentiumpro -Wall::-D_REENTRANT::-ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
+ "linux-k6",	"gcc:-DL_ENDIAN -DTERMIO -O3 -fomit-frame-pointer -march=k6 -Wall::-D_REENTRANT::-ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
+ "debug-linux-pentium","gcc:-DBN_DEBUG -DREF_CHECK -DCONF_DEBUG -DBN_CTX_DEBUG -DCRYPTO_MDEBUG -DL_ENDIAN -DTERMIO -g -march=pentium -Wall::-D_REENTRANT::-ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn",
+ "debug-linux-ppro","gcc:-DBN_DEBUG -DREF_CHECK -DCONF_DEBUG -DBN_CTX_DEBUG -DCRYPTO_MDEBUG -DL_ENDIAN -DTERMIO -g -march=pentiumpro -Wall::-D_REENTRANT::-ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn",
+-"debug-linux-elf","gcc:-DBN_DEBUG -DREF_CHECK -DCONF_DEBUG -DBN_CTX_DEBUG -DCRYPTO_MDEBUG -DL_ENDIAN -DTERMIO -g -m486 -Wall::-D_REENTRANT::-lefence -ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
+-"debug-linux-elf-noefence","gcc:-DBN_DEBUG -DREF_CHECK -DCONF_DEBUG -DBN_CTX_DEBUG -DCRYPTO_MDEBUG -DL_ENDIAN -DTERMIO -g -m486 -Wall::-D_REENTRANT::-ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
+-"linux-aout",	"gcc:-DL_ENDIAN -DTERMIO -O3 -fomit-frame-pointer -m486 -Wall::(unknown):::BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_out_asm}",
++"debug-linux-elf","gcc:-DBN_DEBUG -DREF_CHECK -DCONF_DEBUG -DBN_CTX_DEBUG -DCRYPTO_MDEBUG -DL_ENDIAN -DTERMIO -g -march=i486 -Wall::-D_REENTRANT::-lefence -ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
++"debug-linux-elf-noefence","gcc:-DBN_DEBUG -DREF_CHECK -DCONF_DEBUG -DBN_CTX_DEBUG -DCRYPTO_MDEBUG -DL_ENDIAN -DTERMIO -g -march=i486 -Wall::-D_REENTRANT::-ldl:BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_elf_asm}:dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
++"linux-aout",	"gcc:-DL_ENDIAN -DTERMIO -O3 -fomit-frame-pointer -march=i486 -Wall::(unknown):::BN_LLONG ${x86_gcc_des} ${x86_gcc_opts}:${x86_out_asm}",
+ "linux-mipsel",   "gcc:-DL_ENDIAN -DTERMIO -O3 -fomit-frame-pointer -Wall::-D_REENTRANT::-ldl:BN_LLONG RC2_CHAR RC4_INDEX DES_INT DES_UNROLL DES_RISC2::::::::::dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
+ "linux-mips",   "gcc:-DB_ENDIAN -DTERMIO -O3 -fomit-frame-pointer -Wall::-D_REENTRANT::-ldl:BN_LLONG RC2_CHAR RC4_INDEX DES_INT DES_UNROLL DES_RISC2::::::::::dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
+ "linux-ppc",    "gcc:-DB_ENDIAN -DTERMIO -O3 -fomit-frame-pointer -Wall::-D_REENTRANT::-ldl:BN_LLONG RC4_CHAR RC4_CHUNK DES_RISC1 DES_UNROLL:asm/linux_ppc32.o:::::::::dlfcn:linux-shared:-fPIC::.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR)",
+@@ -767,7 +767,9 @@
+ 		elsif (/^no-(.+)$/)
+ 			{
+ 			my $algo=$1;
+-			push @skip,$algo;
++			if ($algo ne "pkcs12") {
++				push @skip,$algo;
++			}
+ 			$algo =~ tr/[a-z]/[A-Z]/;
+ 			$flags .= "-DOPENSSL_NO_$algo ";
+ 			$depflags .= "-DOPENSSL_NO_$algo ";

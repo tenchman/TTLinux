@@ -1,0 +1,26 @@
+-- -*- asn1 -*-
+-- $Id: TELCO-TECH-MIB.txt 1192 2007-11-22 12:25:43Z manfred $ --
+TELCO-TECH-MIB DEFINITIONS ::= BEGIN
+
+IMPORTS
+        MODULE-IDENTITY, enterprises
+        FROM SNMPv2-SMI
+        ;
+
+
+telcoTechMIB MODULE-IDENTITY
+LAST-UPDATED "200710021200Z"            -- 02 October 2007, high noon
+ORGANIZATION "net-snmp"
+CONTACT-INFO "postal:   TELCO TECH GmbH
+                        Potsdamer Str. 18a
+                        D-14513 Teltow (Germany)
+
+                        email:    support@telco-tech.de
+                 "
+
+DESCRIPTION  "This MIB module gives a name to the enterprise number 7067.
+"
+REVISION     "200710021200Z"            -- 02 October 2007, high noon
+DESCRIPTION  "Initial release."
+    ::= { enterprises 7067 }
+END

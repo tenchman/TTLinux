@@ -1,0 +1,424 @@
+--- util-linux-2.12r/login-utils/simpleinit.c.printf	2004-12-15 21:23:25.000000000 +0100
++++ util-linux-2.12r/login-utils/simpleinit.c	2006-05-16 21:47:18.000000000 +0200
+@@ -45,8 +45,6 @@
+ #include "my_crypt.h"
+ #include "pathnames.h"
+ #include "linux_reboot.h"
+-#include "xstrncpy.h"
+-#include "nls.h"
+ #include "simpleinit.h"
+ 
+ #define CMDSIZ     150	/* max size of a line in inittab */
+@@ -79,6 +77,7 @@
+ struct initline inittab[NUMCMD];
+ int numcmd;
+ int stopped = 0;	/* are we stopped */
++char *strtmp;
+ static char boot_prog[PATH_SIZE] = _PATH_RC;
+ static char script_prefix[PATH_SIZE] = "\0";
+ static char final_prog[PATH_SIZE] = "\0";
+@@ -129,15 +128,15 @@
+     pid_t pid;
+     int i;
+ 
+-    err(_("Booting to single user mode.\n"));
++    err("Booting to single user mode.\n");
+     if((pid = fork()) == 0) {
+ 	/* the child */
+ 	execl(_PATH_BSHELL, _PATH_BSHELL, NULL);
+-	err(_("exec of single user shell failed\n"));
++	err("exec of single user shell failed\n");
+     } else if(pid > 0) {
+ 	while (waitpid (pid, &i, 0) != pid)  /*  Nothing  */;
+     } else if(pid < 0) {
+-	err(_("fork of single user shell failed\n"));
++	err("fork of single user shell failed\n");
+     }
+     unlink(_PATH_SINGLE);
+ }
+@@ -167,10 +166,6 @@
+ 	sa.sa_handler = sigquit_handler;
+ 	sigaction (SIGQUIT, &sa, NULL);
+ 
+-	setlocale(LC_ALL, "");
+-	bindtextdomain(PACKAGE, LOCALEDIR);
+-	textdomain(PACKAGE);
+-
+ 	my_reboot (LINUX_REBOOT_CMD_CAD_OFF);
+ 	/*  Find script to run. Command-line overrides config file overrides
+ 	    built-in default  */
+@@ -183,11 +178,11 @@
+ 			no_reboot = 1;
+ 		else if (strlen(script_prefix) + strlen(argv[i]) < PATH_SIZE) {
+ 			char path[PATH_SIZE];
+-
+-			strcpy (path, script_prefix);
+-			strcat (path, argv[i]);
++			strtmp = path;
++			strtmp+=str_copy(strtmp, script_prefix);
++			str_copy(strtmp, argv[i]);
+ 			if (access (path, R_OK | X_OK) == 0)
+-				strcpy (boot_prog, path);
++				str_copy(boot_prog, path);
+ 		}
+ 	}
+ 	if (init_path[0] == '\0')
+@@ -196,8 +191,7 @@
+ 
+ 	    if ( (stat (boot_prog, &statbuf) == 0) && S_ISDIR (statbuf.st_mode) )
+ 	    {
+-		strcpy (init_path, boot_prog);
+-		i = strlen (init_path);
++		i = str_copy(init_path, boot_prog);
+ 		if (init_path[i - 1] == '/') init_path[i - 1] = '\0';
+ 	    }
+ 	}
+@@ -205,7 +199,7 @@
+ 	if ( ( initctl_fd = open (initctl_name, O_RDWR, 0) ) < 0 ) {
+ 		mkfifo (initctl_name, S_IRUSR | S_IWUSR);
+ 		if ( ( initctl_fd = open (initctl_name, O_RDWR, 0) ) < 0 )
+-			err ( _("error opening fifo\n") );
++			err ("error opening fifo\n");
+ 	}
+ 
+ 	if (initctl_fd >= 0 && fcntl(initctl_fd, F_SETFD, FD_CLOEXEC) != 0) {
+@@ -256,11 +250,11 @@
+ 		{
+ 		  case 0:   /*  Child   */
+ 		    execl (final_prog, final_prog, "start", NULL);
+-		    err ( _("error running finalprog\n") );
++		    err ("error running finalprog\n");
+ 		    _exit (1);
+ 		    break;
+ 		  case -1:  /*  Error   */
+-		    err ( _("error forking finalprog\n") );
++		    err ("error forking finalprog\n");
+ 		    break;
+ 		  default:  /*  Parent  */
+ 		    break;
+@@ -337,12 +331,12 @@
+ 
+     for (i = 0; i < MAXTRIES; i++)
+     {
+-	pass = getpass (_ ("Password: ") );
++	pass = getpass ("Password: ");
+ 	if (pass == NULL) continue;
+ 		
+ 	if ( !strcmp (crypt (pass, rootpass), rootpass) ) return 1;
+ 
+-	puts (_ ("\nWrong password.\n") );
++	puts ("\nWrong password.\n");
+     }
+     return 0;
+ }
+@@ -352,8 +346,9 @@
+     char path[PATH_SIZE];
+ 
+     if (caught_sigint) return;
+-    strcpy (path, script_prefix);
+-    strcat (path, "single");
++    strtmp = path;
++    strtmp += str_copy(strtmp, script_prefix);
++    str_copy(strtmp, "single");
+     if (access (path, R_OK | X_OK) == 0)
+ 	if (do_rc_tty (path) == 0) return;
+     if ( check_single_ok () ) enter_single ();
+@@ -415,7 +410,7 @@
+ 
+     if (lstat (path, &statbuf) != 0)
+     {
+-	err (_ ("lstat of path failed\n") );
++	err ("lstat of path failed\n");
+ 	return 1;
+     }
+     if ( S_ISLNK (statbuf.st_mode) )
+@@ -423,7 +418,7 @@
+ 	if (stat (path, &statbuf) != 0)
+ 	{
+ 	    if ( (errno == ENOENT) && ignore_dangling_symlink ) return 0;
+-	    err (_ ("stat of path failed\n") );
++	    err ("stat of path failed\n");
+ 	    return 1;
+ 	}
+     }
+@@ -431,7 +426,7 @@
+     if ( !S_ISDIR (statbuf.st_mode) ) return (*func) (path);
+     if ( ( dp = opendir (path) ) == NULL )
+     {
+-	err (_ ("open of directory failed\n") );
++	err ("open of directory failed\n");
+ 	return 1;
+     }
+     while ( ( de = readdir (dp) ) != NULL )
+@@ -440,7 +435,11 @@
+ 	char newpath[PATH_SIZE];
+ 
+ 	if (de->d_name[0] == '.') continue;
+-	retval = sprintf (newpath, "%s/%s", path, de->d_name);
++	strtmp=newpath;
++	strtmp += str_copy(strtmp, path);
++	strtmp += str_copy(strtmp, "/");
++	strtmp += str_copy(strtmp, de->d_name);
++	retval  = strtmp - newpath;
+ 	if (newpath[retval - 1] == '~') continue;  /*  Common mistake  */
+ 	if ( ( retval = process_path (newpath, func, 1) ) ) return retval;
+     }
+@@ -497,15 +496,17 @@
+ 		inittab[i].toks[0] = NULL;
+ 		inittab[i].pid = -1;
+ 		inittab[i].rate = 0;
+-		sprintf (txt,"respawning: \"%s\" too fast: quenching entry\n",
+-			 inittab[i].tty);
+-		err (_(txt));
++		strtmp = txt;
++		strtmp += str_copy(strtmp, "respawning: \"");
++		strtmp += str_copy(strtmp, inittab[i].tty);
++		str_copy(strtmp, "\" too fast: quenching entry\n");
++		err (txt);
+ 		return;
+ 	}
+ 
+ 	if((pid = fork()) < 0) {
+ 		inittab[i].pid = -1;
+-		err(_("fork failed\n"));
++		err("fork failed\n");
+ 		return;
+ 	}
+ 	if(pid) {
+@@ -526,17 +527,21 @@
+ 		for(j = 0; j < getdtablesize(); j++)
+ 			(void) close(j);
+ 
+-		(void) sprintf(term, "TERM=%s", inittab[i].termcap);
++		strtmp = term;
++		strtmp += str_copy(strtmp, "TERM="); 
++		str_copy(strtmp, inittab[i].termcap);
+ 		env[0] = term;
+ 		env[1] = (char *)0;
+ #ifdef SET_TZ
+-		(void) sprintf(tz, "TZ=%s", tzone);
++		strtmp = tz;
++		strtmp += str_copy(strtmp, "TZ=");
++		str_copy(strtmp, tzone);
+ 		env[1] = tz;
+ #endif
+ 		env[2] = (char *)0;
+ 
+ 		execve(inittab[i].toks[0], inittab[i].toks, env);
+-		err(_("exec failed\n"));
++		err("exec failed\n");
+ 		sleep(5);
+ 		_exit(1);
+ 	}
+@@ -560,7 +565,7 @@
+ 	/* termenv = "vt100"; */
+ 			
+ 	if(!(f = fopen(_PATH_INITTAB, "r"))) {
+-		err(_("cannot open inittab\n"));
++		err("cannot open inittab\n");
+ 		return;
+ 	}
+ 
+@@ -582,38 +587,43 @@
+ 			ptr++;
+ 			if ( !strncmp (buf, "bootprog", 8) ) {
+ 				while ( isspace (*ptr) ) ++ptr;
+-				strcpy (prog, ptr);
++				str_copy(prog, ptr);
+ 				has_prog = 1;
+ 				continue;
+ 			}
+ 			if ( !strncmp (buf, "fileprefix", 10) ) {
+ 				while ( isspace (*ptr) ) ++ptr;
+-				strcpy (script_prefix, ptr);
++				str_copy(script_prefix, ptr);
+ 				continue;
+ 			}
+ 			if ( !strncmp (buf, "PATH", 4) ) {
++				char *value;
+ 				while ( isspace (*ptr) ) ++ptr;
+-				setenv ("PATH", ptr, 1);
++				value = malloc(strlen(ptr)+6);
++				strtmp = value;
++				strtmp += str_copy(strtmp, "PATH=");
++				str_copy(strtmp, ptr);
++				putenv (value);
+ 				continue;
+ 			}
+ 			if ( !strncmp (buf, "INIT_PATH", 9) ) {
+ 				while ( isspace (*ptr) ) ++ptr;
+-				strcpy (init_path, ptr);
++				str_copy(init_path, ptr);
+ 				continue;
+ 			}
+ 			if ( !strncmp (buf, "finalprog", 8) ) {
+ 				while ( isspace (*ptr) ) ++ptr;
+-				strcpy (final_prog, ptr);
++				str_copy(final_prog, ptr);
+ 				continue;
+ 			}
+ 		}
+ 			
+ 
+-		(void) strcpy(inittab[i].line, buf);
++		(void) str_copy(inittab[i].line, buf);
+ 
+ 		(void) strtok(inittab[i].line, ":");
+-		xstrncpy(inittab[i].tty, inittab[i].line, 10);
+-		xstrncpy(inittab[i].termcap, strtok((char *)0, ":"), 30);
++		str_ncopy(inittab[i].tty, inittab[i].line, 10);
++		str_ncopy(inittab[i].termcap, strtok((char *)0, ":"), 30);
+ 
+ 		getty = strtok((char *)0, ":");
+ 		(void) strtok(getty, " \t\n");
+@@ -625,13 +635,15 @@
+ 
+ #ifdef SPECIAL_CONSOLE_TERM
+ 		/* special-case termcap for the console ttys */
+-		(void) sprintf(tty, "/dev/%s", inittab[i].tty);
++		strtmp = tty;
++		strtmp += str_copy(strtmp, "/dev/");
++		str_copy(strtmp, inittab[i].tty);
+ 		if(!termenv || stat(tty, &stb) < 0) {
+-			err(_("no TERM or cannot stat tty\n"));
++			err("no TERM or cannot stat tty\n");
+ 		} else {
+ 			/* is it a console tty? */
+ 			if(major(stb.st_rdev) == 4 && minor(stb.st_rdev) < 64)
+-				xstrncpy(inittab[i].termcap, termenv, 30);
++				str_ncopy(inittab[i].termcap, termenv, 30);
+ 		}
+ #endif
+ 
+@@ -643,12 +655,13 @@
+ 		int len;
+ 		char path[PATH_SIZE];
+ 
+-		strcpy (path, script_prefix);
+-		strcat (path, prog);
+-		len = strlen (path);
++		strtmp = path;
++		strtmp += str_copy (strtmp, script_prefix);
++		strtmp += str_copy (strtmp, prog);
++		len = strtmp - path;
+ 		if (path[len - 1] == '/') path[len - 1] = '\0';
+ 		if (access (path, R_OK | X_OK) == 0)
+-			strcpy (boot_prog, path);
++			str_copy(boot_prog, path);
+ 	}
+ }   /*  End Function read_inittab  */
+ 
+@@ -742,7 +755,7 @@
+     struct utmp ut;
+     
+     memset((char *)&ut, 0, sizeof(ut));
+-    strcpy(ut.ut_line, "~");
++    str_copy(ut.ut_line, "~");
+     memset(ut.ut_name, 0, sizeof(ut.ut_name));
+     time(&ut.ut_time);
+     ut.ut_type = BOOT_TIME;
+@@ -933,8 +946,10 @@
+ 		dup2 (1, 2);
+ 		execlp (get_path (victim->first_service->name),
+ 			victim->first_service->name, "stop", NULL);
+-		sprintf (txt, _("error stopping service: \"%s\""),
+-			 victim->first_service->name);
++		strtmp = txt;
++		strtmp += str_copy(strtmp, "error stopping service: \"");
++		strtmp += str_copy(strtmp, victim->first_service->name);
++		str_copy(strtmp, "\"\n");
+ 		err (txt);
+ 		_exit (SIG_NOT_STOPPED);
+ 	    }
+@@ -944,8 +959,10 @@
+ 		while (waitpid (pid, &ival, 0) != pid) /*  Nothing  */;
+ 		if ( WIFEXITED (ival) && (WEXITSTATUS (ival) == 0) )
+ 		{
+-		    sprintf (txt, "Stopped service: %s\n",
+-			     victim->first_service->name);
++		    strtmp = txt;
++		    strtmp += str_copy(strtmp, "stopped service: ");
++		    strtmp += str_copy(strtmp, victim->first_service->name);
++		    str_copy(strtmp, "\n");
+ 		    remove_entry (&available_list, victim);
+ 		    free (victim);
+ 		    err (txt);
+@@ -967,8 +984,12 @@
+ 	    fputs ("UNAVAILABLE SERVICES:\n", fp);
+ 	    for (service = unavailable_services; service != NULL;
+ 		 service = service->next)
+-		fprintf (fp, "%s (%s)\n", service->name,
+-			 service->failed ? "FAILED" : "not configured");
++	    {
++		fputs(service->name, fp);
++		fputs("(", fp);
++		fputs(service->failed ? "FAILED" : "not configured", fp);
++		fputs(")\n", fp);
++	    }
+ 	    fclose (fp);
+ 	    _exit (0);
+ 	}
+@@ -1004,7 +1025,7 @@
+ 		kill (command->pid, SIG_NOT_CHILD);
+ 		break;
+ 	    }
+-	    strcpy (service->name, command->name);
++	    str_copy(service->name, command->name);
+ 	}
+ 	else
+ 	{   /*  Orphaned service: unhook and grab it  */
+@@ -1057,14 +1078,17 @@
+ 	    free (script);
+ 	    return SIG_FAILED;
+ 	}
+-	strcpy (service->name, name);
++	str_copy(service->name, name);
+ 	switch ( script->pid = fork () )
+ 	{
+ 	  case 0:   /*  Child   */
+ 	    for (i = 1; i < NSIG; i++) signal (i, SIG_DFL);
+ 	    execlp (get_path (file), service->name, "start", NULL);
+-	    sprintf (txt, "error running programme: \"%s\"\n", service->name);
+-	    err ( _(txt) );
++	    strtmp = txt;
++	    strtmp += str_copy(strtmp, "error running programme: \"");
++	    strtmp += str_copy(strtmp, service->name);
++	    str_copy(strtmp, "\"\n");
++	    err ( txt );
+ 	    _exit (SIG_FAILED);
+ 	    break;
+ 	  case -1:  /*  Error   */
+@@ -1209,14 +1233,18 @@
+ static void show_scripts (FILE *fp, const struct script_struct *script,
+ 			  const char *type)
+ {
+-    fprintf (fp, "%s SERVICES:\n", type);
++    fputs(type, fp);
++    fputs(" SERVICES:\n", fp);
+     for (; script != NULL; script = script->next)
+     {
+ 	struct service_struct *service = script->first_service;
+ 
+ 	fputs (service->name, fp);
+-	for (service = service->next; service != NULL; service = service->next)
+-	    fprintf (fp, "  (%s)", service->name);
++	for (service = service->next; service != NULL; service = service->next) {
++	    fputs("  (", fp);
++	    fputs(service->name, fp);
++	    fputs(")", fp);
++	}
+ 	putc ('\n', fp);
+     }
+ }   /*  End Function show_scripts  */
+@@ -1232,9 +1260,9 @@
+     {
+ 	if ( ( p2 = strchr (p1, ':') ) == NULL )
+ 	    p2 = p1 + strlen (p1);
+-	strncpy (path, p1, p2 - p1);
++	str_ncopy(path, p1, p2 - p1);
+ 	path[p2 - p1] = '/';
+-	strcpy (path + (p2 - p1) + 1, file);
++	str_copy(path + (p2 - p1) + 1, file);
+ 	if (*p2 == ':') ++p2;
+ 	if (access (path, X_OK) == 0) return path;
+     }

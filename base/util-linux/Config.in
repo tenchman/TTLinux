@@ -1,0 +1,213 @@
+# vim:set syntax=kconfig:
+config CONFIG_UTIL_LINUX
+  bool "util-linux - A collection of basic system utilities"
+  default n
+  help
+    The util-linux package contains a large variety of low-level system
+    utilities that are necessary for a Linux system to function. Among
+    others, Util-linux contains the fdisk configuration tool and the login
+    program.
+
+  config CONFIG_UTIL_LINUX_LOGIN
+  bool "login - sign on"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_KILL
+  bool "kill - terminate a process"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_MOUNT
+  bool "mount - mount a file system"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_UMOUNT
+  bool "umount - unmount file systems"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_ARCH
+  bool "arch - print machine architecture"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_DMESG
+  bool "dmesg - print or control the kernel ring buffer"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_MKFS
+  bool "mkfs - build a Linux file system"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_MKSWAP
+  bool "mkswap - set up a Linux swap area"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_BLOCKDEV
+  bool "blockdev - call block device ioctls from the command line"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_ELVTUNE
+  bool "elvtune - I/O elevator tuner"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_FSCK_MINIX
+  bool "fsck.minix - check a minix file system"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_FSCK_CRAMFS
+  bool "cramfsck - check a cramfs file system"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_MKFS_MINIX
+  bool "mkfs.minix - make a Linux MINIX filesystem"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_MKFS_BFS
+  bool "mkfs.bfs - make an SCO bfs filesystem"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_MKFS_CRAMFS
+  bool "mkcramfs - make a cramfs file system"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_AGETTY
+  bool "agetty - alternative Linux getty"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_SWAPON
+  bool "swapon - enable devices and files for paging and swapping"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_LOSETUP
+  bool "losetup - set up and control loop devices"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_SWAPOFF
+  bool "swapoff - disable devices and files for paging and swapping"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_FDISK
+  bool "fdisk - Partition table manipulator for Linux"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_SFDISK
+  bool "sfdisk - Partition table manipulator for Linux"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_HWCLOCK
+  bool "hwclock - query and set the hardware clock (RTC)"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_CTRLALTDEL
+  bool "ctrlaltdel - set the function of the Ctrl-Alt-Del combination"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_SLN
+  bool "sln - static ln"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_GETOPT
+  bool "getopt - parse command options"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_FDFORMAT
+  bool "fdformat - Low-level formats a floppy disk"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_ISOSIZE
+  bool "isosize - outputs the length of a iso9660 file system"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_SETFDPRM
+  bool "setfdprm - sets user-provided floppy disk parameters"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_RAW
+  bool "raw - bind a Linux raw character device"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_CAL
+  bool "cal - displays a calendar"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_CHKDUPEXE
+  bool "chkdupexe - find duplicate executables"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_DDATE
+  bool "ddate - converts Gregorian dates to Discordian dates"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_LOGGER
+  bool "logger - a shell command interface to the syslog(3) system log module"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_LOOK
+  bool "look - display lines beginning with a given string"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_MCOOKIE
+  bool "mcookie - generate magic cookies for xauth"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_NAMEI
+  bool "namei - follow a pathname until a terminal point is found"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_RENAME
+  bool "rename - Rename files"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_SCRIPT
+  bool "script - make typescript of terminal session"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_WHEREIS
+  bool "whereis - locate the binary, source, and manual page files for a command"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_WRITE
+  bool "write - send a message to another user"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_IPCRM
+  bool "ipcrm - remove an XSI message queue, semaphore set, or shared memory segment identifier"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_IPCS
+  bool "ipcs - report XSI interprocess communication facilities status"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_RENICE
+  bool "renice - set nice values of running processes"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_SETSID
+  bool "setsid - run a program in a new session"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_COL
+  bool "col - filter reverse line feeds from input"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_COLCRT
+  bool "colcrt - filter nroff output for CRT previewing"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_COLRM
+  bool "colrm - remove columns from a file"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_COLUMN
+  bool "column - columnate lists"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_HEXDUMP
+  bool "hexdump - ascii, decimal, hexadecimal, octal dump"
+  depends CONFIG_UTIL_LINUX
+  
+  config CONFIG_UTIL_LINUX_REV
+  bool "rev - reverse lines of a file"
+  depends CONFIG_UTIL_LINUX
+
+  config CONFIG_UTIL_LINUX_LINE
+  bool "line - read one line"
+  depends CONFIG_UTIL_LINUX

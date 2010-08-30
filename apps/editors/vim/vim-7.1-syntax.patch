@@ -1,0 +1,50 @@
+--- vim-7.1/runtime/syntax/squid.vim.syntax	2005-06-12 17:27:20.000000000 +0200
++++ vim-7.1/runtime/syntax/squid.vim	2007-08-07 22:03:16.000000000 +0200
+@@ -60,6 +60,7 @@
+ syn keyword	squidConf	ipcache_low ipcache_size local_domain local_ip
+ syn keyword	squidConf	logfile_rotate log_fqdn log_icp_queries
+ syn keyword	squidConf	log_mime_hdrs maximum_object_size
++syn keyword	squidConf	maximum_object_size_in_memory request_body_max_size
+ syn keyword	squidConf	maximum_single_addr_tries mcast_groups
+ syn keyword	squidConf	mcast_icp_query_timeout mcast_miss_addr
+ syn keyword	squidConf	mcast_miss_encode_key mcast_miss_port memory_pools
+@@ -92,6 +93,15 @@
+ syn keyword	squidConf	unlinkd_program uri_whitespace useragent_log
+ syn keyword	squidConf	visible_hostname wais_relay wais_relay_host
+ syn keyword	squidConf	wais_relay_port
++syn keyword     squidConf       icap_enable icap_preview_enable icap_preview_size
++syn keyword     squidConf       icap_check_interval icap_send_client_ip
++syn keyword     squidConf       icap_send_server_ip icap_send_auth_user
++syn keyword     squidConf       icap_auth_scheme icap_service icap_class
++syn keyword     squidConf       icap_access icap_persistent_connections access_log
++syn keyword     squidConf       url_rewrite_program url_rewrite_children logformat
++syn keyword     squidConf       auth_param external_acl_type
++syn keyword     squidConf       request_header_access reply_header_access
++ 
+ 
+ syn keyword	squidOpt	proxy-only weight ttl no-query default
+ syn keyword	squidOpt	round-robin multicast-responder
+@@ -99,18 +109,20 @@
+ syn keyword	squidopt	via parent no-digest heap lru realm
+ syn keyword	squidopt	children credentialsttl none disable
+ syn keyword	squidopt	offline_toggle diskd q1 q2
++syn keyword	squidopt	basic ntlm program ufs
+ 
+ " Security Actions for cachemgr_passwd
+ syn keyword	squidAction	shutdown info parameter server_list
+-syn keyword	squidAction	client_list
++syn keyword	squidAction	client_list reqmod_precache reqmod_postcache
++syn keyword     squidAction     respmod_precache respmod_postcache
+ syn match	squidAction	"stats/\(objects\|vm_objects\|utilization\|ipcache\|fqdncache\|dns\|redirector\|io\|reply_headers\|filedescriptors\|netdb\)"
+ syn match	squidAction	"log\(/\(status\|enable\|disable\|clear\)\)\="
+ syn match	squidAction	"squid\.conf"
+ 
+ " Keywords for the acl-config
+ syn keyword	squidAcl	url_regex urlpath_regex referer_regex port proto
+-syn keyword	squidAcl	req_mime_type rep_mime_type
+-syn keyword	squidAcl	method browser user src dst
++syn keyword	squidAcl	req_mime_type rep_mime_type req_header rep_header
++syn keyword	squidAcl	method browser user src dst 
+ syn keyword	squidAcl	time dstdomain ident snmp_community
+ 
+ syn match	squidNumber	"\<\d\+\>"

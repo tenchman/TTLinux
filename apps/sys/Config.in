@@ -1,0 +1,7 @@
+# vim:set syntax=kconfig:
+menu "System utillities"
+  source "apps/sys/ethtool/Config.in"
+  source "apps/sys/hdparm/Config.in"
+  source "apps/sys/htop/Config.in"
+  source "apps/sys/sysfsutils/Config.in"
+endmenu

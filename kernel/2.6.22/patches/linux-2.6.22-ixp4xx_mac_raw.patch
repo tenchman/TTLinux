@@ -1,0 +1,12 @@
+diff -up linux-2.6.22.18/drivers/net/ixp400_eth.c.mac_raw linux-2.6.22.18/drivers/net/ixp400_eth.c
+--- linux-2.6.22.18/drivers/net/ixp400_eth.c.mac_raw	2008-03-25 12:07:32.000000000 +0100
++++ linux-2.6.22.18/drivers/net/ixp400_eth.c	2008-03-25 12:08:23.000000000 +0100
+@@ -2206,7 +2206,7 @@ static inline void dev_eth_type_trans(un
+ 				      struct net_device *dev)
+ {
+     unsigned header_len = dev->hard_header_len;
+-    skb->mac.raw=skb->data;
++    skb_reset_mac_header(skb);
+     /* skip the mac header : there is no need for length comparison since
+      * the skb during a receive is always greater than the header size and 
+      * runt frames are not enabled.

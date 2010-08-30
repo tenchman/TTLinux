@@ -1,0 +1,21 @@
+diff -up ocfs2-tools-1.2.7/libocfs2/include/ocfs2.h.uint64 ocfs2-tools-1.2.7/libocfs2/include/ocfs2.h
+--- ocfs2-tools-1.2.7/libocfs2/include/ocfs2.h.uint64	2007-09-29 01:53:00.000000000 +0200
++++ ocfs2-tools-1.2.7/libocfs2/include/ocfs2.h	2008-03-10 12:57:58.000000000 +0100
+@@ -73,6 +73,17 @@
+ 
+ #include "ocfs2_lockid.h"
+ 
++#ifndef UINT64_MAX
++# if __WORDSIZE == 64
++#  define UINT64_MAX    18446744073709551615UL
++# else
++#  define UINT64_MAX    18446744073709551615ULL
++# endif
++#endif
++#ifndef UINT32_MAX
++#define UINT32_MAX      4294967295U
++#endif
++
+ #define OCFS2_LIB_FEATURE_INCOMPAT_SUPP		(OCFS2_FEATURE_INCOMPAT_SUPP | \
+ 						 OCFS2_FEATURE_INCOMPAT_HEARTBEAT_DEV | \
+ 						 OCFS2_FEATURE_INCOMPAT_RESIZE_INPROG | \

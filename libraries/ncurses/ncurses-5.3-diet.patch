@@ -1,0 +1,14 @@
+--- ncurses-5.3/ncurses/tinfo/lib_kernel.c.diet	2003-09-08 09:26:52.000000000 +0200
++++ ncurses-5.3/ncurses/tinfo/lib_kernel.c	2003-09-08 09:29:52.000000000 +0200
+@@ -59,7 +59,11 @@
+ #endif
+ #if defined(_PC_VDISABLE)
+     if (value == -1) {
++#if defined (__dietlibc__)
++	value = _PC_VDISABLE;
++#else
+ 	value = fpathconf(0, _PC_VDISABLE);
++#endif
+ 	if (value == -1) {
+ 	    value = 0377;
+ 	}

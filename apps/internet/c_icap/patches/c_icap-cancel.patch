@@ -1,0 +1,27 @@
+--- c_icap-cvs-20070305/mpmt_server.c.cancel	2007-03-05 20:07:00.000000000 +0100
++++ c_icap-cvs-20070305/mpmt_server.c	2007-03-07 14:05:58.000000000 +0100
+@@ -594,7 +595,7 @@
+           child_data->idle = 0;
+           ci_debug_printf(7, "Child %d getting requests now ...\n", pid);
+           do {                  //Getting requests while we have free servers.....
+-#ifndef SIGNLE_ACCEPT
++#ifndef SINGLE_ACCEPT
+                fd_set fds;
+                int ret;
+                do {
+@@ -737,13 +738,13 @@
+           if (!listener_running) {
+                ci_debug_printf(1,
+                                "Ohh!! something happen to listener thread! Terminating\n");
+-               child_data->to_be_killed = GRACEFULLY;
++               child_data->to_be_killed = IMMEDIATELY;
+           }
+           if (MAX_REQUESTS_PER_CHILD > 0
+               && child_data->requests > MAX_REQUESTS_PER_CHILD) {
+                ci_debug_printf(5,
+                                "Maximum number of requests reached.Going down\n");
+-               child_data->to_be_killed = GRACEFULLY;
++               child_data->to_be_killed = IMMEDIATELY;
+           }
+           if (child_data->to_be_killed)
+                break;

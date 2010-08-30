@@ -1,0 +1,35 @@
+--- dietlibc-0.30/include/features.h.features_h	2009-02-18 21:28:25.000000000 +0100
++++ dietlibc-0.30/include/features.h	2009-02-18 21:38:39.000000000 +0100
+@@ -5,4 +5,32 @@
+ #error "not using the diet wrapper?!"
+ #endif
+ 
++#undef __KERNEL_STRICT_NAMES
++/* Suppress kernel-name space pollution unless user expressedly asks
++ * for it. */
++#ifndef _LOOSE_KERNEL_NAMES
++# define __KERNEL_STRICT_NAMES
++#endif
++
++#ifdef _GNU_SOURCE
++# undef  _POSIX_SOURCE
++# define _POSIX_SOURCE	1
++# undef _BSD_SOURCE
++# define _BSD_SOURCE 1
++# undef _XOPEN_SOURCE
++# define _XOPEN_SOURCE  600
++# undef  _SVID_SOURCE
++# define _SVID_SOURCE   1
++#endif
++
++/* If nothing (other than _GNU_SOURCE) is defined,
++ * define _BSD_SOURCE and _SVID_SOURCE.  */
++#if (!defined __STRICT_ANSI__ && !defined _ISOC99_SOURCE && \
++     !defined _POSIX_SOURCE && !defined _POSIX_C_SOURCE && \
++     !defined _XOPEN_SOURCE && !defined _XOPEN_SOURCE_EXTENDED && \
++     !defined _BSD_SOURCE && !defined _SVID_SOURCE)
++# define _BSD_SOURCE    1
++# define _SVID_SO
++#endif
++
+ #endif

@@ -1,0 +1,8 @@
+config CONFIG_TINYLDAP
+  bool "tinyldap - a very small and very fast LDAP server"
+  default n
+  select CONFIG_LIBOWFAT
+  help
+    Tinyldap is an attempt to write a very small and very fast LDAP server.
+
+    http://www.fefe.de/tinyldap/

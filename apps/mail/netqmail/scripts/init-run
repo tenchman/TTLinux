@@ -1,0 +1,6 @@
+#!/bin/sh
+[ -f /etc/qmail/control/me ] || cp /etc/hostname /etc/qmail/control/me
+VARQMAIL=/etc/qmail/varqmail.tar.gz
+if [ ! -d /var/qmail -a -f ${VARQMAIL} ]; then
+  cd / && zcat < ${VARQMAIL} | tar x
+fi

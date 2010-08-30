@@ -1,0 +1,13 @@
+We build without special privileges, so chown won't work here.
+
+--- mgetty-1.1.29/fax/Makefile	2002-11-25 17:39:48.000000000 -0500
++++ mgetty-1.1.29/fax/Makefile	2002-11-25 17:39:44.000000000 -0500
+@@ -61,7 +61,7 @@
+ 	done
+ 	$(INSTALL) -m 755 faxrunqd $(SBINDIR)
+ 	$(INSTALL) faxq-helper $(LIBDIR)
+-	chown $(FAX_OUT_USER) $(LIBDIR)/faxq-helper
++	chown $(FAX_OUT_USER) $(LIBDIR)/faxq-helper || :
+ 	chmod 4711 $(LIBDIR)/faxq-helper
+ #
+ # data files

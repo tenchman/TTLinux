@@ -1,0 +1,16 @@
+--- dietlibc-0.32/lib/__v_scanf.c.scanf	2008-07-07 23:07:48.000000000 +0200
++++ dietlibc-0.32/lib/__v_scanf.c	2009-06-10 21:42:47.000000000 +0200
+@@ -116,11 +116,11 @@ in_scan:
+ 	case 'x':
+ 	  _div+=6;
+ 	case 'd':
++	case 'u':
++	case 'i':
+ 	  _div+=2;
+ 	case 'o':
+ 	  _div+=8;
+-	case 'u':
+-	case 'i':
+ 	  {
+ #ifdef WANT_LONGLONG_SCANF
+ 	    unsigned long long v=0;

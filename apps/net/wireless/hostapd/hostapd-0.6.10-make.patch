@@ -1,0 +1,36 @@
+diff -up hostapd-0.6.10/hostapd/Makefile.make hostapd-0.6.10/hostapd/Makefile
+--- hostapd-0.6.10/hostapd/Makefile.make	2010-01-12 15:55:02.000000000 +0100
++++ hostapd-0.6.10/hostapd/Makefile	2010-08-06 14:58:10.449060944 +0200
+@@ -576,15 +576,20 @@ verify_config:
+ 		exit 1; \
+ 	fi
+ 
+-install: all
+-	for i in $(ALL); do cp $$i /usr/local/bin/$$i; done
++install:
++	@mkdir -p $(DESTDIR)/usr/sbin
++	@mkdir -p $(DESTDIR)/usr/share/man1
++	@mkdir -p $(DESTDIR)/usr/share/man8
++	@cp hostapd hostapd_cli $(DESTDIR)/usr/sbin
++	@cp hostapd_cli.1 $(DESTDIR)/usr/share/man1
++	@cp hostapd.8 $(DESTDIR)/usr/share/man8
+ 
+ hostapd: $(OBJS)
+-	$(CC) -o hostapd $(OBJS) $(LIBS)
++	$(CC) $(LDFLAGS) -o hostapd $(OBJS) $(LIBS)
+ 
+ OBJS_c = hostapd_cli.o ../src/common/wpa_ctrl.o ../src/utils/os_$(CONFIG_OS).o
+ hostapd_cli: $(OBJS_c)
+-	$(CC) -o hostapd_cli $(OBJS_c)
++	$(CC) $(LDFLAGS) -o hostapd_cli $(OBJS_c)
+ 
+ NOBJS = nt_password_hash.o ../src/crypto/ms_funcs.o ../src/crypto/sha1.o ../src/crypto/rc4.o ../src/crypto/md5.o
+ NOBJS += ../src/crypto/crypto_openssl.o ../src/utils/os_$(CONFIG_OS).o
+@@ -624,6 +629,7 @@ clean-docs:
+ 	rm -rf doc/latex doc/html
+ 	rm -f doc/hostapd.{eps,png} hostapd-devel.pdf
+ 
++
+ TEST_SRC_MILENAGE = ../src/hlr_auc_gw/milenage.c ../src/crypto/aes_wrap.c ../src/crypto/aes.c ../src/utils/common.c ../src/utils/wpa_debug.o ../src/utils/os_$(CONFIG_OS).c
+ test-milenage: $(TEST_SRC_MILENAGE)
+ 	$(CC) -o test-milenage -Wall -Werror $(TEST_SRC_MILENAGE) \

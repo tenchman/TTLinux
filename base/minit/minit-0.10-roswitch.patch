@@ -1,0 +1,207 @@
+--- minit-0.10/minit.h.roswitch	2004-02-20 05:42:54.000000000 +0100
++++ minit-0.10/minit.h	2006-08-02 16:16:10.000000000 +0200
+@@ -1,4 +1,5 @@
+ #define MINITROOT "/etc/minit"
++#define MINITPIPEFILE "/etc/minit/pipedir"
+ 
+ #ifndef NOVARS
+ static struct process {
+@@ -16,4 +17,10 @@
+ static int infd,outfd;
+ static int maxprocess=-1;
+ static int processalloc;
++
++#ifndef BUILDPIPEDIR
++#define BUILDPIPEDIR 1
++int buildpipedir(char **in, char **out);
++#endif
++
+ #endif
+--- minit-0.10/msvc.c.roswitch	2005-03-31 19:55:20.000000000 +0200
++++ minit-0.10/msvc.c	2006-08-02 16:16:10.000000000 +0200
+@@ -165,6 +165,8 @@
+ }
+ 
+ int main(int argc,char *argv[]) {
++  char *pipeinpath = NULL, *pipeoutpath = NULL;
++
+   if (argc<2) {
+     msg(
+ 	"usage: msvc -[uodpchaitkogC] service\n"
+@@ -187,8 +189,11 @@
+     return 0;
+   }
+   errmsg_iam("msvc");
+-  infd=open(MINITROOT "/in",O_WRONLY);
+-  outfd=open(MINITROOT "/out",O_RDONLY);
++
++  buildpipedir(&pipeinpath, &pipeoutpath);
++
++  infd=open(pipeinpath,O_WRONLY);
++  outfd=open(pipeoutpath,O_RDONLY);
+   if (infd>=0) {
+     while (lockf(infd,F_LOCK,1)) {
+       carp("could not acquire lock!");
+--- minit-0.10/shutdown.c.roswitch	2006-08-02 16:16:10.000000000 +0200
++++ minit-0.10/shutdown.c	2006-08-02 16:16:10.000000000 +0200
+@@ -129,10 +129,14 @@
+ 
+ int minit_shutdown(int level) {
+   int retval;
++  char *pipeinpath = NULL, *pipeoutpath = NULL;
+ 
+   __write2("Shutting down minit services: \n");
+-  infd=open(MINITROOT "/in", O_WRONLY);
+-  outfd=open(MINITROOT "/out", O_RDONLY);
++
++  buildpipedir(&pipeinpath, &pipeoutpath);
++
++  infd=open(pipeinpath, O_WRONLY);
++  outfd=open(pipeoutpath, O_RDONLY);
+   if (infd>=0) {
+     while (lockf(infd, F_TLOCK, 1)) {
+       __write2("could not acquire lock!\n");
+--- minit-0.10/openreadclose.c.roswitch	2003-05-20 18:20:16.000000000 +0200
++++ minit-0.10/openreadclose.c	2006-08-02 16:16:10.000000000 +0200
+@@ -3,6 +3,7 @@
+ #include <fcntl.h>
+ #include <stdlib.h>
+ #endif
++#include "minit.h"
+ 
+ int openreadclose(char *fn, char **buf, unsigned long *len) {
+   int fd=open(fn,O_RDONLY);
+@@ -21,3 +22,37 @@
+     (*buf)[*len]=0;
+   return close(fd);
+ }
++
++static char *_buildpipedir(char *path, char *fn) {
++  char *tmp = NULL;
++    
++  if(!path || !fn)
++    return NULL;
++
++  if((tmp = malloc(strlen(path) + 1 + strlen(fn) + 1))) {
++    strcpy(tmp, path);
++    strcat(tmp, "/");
++    strcat(tmp,fn);
++  }
++
++  return tmp;
++}
++
++int buildpipedir(char **in, char**out) {
++  char *intmp = NULL, *outtmp = NULL, *pipedir = NULL;
++
++  if(!in || !out)
++    return -1;
++
++  unsigned long pipedirlen = 0;
++  if(openreadclose(MINITPIPEFILE,&pipedir, &pipedirlen) == -1)
++    pipedir = strdup(MINITROOT);
++
++  if(pipedir && (pipedir[pipedirlen-1] == '\n'))
++    pipedir[pipedirlen-1] = 0;
++
++  *in  = _buildpipedir(pipedir, "in");
++  *out = _buildpipedir(pipedir, "out");
++
++  return 0;
++}
+--- minit-0.10/Makefile.roswitch	2005-04-08 19:24:04.000000000 +0200
++++ minit-0.10/Makefile	2006-08-02 16:16:10.000000000 +0200
+@@ -41,7 +41,7 @@
+ endif
+ 
+ minit: minit.o split.o openreadclose.o opendevconsole.o
+-msvc: msvc.o
++msvc: msvc.o openreadclose.o
+ minit-update: minit-update.o split.o openreadclose.o
+ serdo: serdo.o
+ 
+--- minit-0.10/minit.c.roswitch	2005-04-08 19:18:40.000000000 +0200
++++ minit-0.10/minit.c	2006-08-02 16:21:05.000000000 +0200
+@@ -400,10 +400,34 @@
+ 
+ static volatile int dowinch=0;
+ static volatile int doint=0;
++static volatile int dopipe=0;
++static char *pipeinpath = NULL;
++static char *pipeoutpath = NULL;
+ 
+ void sigchild(int sig) { (void)sig; }
+ void sigwinch(int sig) { (void)sig; dowinch=1; }
+ void sigint(int sig) { (void)sig; doint=1; }
++void sigusr1(int sig) {
++
++  close(infd);
++  close(outfd);
++
++  if(pipeinpath)
++    free(pipeinpath);
++  if(pipeoutpath)
++    free(pipeoutpath);
++  buildpipedir(&pipeinpath, &pipeoutpath);
++
++  infd=open(pipeinpath,O_RDWR);
++  outfd=open(pipeoutpath,O_RDWR|O_NONBLOCK);
++
++  if (infd>0 && outfd>0) {
++    fcntl(infd,F_SETFD,FD_CLOEXEC);
++    fcntl(outfd,F_SETFD,FD_CLOEXEC);
++  }
++
++  dopipe=1;
++}
+ 
+ int main(int argc, char *argv[]) {
+   /* Schritt 1: argv[1] als Service nehmen und starten */
+@@ -420,8 +444,10 @@
+ 
+   Argv=argv;
+ 
+-  infd=open(MINITROOT "/in",O_RDWR);
+-  outfd=open(MINITROOT "/out",O_RDWR|O_NONBLOCK);
++  buildpipedir(&pipeinpath, &pipeoutpath);
++
++  infd=open(pipeinpath,O_RDWR);
++  outfd=open(pipeoutpath,O_RDWR|O_NONBLOCK);
+ 
+   if (getpid()==1) {
+     int fd;
+@@ -443,6 +469,7 @@
+     sa.sa_handler=sigchild; sigaction(SIGCHLD,&sa,0);
+     sa.sa_handler=sigint; sigaction(SIGINT,&sa,0);	/* ctrl-alt-del */
+     sa.sa_handler=sigwinch; sigaction(SIGWINCH,&sa,0);	/* keyboard request */
++    sa.sa_handler=sigusr1; sigaction(SIGUSR1,&sa,0);	/* pipe replacement */
+   }
+ 
+   if (infd<0 || outfd<0) {
+@@ -490,6 +517,17 @@
+       dowinch=0;
+       startservice(loadservice("kbreq"),0,-1);
+     }
++    if (dopipe) {
++      if (infd<0 || outfd<0) {
++        _puts("minit: could not open " MINITROOT "/in or " MINITROOT "/out\n");
++        sulogin();
++        nfds=0;
++      } else
++        pfd.fd=infd;
++      pfd.events=POLLIN;
++
++      dopipe=0;
++    }
+     childhandler();
+     now=time(0);
+     if (now<last || now-last>30) {
+@@ -503,6 +541,8 @@
+     last=now;
+     switch (poll(&pfd,nfds,5000)) {
+     case -1:
++      /* switch pipe to read from */
++
+       if (errno==EINTR) {
+ 	childhandler();
+ 	break;

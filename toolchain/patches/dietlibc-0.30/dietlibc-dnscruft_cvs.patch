@@ -1,0 +1,140 @@
+diff -up dietlibc-0.30/libcruft/dnscruft.c.dnscruft dietlibc-0.30/libcruft/dnscruft.c
+--- dietlibc-0.30/libcruft/dnscruft.c.dnscruft	2009-03-31 08:44:27.000000000 +0200
++++ dietlibc-0.30/libcruft/dnscruft.c	2009-03-31 08:53:45.000000000 +0200
+@@ -20,8 +20,8 @@ int __dns_fd6=-1;
+ void __dns_make_fd(void);
+ void __dns_make_fd6(void);
+ void __dns_readstartfiles(void);
+-int __dns_decodename(unsigned char *packet,unsigned int offset,unsigned char *dest,
+-		     unsigned int maxlen,unsigned char* behindpacket);
++int __dns_decodename(const unsigned char *packet,unsigned int offset,unsigned char *dest,
++		     unsigned int maxlen,const unsigned char* behindpacket);
+ 
+ void __dns_make_fd(void) {
+   int tmp;
+@@ -45,9 +45,8 @@ void __dns_make_fd6(void) {
+   tmp=socket(PF_INET6,SOCK_DGRAM,IPPROTO_UDP);
+   if (tmp<0) return;
+   fcntl(tmp,F_SETFD,FD_CLOEXEC);
++  memset(&si,0,sizeof(si));
+   si.sin6_family=AF_INET6;
+-  si.sin6_port=0;
+-  memset(&si.sin6_addr,0,16);
+   if (bind(tmp,(struct sockaddr*)&si,sizeof(si))) return;
+   __dns_fd6=tmp;
+ }
+@@ -149,11 +148,11 @@ void __dns_readstartfiles(void) {
+ }
+ 
+ /* return length of decoded data or -1 */
+-int __dns_decodename(unsigned char *packet,unsigned int offset,unsigned char *dest,
+-		     unsigned int maxlen,unsigned char* behindpacket) {
+-  unsigned char *tmp;
+-  unsigned char *max=dest+maxlen;
+-  unsigned char *after=packet+offset;
++int __dns_decodename(const unsigned char *packet,unsigned int offset,unsigned char *dest,
++		     unsigned int maxlen,const unsigned char* behindpacket) {
++  const unsigned char *tmp;
++  const unsigned char *max=dest+maxlen;
++  const unsigned char *after=packet+offset;
+   int ok=0;
+   for (tmp=after; maxlen>0&&*tmp; ) {
+     if (tmp>=behindpacket) return -1;
+diff -up dietlibc-0.30/libcruft/res_mkquery.c.dnscruft dietlibc-0.30/libcruft/res_mkquery.c
+--- dietlibc-0.30/libcruft/res_mkquery.c.dnscruft	2004-11-10 18:45:17.000000000 +0100
++++ dietlibc-0.30/libcruft/res_mkquery.c	2009-03-31 08:56:19.000000000 +0200
+@@ -42,10 +42,14 @@ extern void __dns_readstartfiles(void);
+ int res_mkquery(int op, const char *dname, int class, int type, char* data,
+ 		int datalen, const unsigned char* newrr, char* buf, int buflen) {
+   unsigned char packet[512];
+-  unsigned long len=0;
+-  memmove(packet,dnspacket,12);
++  unsigned long len;
++
++  memcpy(packet,dnspacket,12);
++  len=rand();
++  packet[0]=len;
++  packet[1]=len>>8;
++  len=0;
+   if ((_res.options&RES_RECURSE)==0) packet[2]=0;
+-  *(unsigned short*)packet=rand();
+   {
+     unsigned char* x;
+     const char* y,* tmp;
+diff -up dietlibc-0.30/libcruft/res_query.c.dnscruft dietlibc-0.30/libcruft/res_query.c
+--- dietlibc-0.30/libcruft/res_query.c.dnscruft	2009-03-31 08:57:55.000000000 +0200
++++ dietlibc-0.30/libcruft/res_query.c	2009-03-31 09:02:15.000000000 +0200
+@@ -6,7 +6,7 @@
+ #include <netdb.h>
+ #include <stdlib.h>
+ #include <arpa/inet.h>
+-#include <sys/poll.h>
++#include <poll.h>
+ #include <unistd.h>
+ #include <errno.h>
+ #include <arpa/nameser.h>
+@@ -70,11 +70,10 @@ int res_query(const char *dname, int cla
+ 	  if (pnpfd>=0) {
+ 	    int one=1;
+ 	    fcntl(pnpfd,F_SETFD,FD_CLOEXEC);
+-	    if (v4pnp) {
+-	      setsockopt(pnpfd,SOL_IP,IP_RECVTTL,&one,sizeof one);
+-	      setsockopt(pnpfd,SOL_IP,IP_PKTINFO,&one,sizeof one);
+-	    } else
++	    if (!v4pnp)
+ 	      setsockopt(pnpfd,IPPROTO_IPV6,IPV6_HOPLIMIT,&one,sizeof one);
++	    setsockopt(pnpfd,SOL_IP,IP_RECVTTL,&one,sizeof one);
++	    setsockopt(pnpfd,SOL_IP,IP_PKTINFO,&one,sizeof one);
+ 	  }
+ 	}
+ #ifdef WANT_IPV6_DNS
+@@ -84,22 +83,19 @@ int res_query(const char *dname, int cla
+ 	  if (pnpfd!=-1) bind(pnpfd,(struct sockaddr*)&pnpsa6,sizeof(pnpsa6));
+ 	  pnpsa6.sin6_port=htons(5353);
+ 	  memcpy(&pnpsa6.sin6_addr,"\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xfb",16);
+-	} else {
+-#endif
+-	  memset(&pnpsa4,0,sizeof(pnpsa4));
+-	  pnpsa4.sin_family=AF_INET;
+-	  if (pnpfd!=-1) bind(pnpfd,(struct sockaddr*)&pnpsa4,sizeof(pnpsa4));
+-	  pnpsa4.sin_port=htons(5353);
+-	  memcpy(&pnpsa4.sin_addr,"\xe0\x00\x00\xfb",4);  /* 224.0.0.251 */
+-#ifdef WANT_IPV6_DNS
+ 	}
+ #endif
++	memset(&pnpsa4,0,sizeof(pnpsa4));
++	pnpsa4.sin_family=AF_INET;
++	if (pnpfd!=-1) bind(pnpfd,(struct sockaddr*)&pnpsa4,sizeof(pnpsa4));
++	pnpsa4.sin_port=htons(5353);
++	memcpy(&pnpsa4.sin_addr,"\xe0\x00\x00\xfb",4);  /* 224.0.0.251 */
+ 
+ 	duh[1].events=POLLIN;
+ 	duh[1].fd=pnpfd;
+       } else {
+ 	duh[1].fd=-1;
+-	duh[1].revents=0;
++	duh[1].events=0;
+       }
+ 
+ #endif
+@@ -109,9 +105,8 @@ int res_query(const char *dname, int cla
+       last.tv_sec=0;
+ #ifdef WANT_PLUGPLAY_DNS
+       if (duh[1].fd!=-1) {
+-	if (v4pnp)
+-	  sendto(pnpfd,packet,size,0,(struct sockaddr*)(&pnpsa4),sizeof(pnpsa4));
+-	else
++	sendto(pnpfd,packet,size,0,(struct sockaddr*)(&pnpsa4),sizeof(pnpsa4));
++	if (!v4pnp)
+ 	  sendto(pnpfd,packet,size,0,(struct sockaddr*)(&pnpsa6),sizeof(pnpsa6));
+       }
+       /* if it doesn't work, we don't care */
+@@ -191,6 +186,8 @@ int res_query(const char *dname, int cla
+ 	      /* as per standard, discard packets with TTL!=255 */
+ 	      continue;
+ 	    }
++	    /* work around stupid avahi bug */
++	    inpkg[2]=(inpkg[2]&~0x1) | (packet[2]&0x1);
+ 	  }
+ #else
+ 	  int len=read(duh[0].fd,inpkg,sizeof(inpkg));

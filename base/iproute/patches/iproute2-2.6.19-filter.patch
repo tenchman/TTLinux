@@ -1,0 +1,11 @@
+--- iproute2-2.6.19/ip/ipmroute.c.filter	2006-12-15 00:04:12.000000000 +0100
++++ iproute2-2.6.19/ip/ipmroute.c	2007-04-24 19:49:55.000000000 +0200
+@@ -44,7 +44,7 @@
+ 
+ static char *viftable[32];
+ 
+-struct rtfilter
++static struct rtfilter
+ {
+ 	inet_prefix mdst;
+ 	inet_prefix msrc;

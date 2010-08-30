@@ -1,0 +1,161 @@
+--- util-linux-2.12r/text-utils/column.c.diet	2002-07-04 14:53:43.000000000 +0200
++++ util-linux-2.12r/text-utils/column.c	2006-01-26 11:34:41.000000000 +0100
+@@ -47,6 +47,7 @@
+ #include <unistd.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <termios.h>
+ #include "errs.h"
+ #include "nls.h"
+ 
+--- util-linux-2.12r/sys-utils/dmesg.c.diet	2004-05-04 18:38:12.000000000 +0200
++++ util-linux-2.12r/sys-utils/dmesg.c	2006-01-26 11:34:41.000000000 +0100
+@@ -35,7 +35,7 @@
+ #include <stdlib.h>
+ #include "nls.h"
+ 
+-#if __GNU_LIBRARY__ < 5
++#if __GNU_LIBRARY__ < 5 && !defined(__dietlibc__)
+ 
+ #ifndef __alpha__
+ # define __NR_klogctl __NR_syslog
+@@ -52,8 +52,7 @@
+ 
+ static void
+ usage(void) {
+-	fprintf(stderr,
+-		_("Usage: %s [-c] [-n level] [-s bufsize]\n"), progname);
++	write(2,"Usage: dmesg [-c] [-n level] [-s bufsize]\n",42);
+ }
+ 
+ int
+--- util-linux-2.12r/disk-utils/raw.c.diet	2002-03-08 23:58:37.000000000 +0100
++++ util-linux-2.12r/disk-utils/raw.c	2006-01-26 11:34:41.000000000 +0100
+@@ -15,7 +15,7 @@
+ #include <unistd.h>
+ #include <errno.h>
+ #include <string.h>
+-#include <sys/fcntl.h>
++#include <fcntl.h>
+ #include <sys/stat.h>
+ #include <sys/ioctl.h>
+ #include <sys/sysmacros.h>
+--- util-linux-2.12r/misc-utils/whereis.c.diet	2001-03-15 11:09:58.000000000 +0100
++++ util-linux-2.12r/misc-utils/whereis.c	2006-01-26 11:34:41.000000000 +0100
+@@ -38,7 +38,7 @@
+  */
+ 
+ #include <sys/param.h>
+-#include <sys/dir.h>
++#include <dirent.h>
+ #include <sys/stat.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -317,7 +317,7 @@
+ void
+ findin(char *dir, char *cp) {
+ 	DIR *dirp;
+-	struct direct *dp;
++	struct dirent *dp;
+ 	char *d, *dd;
+ 	int l;
+ 	char dirbuf[1024];
+--- util-linux-2.12r/fdisk/llseek.c.diet	2003-07-13 23:13:33.000000000 +0200
++++ util-linux-2.12r/fdisk/llseek.c	2006-01-26 11:34:41.000000000 +0100
+@@ -15,11 +15,11 @@
+ #ifdef __linux__
+ 
+ #ifdef HAVE_LLSEEK
+-#include <syscall.h>
++#include <sys/syscall.h>
+ 
+ #else	/* HAVE_LLSEEK */
+ 
+-#if defined(__alpha__) || defined(__ia64__) || defined(__s390x__)
++#if defined(__alpha__) || defined(__ia64__) || defined(__s390x__) || defined(__dietlibc__)
+ 
+ #define my_llseek lseek
+ 
+--- util-linux-2.12r/fdisk/sfdisk.c.diet	2005-01-04 23:31:57.000000000 +0100
++++ util-linux-2.12r/fdisk/sfdisk.c	2006-01-26 11:34:41.000000000 +0100
+@@ -172,7 +172,7 @@
+  * Note: we use 512-byte sectors here, irrespective of the hardware ss.
+  */
+ #undef use_lseek
+-#if defined (__alpha__) || defined (__ia64__) || defined (__x86_64__) || defined (__s390x__)
++#if defined (__alpha__) || defined (__ia64__) || defined (__x86_64__) || defined (__s390x__) || defined (__dietlibc__)
+ #define use_lseek
+ #endif
+ 
+--- util-linux-2.12r/mount/mount_by_label.c.diet	2004-12-22 00:15:33.000000000 +0100
++++ util-linux-2.12r/mount/mount_by_label.c	2006-01-26 11:34:41.000000000 +0100
+@@ -189,7 +189,7 @@
+ 	if (!procpt) {
+ 		static int warn = 0;
+ 		if (!warn++)
+-		    error (_("%s: could not open %s, so UUID and LABEL "
++		    fprintf(stderr, _("%s: could not open %s, so UUID and LABEL "
+ 			     "conversion cannot be done.\n"),
+ 			   progname, PROC_PARTITIONS);
+ 		return;
+--- util-linux-2.12r/mount/Makefile.diet	2004-12-22 10:32:08.000000000 +0100
++++ util-linux-2.12r/mount/Makefile	2006-01-26 11:34:41.000000000 +0100
+@@ -1,7 +1,7 @@
+ include ../make_include
+ include ../MCONFIG
+ 
+-DEFINES = -DHAVE_NFS $(BLKID_DEFINE)
++DEFINES = -DHAVE_LOOP $(BLKID_DEFINE)
+ 
+ RPCSVCDIR = rpcsvc
+ RPC_CFLAGS = -Wno-unused 
+@@ -30,7 +30,7 @@
+ MAYBE = pivot_root swapoff
+ 
+ LO_OBJS = lomount.o $(LIB)/xstrncpy.o
+-NFS_OBJS = nfsmount.o nfsmount_xdr.o nfsmount_clnt.o
++# NFS_OBJS = nfsmount.o nfsmount_xdr.o nfsmount_clnt.o
+ GEN_FILES = nfsmount.h nfsmount_xdr.c nfsmount_clnt.c
+ 
+ all: $(PROGS)
+--- util-linux-2.12r/mount/fstab.c.diet	2004-12-21 20:09:24.000000000 +0100
++++ util-linux-2.12r/mount/fstab.c	2006-01-26 11:34:41.000000000 +0100
+@@ -400,7 +400,9 @@
+ static int signals_have_been_setup = 0;
+ 
+ /* Ensure that the lock is released if we are interrupted.  */
++#ifndef __dietlibc__
+ extern char *strsignal(int sig);	/* not always in <string.h> */
++#endif
+ 
+ static void
+ handler (int sig) {
+--- util-linux-2.12r/MCONFIG.diet	2004-12-13 00:15:48.000000000 +0100
++++ util-linux-2.12r/MCONFIG	2006-01-26 11:44:34.000000000 +0100
+@@ -31,7 +31,7 @@
+ # If HAVE_SHADOW is set to "yes", then login, chfn, chsh, newgrp, passwd,
+ # and vipw will not be built or installed from the login-utils
+ # subdirectory.  
+-HAVE_SHADOW=yes
++HAVE_SHADOW=no
+ 
+ # If HAVE_PASSWD is set to "yes", then passwd will not be built or
+ # installed from the login-utils subdirectory.
+@@ -77,7 +77,7 @@
+ # user's tty to "tty" [The login in util-linux does this correctly, and
+ # xterm will do it correctly if X is compiled with USE_TTY_GROUP set
+ # properly.]
+-USE_TTY_GROUP=yes
++USE_TTY_GROUP=no
+ 
+ # If HAVE_KILL is set to "yes", then kill will not be built or
+ # installed from the misc-utils subdirectory.
+@@ -220,7 +220,7 @@
+ INSTALLBIN=	$(INSTALL) -m $(BINMODE)
+ INSTALLMAN=	$(INSTALL) -m $(MANMODE)
+ INSTALLDAT=	$(INSTALL) -m $(DATMODE)
+-INSTALLSUID=    $(INSTALL) -m $(SUIDMODE) -o root
++INSTALLSUID=    $(INSTALL) -m $(SUIDMODE)
+ 
+ ifeq "$(DISABLE_NLS)" "yes"
+ NLSFLAGS = -DDISABLE_NLS

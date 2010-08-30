@@ -1,0 +1,15 @@
+config CONFIG_CONNTRACKD
+  bool "conntrackd - The connection tracking userspace daemon for Linux"
+  default y
+  select CONFIG_LIBNFNETLINK
+  select CONFIG_LIBNETFILTER_CONNTRACK
+  help
+	Conntrackd is the userspace daemon for the Netfilter's Connection 
+	Tracking System. This daemon maintains a copy of the Connection
+	Tracking System in userspace. It is entirely written in C and is
+	highly configurable and easily extensible. Currently it covers the
+	specific aspects of Stateful Linux firewalls to enable high
+	availability solutions and can be used as statistics collector of the
+	firewall use.
+	
+	http://people.netfilter.org/pablo/conntrackd

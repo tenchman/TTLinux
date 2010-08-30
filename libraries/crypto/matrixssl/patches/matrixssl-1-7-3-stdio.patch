@@ -1,0 +1,121 @@
+--- matrixssl-1-7-3-open/src/pki/rsaPki.c.stdio	2005-11-22 21:56:54.000000000 +0100
++++ matrixssl-1-7-3-open/src/pki/rsaPki.c	2005-11-22 21:56:54.000000000 +0100
+@@ -96,9 +96,9 @@
+ int32 psGetFileBin(psPool_t *pool, char *fileName, unsigned char **bin,
+ 				 int32 *binLen)
+ {
+-	FILE	*fp;
++	int     fd;
+ 	struct	stat	fstat;
+-	size_t	tmp = 0;
++	size_t	tmp = 0, len;
+ 
+ 	*binLen = 0;
+ 	*bin = NULL;
+@@ -106,7 +106,7 @@
+ 	if (fileName == NULL) {
+ 		return -1;
+ 	}
+-	if ((stat(fileName, &fstat) != 0) || (fp = fopen(fileName, "r")) == NULL) {
++	if ((stat(fileName, &fstat) != 0) || (fd = open(fileName, O_RDONLY))==-1) {
+ 		return -7; /* FILE_NOT_FOUND */
+ 	}
+ 
+@@ -114,11 +114,13 @@
+ 	if (*bin == NULL) {
+ 		return -8; /* SSL_MEM_ERROR */
+ 	}
+-	while (((tmp = fread(*bin + *binLen, sizeof(char), 512, fp)) > 0) &&
++	len = fstat.st_size;
++	while (((tmp = read(fd, *bin + *binLen, len)) > 0) &&
+ 			(*binLen < fstat.st_size)) { 
+ 		*binLen += (int32)tmp;
++		len -= tmp;
+ 	}
+-	fclose(fp);
++	close(fd);
+ 	return 0;
+ }
+ 
+--- matrixssl-1-7-3-open/src/os/linux/linux.c.stdio	2005-11-22 21:56:53.000000000 +0100
++++ matrixssl-1-7-3-open/src/os/linux/linux.c	2005-11-22 22:01:22.000000000 +0100
+@@ -68,10 +68,10 @@
+ 
+ int32 sslOpenOsdep(void)
+ {
+-	FILE		*cpuInfo;
++	int             fd;
+ 	double		mhz;
+-	char		line[80] = "";
+-	char		*tmpstr;
++	char		*tmpstr, *buf = NULL;
++	int             r, size = 0, startsize = 512;
+ 	int32 		c;
+ /*
+ 	Open /dev/random access non-blocking.
+@@ -87,27 +87,41 @@
+ 	Initialize times
+ */
+ #if defined(__i386__) || defined(RDTSC)
+-	if ((cpuInfo = fopen ("/proc/cpuinfo","r")) == NULL) {
++	if ((fd = open("/proc/cpuinfo", O_RDONLY)) < 0) {
+ 		matrixStrDebugMsg("Error opening /proc/cpuinfo\n", NULL);
+ 		return -2;
+ 	}
+-
+-	while ((!feof(cpuInfo)) && (strncasecmp(line,"cpu MHz",7) != 0)){
+-		fgets(line,79,cpuInfo);
++	
++readmore:
++	if ((tmpstr = realloc(buf, startsize)) == NULL)
++		return -1;
++	
++	buf = tmpstr;
++	
++	if ((r = read(fd, buf + size, startsize - size)) < 0)
++		return -2;
++	
++	size += r;
++	if (size == startsize) {
++	  startsize += startsize;
++	  goto readmore;
+ 	}
+ 
+-	if (strncasecmp(line,"cpu MHz",7) == 0){ 
+-		tmpstr = strchr(line,':');
++	buf[size] = '\0'; 
++	if ((tmpstr = strstr(buf,"cpu MHz"))){ 
++		tmpstr = strchr(tmpstr,':');
+ 		tmpstr++;
+ 		c = strspn(tmpstr, " \t");
+ 		tmpstr +=c;
+ 		c = strcspn(tmpstr, " \t\n\r");
+ 		tmpstr[c] = '\0';
+-		mhz = 1000000 * atof(tmpstr);
++		mhz = 1000000 * atoi(tmpstr);
+ 		hiresFreq = (sslTime_t)mhz;
+-		fclose (cpuInfo);	
++		free(buf);
++		close (fd);
+ 	} else {
+-		fclose (cpuInfo);
++		free(buf);
++		close (fd);
+ 		hiresStart = 0;
+ 		return -3;
+ 	}
+--- matrixssl-1-7-3-open/src/os/osLayer.h.stdio	2005-11-22 21:56:53.000000000 +0100
++++ matrixssl-1-7-3-open/src/os/osLayer.h	2005-11-22 21:56:54.000000000 +0100
+@@ -35,8 +35,11 @@
+ #define _h_OS_LAYER
+ #define _h_EXPORT_SYMBOLS
+ 
+-#include <stdio.h>
+ #include <stdlib.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++
+ 
+ #ifndef WINCE
+ #include <time.h>

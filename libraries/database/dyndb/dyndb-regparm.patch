@@ -1,0 +1,24 @@
+--- dyndb-0.5.2/src/uogetopt.c.regparm	2007-04-20 15:49:39.000000000 +0200
++++ dyndb-0.5.2/src/uogetopt.c	2007-04-20 15:50:45.000000000 +0200
+@@ -56,16 +56,12 @@
+ #define FLAGS (UOGO_HIDDEN|UOGO_OPTARG)
+ extern void _exit(int) attribute_noreturn;
+ 
+-static void	uogetopt_printver(uogetopt_env_t *env) 
+-	attribute_regparm(1);
+-static void handle_argopt(uogetopt_env_t *env, uogetopt_t *o, char *arg) 
+-	attribute_regparm(3);
+-static void outplus(void (*out)(int, const char *), const char *s) 
+-	attribute_regparm(2);
++static void uogetopt_printver(uogetopt_env_t *env);
++static void handle_argopt(uogetopt_env_t *env, uogetopt_t *o, char *arg);
++static void outplus(void (*out)(int, const char *), const char *s);
+ static unsigned int outandcount(void (*out)(int iserr,const char *), 
+-	const char *s) attribute_regparm(2);
+-static void uogetopt_printhelp(uogetopt_env_t *env, int mode)
+-	attribute_regparm(2);
++	const char *s);
++static void uogetopt_printhelp(uogetopt_env_t *env, int mode);
+ 
+ int uogo_posixmode=0;
+ 

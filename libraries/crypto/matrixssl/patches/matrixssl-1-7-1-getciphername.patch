@@ -1,0 +1,40 @@
+--- matrixssl-1-7-1c-open/matrixSsl.h.getciphername	2005-09-21 03:03:40.000000000 +0200
++++ matrixssl-1-7-1c-open/matrixSsl.h	2005-10-06 23:52:00.000000000 +0200
+@@ -140,6 +140,7 @@
+ 	Server side APIs
+ */
+ MATRIXPUBLIC int32	matrixSslEncodeHelloRequest(ssl_t *ssl, sslBuf_t *out);
++MATRIXPUBLIC char	*matrixSslGetCipherName(ssl_t *ssl);
+ 
+ 
+ 
+--- matrixssl-1-7-1c-open/src/matrixSsl.c.getciphername	2005-09-21 03:05:56.000000000 +0200
++++ matrixssl-1-7-1c-open/src/matrixSsl.c	2005-10-06 23:51:14.000000000 +0200
+@@ -689,6 +689,27 @@
+ }
+ #endif /* USE_CLIENT_SIDE_SSL */
+ 
++char * matrixSslGetCipherName(ssl_t *ssl)
++{
++  if (ssl->cipher != NULL )
++    switch (ssl->cipher->id) {
++      case SSL_RSA_WITH_NULL_MD5:
++	return "NULL-MD5";
++      case SSL_RSA_WITH_NULL_SHA:
++	return "NULL-SHA";
++      case SSL_RSA_WITH_RC4_128_MD5:
++	return "RC4-MD5";
++      case SSL_RSA_WITH_RC4_128_SHA:
++	return "RC4-SHA";
++      case SSL_RSA_WITH_3DES_EDE_CBC_SHA:
++	return "DES-CBC3-SHA";
++      default:
++	return "unknown";
++    }
++  else
++    return "unknown";
++}
++
+ /******************************************************************************/
+ /*
+ 	Rehandshake. Free any allocated sec members that will be repopulated

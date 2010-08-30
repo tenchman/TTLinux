@@ -1,0 +1,11 @@
+diff -up squid-3.1.0.8/src/errorpage.cc.no_quote_external_acl_message squid-3.1.0.8/src/errorpage.cc
+--- squid-3.1.0.8/src/errorpage.cc.no_quote_external_acl_message	2009-09-29 12:10:30.000000000 +0200
++++ squid-3.1.0.8/src/errorpage.cc	2009-09-29 12:11:15.000000000 +0200
+@@ -720,6 +720,7 @@ ErrorState::Convert(char token)
+ 
+     case 'o':
+         p = external_acl_message ? external_acl_message : "[not available]";
++        do_quote = 0;
+ 
+         break;
+ 

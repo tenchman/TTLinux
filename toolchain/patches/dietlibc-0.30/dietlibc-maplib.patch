@@ -1,0 +1,44 @@
+--- dietlibc-0.30/libdl/_dl_main.c.maplib	2008-07-03 09:44:44.000000000 +0200
++++ dietlibc-0.30/libdl/_dl_main.c	2008-07-03 09:47:04.000000000 +0200
+@@ -814,10 +814,10 @@ err_out_close:
+   }
+ 
+   if (ld_nr==1) {
+-    unsigned long addr  =_ELF_DWN_ROUND(at_pagesize,ld[0]->p_vaddr);
+-    unsigned long offset=_ELF_DWN_ROUND(at_pagesize,ld[0]->p_offset);
+-    unsigned long off   =_ELF_RST_ROUND(at_pagesize,ld[0]->p_offset);
+-    unsigned long length=_ELF_UP_ROUND(at_pagesize,ld[0]->p_memsz+off);
++    unsigned long addr  =_ELF_DWN_ROUND(ld[0]->p_align,ld[0]->p_vaddr);
++    unsigned long offset=_ELF_DWN_ROUND(ld[0]->p_align,ld[0]->p_offset);
++    unsigned long off   =_ELF_RST_ROUND(ld[0]->p_align,ld[0]->p_offset);
++    unsigned long length=_ELF_UP_ROUND(ld[0]->p_align,ld[0]->p_memsz+off);
+     ret=_dl_get_handle();
+     m=(char*)do_map_in((void*)addr,length,ld[0]->p_flags,fd,offset);
+     if (m==MAP_FAILED) goto err_out_free;
+@@ -829,16 +829,16 @@ err_out_close:
+     ret->mem_size=length;
+   }
+   else if (ld_nr==2) { /* aem... yes Quick & Really Dirty / for the avarage 99% */
+-    unsigned long text_addr = _ELF_DWN_ROUND(at_pagesize,ld[0]->p_vaddr);
+-    unsigned long text_offset=_ELF_DWN_ROUND(at_pagesize,ld[0]->p_offset);
+-    unsigned long text_off   =_ELF_RST_ROUND(at_pagesize,ld[0]->p_offset);
+-    unsigned long text_size  =_ELF_UP_ROUND(at_pagesize,ld[0]->p_memsz+text_off);
+-
+-    unsigned long data_addr  =_ELF_DWN_ROUND(at_pagesize,ld[1]->p_vaddr);
+-    unsigned long data_offset=_ELF_DWN_ROUND(at_pagesize,ld[1]->p_offset);
+-    unsigned long data_off   =_ELF_RST_ROUND(at_pagesize,ld[1]->p_offset);
+-    unsigned long data_size  =_ELF_UP_ROUND(at_pagesize,ld[1]->p_memsz+data_off);
+-    unsigned long data_fsize =_ELF_UP_ROUND(at_pagesize,ld[1]->p_filesz+data_off);
++    unsigned long text_addr = _ELF_DWN_ROUND(ld[0]->p_align,ld[0]->p_vaddr);
++    unsigned long text_offset=_ELF_DWN_ROUND(ld[0]->p_align,ld[0]->p_offset);
++    unsigned long text_off   =_ELF_RST_ROUND(ld[0]->p_align,ld[0]->p_offset);
++    unsigned long text_size  =_ELF_UP_ROUND(ld[0]->p_align,ld[0]->p_memsz+text_off);
++
++    unsigned long data_addr  =_ELF_DWN_ROUND(ld[1]->p_align,ld[1]->p_vaddr);
++    unsigned long data_offset=_ELF_DWN_ROUND(ld[1]->p_align,ld[1]->p_offset);
++    unsigned long data_off   =_ELF_RST_ROUND(ld[1]->p_align,ld[1]->p_offset);
++    unsigned long data_size  =_ELF_UP_ROUND(ld[1]->p_align,ld[1]->p_memsz+data_off);
++    unsigned long data_fsize =_ELF_UP_ROUND(ld[1]->p_align,ld[1]->p_filesz+data_off);
+ 
+     /* handle data_addr relative to text_addr */
+     data_addr-=text_addr;

@@ -1,0 +1,28 @@
+diff -up hostapd-0.7.2/src/common/nl80211_copy.h.diet hostapd-0.7.2/src/common/nl80211_copy.h
+--- hostapd-0.7.2/src/drivers/nl80211_copy.h.diet	2010-01-12 15:55:02.000000000 +0100
++++ hostapd-0.7.2/src/drivers/nl80211_copy.h	2010-08-05 15:12:47.958823102 +0200
+@@ -25,6 +25,7 @@
+  *
+  */
+ 
++#include <sys/capability.h>
+ #include <linux/types.h>
+ 
+ /**
+diff -up hostapd-0.7.2/src/common/wireless_copy.h.diet hostapd-0.7.2/src/common/wireless_copy.h
+--- hostapd-0.7.2/src/drivers/wireless_copy.h.diet	2010-01-12 15:55:02.000000000 +0100
++++ hostapd-0.7.2/src/drivers/wireless_copy.h	2010-08-05 15:26:03.726823706 +0200
+@@ -85,12 +85,8 @@
+ #include <linux/if.h>			/* for IFNAMSIZ and co... */
+ #else
+ #include <sys/types.h>
++#include <sys/capability.h>
+ #include <net/if.h>
+-typedef __uint32_t __u32;
+-typedef __int32_t __s32;
+-typedef __uint16_t __u16;
+-typedef __int16_t __s16;
+-typedef __uint8_t __u8;
+ #ifndef __user
+ #define __user
+ #endif /* __user */

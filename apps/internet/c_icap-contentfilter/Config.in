@@ -1,0 +1,8 @@
+# vim:set syntax=kconfig:
+config CONFIG_C_ICAP_CONTENTFILTER
+  bool "C-icap - Contentfilter plugin for c-icap"
+  depends CONFIG_C_ICAP
+  default n
+  help
+
+    https://svn.telco-tech.de/projects/c-icap-plugins

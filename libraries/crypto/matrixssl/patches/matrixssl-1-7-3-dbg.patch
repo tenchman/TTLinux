@@ -1,0 +1,40 @@
+--- matrixssl-1-7-3-open/src/os/debug.c.dbg	2005-10-20 22:29:38.000000000 +0200
++++ matrixssl-1-7-3-open/src/os/debug.c	2005-11-20 15:46:38.000000000 +0100
+@@ -38,22 +38,22 @@
+ void matrixStrDebugMsg(char *message, char *value)
+ {
+ 	if (value) {
+-		printf(message, value);
++		fprintf(stderr, message, value);
+ 	} else {
+-		printf(message);
++		fprintf(stderr, message);
+ 	}
+ }
+ 
+ /* message should contain one %d */
+ void matrixIntDebugMsg(char *message, int32 value)
+ {
+-	printf(message, value);
++	fprintf(stderr, message, value);
+ }
+ 
+ /* message should contain one %p */
+ void matrixPtrDebugMsg(char *message, void *value)
+ {
+-	printf(message, value);
++	fprintf(stderr, message, value);
+ }
+ 
+ #endif /* DEBUG */
+--- matrixssl-1-7-3-open/src/os/osLayer.h.dbg	2005-11-20 15:53:41.000000000 +0100
++++ matrixssl-1-7-3-open/src/os/osLayer.h	2005-11-20 15:55:32.000000000 +0100
+@@ -188,7 +188,7 @@
+ #define matrixIntDebugMsg(x, y)
+ #define matrixPtrDebugMsg(x, y)
+ #define sslAssert(C)  if (C) ; else \
+-	{fprintf(stderr, "%s:%d sslAssert(%s)\n",__FILE__, __LINE__, #C); }
++	{ write(2, #C, strlen(#C)); }
+ #endif /* DEBUG */
+ 
+ #ifdef __cplusplus

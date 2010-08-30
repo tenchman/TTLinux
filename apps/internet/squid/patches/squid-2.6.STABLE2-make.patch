@@ -1,0 +1,36 @@
+--- squid-2.6.STABLE2/src/Makefile.in.make	2006-07-30 10:56:18.000000000 +0200
++++ squid-2.6.STABLE2/src/Makefile.in	2006-08-14 15:25:35.000000000 +0200
+@@ -586,12 +586,12 @@
+ DEFAULT_CONFIG_FILE = $(sysconfdir)/squid.conf
+ DEFAULT_MIME_TABLE = $(sysconfdir)/mime.conf
+ DEFAULT_DNSSERVER = $(libexecdir)/`echo dnsserver | sed '$(transform);s/$$/$(EXEEXT)/'`
+-DEFAULT_LOG_PREFIX = $(localstatedir)/logs
++DEFAULT_LOG_PREFIX = $(localstatedir)/log
+ DEFAULT_CACHE_LOG = $(DEFAULT_LOG_PREFIX)/cache.log
+ DEFAULT_ACCESS_LOG = $(DEFAULT_LOG_PREFIX)/access.log
+ DEFAULT_STORE_LOG = $(DEFAULT_LOG_PREFIX)/store.log
+-DEFAULT_PID_FILE = $(DEFAULT_LOG_PREFIX)/squid.pid
+-DEFAULT_SWAP_DIR = $(localstatedir)/cache
++DEFAULT_PID_FILE = $(localstatedir)/run/squid.pid
++DEFAULT_SWAP_DIR = $(localstatedir)/spool/squid
+ DEFAULT_PINGER = $(libexecdir)/`echo pinger | sed '$(transform);s/$$/$(EXEEXT)/'`
+ DEFAULT_UNLINKD = $(libexecdir)/`echo unlinkd | sed '$(transform);s/$$/$(EXEEXT)/'`
+ DEFAULT_DISKD = $(libexecdir)/`echo diskd-daemon | sed '$(transform);s/$$/$(EXEEXT)/'`
+--- squid-2.6.STABLE2/src/Makefile.am.make	2006-08-14 15:26:56.000000000 +0200
++++ squid-2.6.STABLE2/src/Makefile.am	2006-08-14 15:30:31.000000000 +0200
+@@ -299,12 +299,12 @@
+ DEFAULT_CONFIG_FILE     = $(sysconfdir)/squid.conf
+ DEFAULT_MIME_TABLE	= $(sysconfdir)/mime.conf
+ DEFAULT_DNSSERVER       = $(libexecdir)/`echo dnsserver | sed '$(transform);s/$$/$(EXEEXT)/'`
+-DEFAULT_LOG_PREFIX	= $(localstatedir)/logs
++DEFAULT_LOG_PREFIX	= $(localstatedir)/log
+ DEFAULT_CACHE_LOG       = $(DEFAULT_LOG_PREFIX)/cache.log
+ DEFAULT_ACCESS_LOG      = $(DEFAULT_LOG_PREFIX)/access.log
+ DEFAULT_STORE_LOG       = $(DEFAULT_LOG_PREFIX)/store.log
+-DEFAULT_PID_FILE        = $(DEFAULT_LOG_PREFIX)/squid.pid
+-DEFAULT_SWAP_DIR        = $(localstatedir)/cache
++DEFAULT_PID_FILE        = $(localstatedir)/run/squid.pid
++DEFAULT_SWAP_DIR        = $(localstatedir)/spool/squid
+ DEFAULT_PINGER		= $(libexecdir)/`echo pinger | sed '$(transform);s/$$/$(EXEEXT)/'`
+ DEFAULT_UNLINKD		= $(libexecdir)/`echo unlinkd | sed '$(transform);s/$$/$(EXEEXT)/'`
+ DEFAULT_DISKD		= $(libexecdir)/`echo diskd-daemon | sed '$(transform);s/$$/$(EXEEXT)/'`

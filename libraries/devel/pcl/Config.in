@@ -1,0 +1,10 @@
+# vim:set syntax=kconfig:
+config CONFIG_PCL
+  bool "pcl - Portable Coroutine Library"
+  default n
+  help
+    The Portable Coroutine Library (PCL) implements the low level functionality
+    for coroutines. For a definition of the term coroutine see The Art of Computer
+    Programming by Donald E. Knuth.
+
+    http://www.xmailserver.org/libpcl.html

@@ -1,0 +1,22 @@
+--- linux-2.6.26.2/drivers/rtc/rtc-x1205.c.rtc	2008-08-06 18:19:01.000000000 +0200
++++ linux-2.6.26.2/drivers/rtc/rtc-x1205.c	2008-09-03 13:21:01.000000000 +0200
+@@ -378,7 +378,7 @@ static int x1205_validate_client(struct 
+ 
+ 	static const struct x1205_limit probe_limits_pattern[] = {
+ 		/* register, mask, min, max */
+-		{ X1205_REG_Y2K,	0xFF,	19,	20	},
++		{ X1205_REG_Y2K,	0xFF,	0,	99	},
+ 		{ X1205_REG_DW,		0xFF,	0,	6	},
+ 		{ X1205_REG_YR,		0xFF,	0,	99	},
+ 		{ X1205_REG_MO,		0xFF,	0,	12	},
+@@ -386,8 +386,8 @@ static int x1205_validate_client(struct 
+ 		{ X1205_REG_HR,		0x7F,	0,	23	},
+ 		{ X1205_REG_MN,		0xFF,	0,	59	},
+ 		{ X1205_REG_SC,		0xFF,	0,	59	},
+-		{ X1205_REG_Y2K1,	0xFF,	19,	20	},
+-		{ X1205_REG_Y2K0,	0xFF,	19,	20	},
++		{ X1205_REG_Y2K1,	0xFF,	0,	99	},
++		{ X1205_REG_Y2K0,	0xFF,	0,	99	},
+ 	};
+ 
+ 	/* check that registers have bits a 0 where expected */

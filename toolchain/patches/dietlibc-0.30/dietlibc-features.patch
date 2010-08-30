@@ -1,0 +1,83 @@
+--- dietlibc-0.30/dietfeatures.h.features	2006-04-04 07:35:14.000000000 +0200
++++ dietlibc-0.30/dietfeatures.h	2007-02-12 20:39:01.000000000 +0100
+@@ -7,7 +7,11 @@
+ #define WANT_FLOATING_POINT_IN_SCANF
+ #define WANT_CHARACTER_CLASSES_IN_SCANF
+ #define WANT_NULL_PRINTF
+-/* #define WANT_ERROR_PRINTF */
++#define WANT_N_PRINTF
++#define WANT_A_PRINTF
++#define WANT_MALLOC_IN_PRINTF
++#define WANT_ERROR_PRINTF
++#define WANT_FULL_GETTEXT
+ #define WANT_LONGLONG_PRINTF
+ #define WANT_LONGLONG_SCANF
+ 
+@@ -17,7 +20,7 @@
+ /* want fread to read() directly if size of data is larger than buffer?
+  * This costs a few bytes but is worth it if the application is already
+  * buffering. */
+-#define WANT_FREAD_OPTIMIZATION
++/* #define WANT_FREAD_OPTIMIZATION */
+ 
+ /* this is only for meaningful for ttyname and sysconf_cpus so far */
+ #define SLASH_PROC_OK
+@@ -26,17 +29,17 @@
+ #define WANT_THREAD_SAFE
+ 
+ /* make the startcode, etc. dynamic aware ({con,de}structors) */
+-/* #define WANT_DYNAMIC */
++#define WANT_DYNAMIC
+ 
+ /* GDB support in the dynamic linker */
+-#define WANT_LD_SO_GDB_SUPPORT
++/* #define WANT_LD_SO_GDB_SUPPORT */
+ 
+ /* do you want smaller or faster string routines? */
+-/* #define WANT_FASTER_STRING_ROUTINES */
++#define WANT_FASTER_STRING_ROUTINES
+ 
+ /* define this to have strncpy zero-fill and not just zero-terminate the
+  * string */
+-/* #define WANT_FULL_POSIX_COMPAT */
++/* #define WANT_FULL_POSIX_COMPAT do not enable this, it is broken */
+ 
+ /* on i386, Linux has an alternate syscall method since 2002/12/16 */
+ /* on my Athlon XP, it is twice as fast, but it's only in kernel 2.5 */
+@@ -47,7 +50,7 @@
+ 
+ /* you need to define this if you want to run your programs with large
+  * file support on kernel 2.2 or 2.0 */
+-#define WANT_LARGEFILE_BACKCOMPAT
++/* #define WANT_LARGEFILE_BACKCOMPAT */
+ 
+ /* do you want localtime(3) to read /etc/localtime?
+  * Needed for daylight saving time etc. */
+@@ -84,13 +87,13 @@
+ /* This enables zeroconf DNS aka Rendezvous aka Bonjour. */
+ /* This code will try zeroconf DNS if you ask for host.local or if you
+  * ask for an unqualified hostname */
+-#define WANT_PLUGPLAY_DNS
++/* #define WANT_PLUGPLAY_DNS */
+ 
+ /* do you want that malloc(0) return a pointer to a "zero-length" object
+  * that is realloc-able; means realloc(..,size) gives a NEW object (like a
+  * call to malloc(size)).
+  * WARNING: this violates C99 */
+-/* #define WANT_MALLOC_ZERO */
++#define WANT_MALLOC_ZERO
+ 
+ /* This enables a stack gap.  Basically, the start code does not run
+  * main but stackgap, which then does alloca(random()) and calls main.
+@@ -107,9 +110,11 @@
+  * -fstack-protector.  On i386, enabling this option with
+  * WANT_SSP_URANDOM and then not using -fstack-protector enlarges a
+  * binary by 152 bytes. */
++/*
+ #if (__GNUC__>4) || ((__GNUC__==4) && (__GNUC_MINOR__>=1))
+ #define WANT_SSP
+ #endif
++*/
+ /* Choose which canary seeder you want you can choose
+  * both but it will check urandom first and use xor as
+  * a fallback. xor is lighter but weaker */

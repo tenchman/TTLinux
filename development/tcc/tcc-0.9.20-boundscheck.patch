@@ -1,0 +1,11 @@
+--- tcc-0.9.20/tcc.c.boundcheck	2003-10-05 12:23:48.000000000 +0200
++++ tcc-0.9.20/tcc.c	2004-09-01 22:15:49.240328304 +0200
+@@ -3374,7 +3374,7 @@
+             p--;
+             PEEKC(c, p);
+         parse_ident_slow:
+-            while (isidnum_table[c]) {
++            while (c > 0 && isidnum_table[c]) {
+                 cstr_ccat(&tokcstr, c);
+                 PEEKC(c, p);
+             }

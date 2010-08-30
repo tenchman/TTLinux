@@ -1,0 +1,458 @@
+--- openswan-2.4.7/programs/auto/auto.in.liss	2006-01-05 23:50:45.000000000 +0100
++++ openswan-2.4.7/programs/auto/auto.in	2007-04-24 15:47:21.000000000 +0200
+@@ -353,6 +353,16 @@
+ 			s["right"] = draddr
+ 		}
+ 
++	       if (s["left"] == "@IP@") {
++		       if( system("ip route get " s["right"] "| grep src > /tmp/myip") == 0){
++			 FS=" ";
++			 if (getline < "/tmp/myip"){
++			   s["left"] = $NF
++			   s["leftsourceip"] = $NF
++			 }
++		       } else fail("@IP@ could not be determined for " s["right"])
++	       }
++
+ 		set_os_default("keyexchange", "ike")
+ 		if (s["keyexchange"] != "ike")
+ 			fail("only know how to do keyexchange=ike")
+--- openswan-2.4.7/programs/_realsetup/_realsetup.in.liss	2006-10-03 03:20:32.000000000 +0200
++++ openswan-2.4.7/programs/_realsetup/_realsetup.in	2007-04-24 15:47:21.000000000 +0200
+@@ -336,14 +336,6 @@
+ 	perform $KILLKLIPS
+ 	rm -f /var/run/pluto.pid
+ 
+-	# When we exit we clean up (remove) the modules we are using, even the kame'ish ones
+-	if test -e ${kamepfkey}; then
+-		lsmod 2>&1 | grep "^xfrm4_tunnel" > /dev/null && rmmod -s xfrm4_tunnel
+-		lsmod 2>&1 | grep "^af_key" > /dev/null && rmmod -s af_key
+-		# old name for xfrm4_tunnel
+-		lsmod 2>&1 | grep "^xfrm_user" > /dev/null && rmmod -s xfrm_user
+-	fi 
+-
+ 	perform test -d `dirname $subsyslock` "&&" rm -f $subsyslock
+ 
+ 	perform rm -f $info $lock $plutopid
+--- openswan-2.4.7/programs/_plutorun/_plutorun.in.liss	2006-10-11 18:24:52.000000000 +0200
++++ openswan-2.4.7/programs/_plutorun/_plutorun.in	2007-04-24 15:47:21.000000000 +0200
+@@ -210,8 +210,6 @@
+ 						logger -p authpriv.info -t ipsec__plutorun No file ${FEDORA_SECRETS}, generating key.
+ 						ipsec newhostkey --output ${FEDORA_SECRETS} --quiet
+ 					fi
+-				else
+-					logger -p authpriv.info -t ipsec__plutorun Unknown default RSA hostkey scheme, not generating a default hostkey
+ 				fi
+ 			fi
+ 		fi
+@@ -265,7 +263,7 @@
+ 
+ 		if test $st -gt 128
+ 		then
+-			st="$st (signal `expr $st - 128`)"
++			st="$st (signal `echo $(($st - 128))`"
+ 		fi
+ 		echo "!pluto failure!:  exited with error status $st"
+ 		echo "restarting IPsec after pause..."
+--- openswan-2.4.7/programs/_startklips/_startklips.in.liss	2006-11-13 21:27:18.000000000 +0100
++++ openswan-2.4.7/programs/_startklips/_startklips.in	2007-04-24 15:48:22.000000000 +0200
+@@ -95,8 +95,7 @@
+ # set up a Klips interface
+ klipsinterface() {
+ 	# pull apart the interface spec
+-	virt=`expr $1 : '\([^=]*\)=.*'`
+-	phys=`expr $1 : '[^=]*=\(.*\)'`
++	eval `echo $1 | awk -F= '{ printf("virt=%s\nphys=%s\n",$1,$2) }'`
+ 	case "$virt" in
+ 	ipsec[0-9])	;;
+ 	*)	echo "invalid interface \`$virt' in \`$1'" ; exit 1	;;
+@@ -104,23 +103,25 @@
+ 
+ 	# figure out ifconfig for interface
+ 	addr=
+-	eval `ifconfig $phys |
+-		awk '$1 == "inet" && $2 ~ /^addr:/ && $NF ~ /^Mask:/ {
+-			gsub(/:/, " ", $0)
+-			print "addr=" $3
+-			other = $5
+-			if ($4 == "Bcast")
+-				print "type=broadcast"
+-			else if ($4 == "P-t-P")
+-				print "type=pointopoint"
+-			else if (NF == 5) {
+-				print "type="
+-				other = ""
+-			} else
++	eval `LANG=C ip addr show label $phys dev $phys |
++		awk '/<.*>/ { 
++			if (index($0, "BROADCAST") != 0)
++				print "type=broadcast";
++			else if (index($0, "POINTOPOINT") != 0)
++				print "type=pointopoint";
++			else
+ 				print "type=unknown"
+-			print "otheraddr=" other
+-			print "mask=" $NF
+-		}'`
++		       };
++	       $1 == "inet" {
++		       gsub(/\//, " ", $0)		       
++
++		       print "addr=" $2
++		       if ( index($5,".") != 0 )
++			       print "mask=" $5
++		       else
++			       print "mask=" $4
++	       };'`
++
+ 	if test " $addr" = " "
+ 	then
+ 		echo "unable to determine address of \`$phys'"
+@@ -143,12 +144,6 @@
+ 	else
+ 		echo "NETKEY on $phys $addr/$mask $type $otheraddr $mtu" | logonly
+ 	fi
+-	if $klips
+-	then
+-		# attach the interface and bring it up
+-		ipsec tncfg --attach --virtual $virt --physical $phys
+-		ifconfig $virt inet $addr $type $otheraddr netmask $mask $mtu
+-	fi
+ 
+ 	# if %defaultroute, note the facts
+ 	if test " $2" != " "
+@@ -206,8 +201,13 @@
+ 
+ # interfaces=%defaultroute:  put ipsec0 on top of default route's interface
+ defaultinterface() {
+-	phys=`netstat -nr |
+-		awk '$1 == "0.0.0.0" && $3 == "0.0.0.0" { print $NF }'`
++	phys=`ip route show |
++		awk '$1 == "default" {
++		if ( $(NF-1) == "dev" )
++			print $NF
++		else 
++			print $(NF-2);
++		}'`
+ 	if test " $phys" = " "
+ 	then
+ 		echo "no default route, %defaultroute cannot cope!!!"
+@@ -218,8 +218,8 @@
+ 		echo "multiple default routes, %defaultroute cannot cope!!!"
+ 		exit 1
+ 	fi
+-	next=`netstat -nr |
+-		awk '$1 == "0.0.0.0" && $3 == "0.0.0.0" { print $2 }'`
++	next=`ip route show |
++	       awk '$1 == "default" { print $3 }'`
+ 	klipsinterface "ipsec0=$phys" $next
+ }
+ 
+@@ -269,17 +269,7 @@
+     echo "FATAL ERROR: Both KLIPS and NETKEY IPsec code is present in kernel"
+     exit
+ fi
+-if test ! -f $ipsecversion && test ! -f $netkey && modprobe -qn ipsec
+-then
+-	# statically compiled KLIPS/NETKEY not found; but there seems to be an ipsec module
+-	modprobe ipsec 2> /dev/null
+-fi
+ 
+-if test ! -f $ipsecversion && test ! -f $netkey && modprobe -qn af_key
+-then
+-	# netkey should work then
+-	modprobe af_key 2> /dev/null
+-fi
+ if test ! -f $ipsecversion && test ! -f $netkey 
+ then
+ 	echo "ERROR: Failed to load or detect KLIPS and NETKEY"
+@@ -288,50 +278,8 @@
+ 	# echo "kernel appears to lack IPsec support (neither CONFIG_KLIPS or CONFIG_NET_KEY are set)"
+ 	# exit 1
+ fi
+-# modules shared between klips and netkey
+-if test -f $modules
+-then
+-	# we modprobe hw_random so ipsec verify can complain about not using it
+-	modprobe -q hw_random 2> /dev/null
+-	# padlock must load before aes module
+-	modprobe -q padlock 2> /dev/null
+-	# load the most common ciphers/algo's
+-	modprobe -q sha256 2> /dev/null
+-	modprobe -q sha1 2> /dev/null
+-	modprobe -q md5 2> /dev/null
+-	modprobe -q des 2> /dev/null
+-	modprobe -q aes 2> /dev/null
+-
+-	if test -f $netkey
+-	then
+-		klips=false
+-		modprobe -q ah4 2> /dev/null
+-		modprobe -q esp4 2> /dev/null
+-		modprobe -q ipcomp 2> /dev/null
+-		#  xfrm4_tunnel is needed by ipip and ipcomp
+-		modprobe -q xfrm4_tunnel 2> /dev/null
+-		# xfrm_user contains netlink support for IPsec 
+-		modprobe -q xfrm_user 2> /dev/null
+-	fi
++klips=false
+ 
+-	if test ! -f $ipsecversion && $klips
+-	then
+-		if [ ! -e /proc/ksyms -a ! -e /proc/kallsyms ]
+-		then
+-			echo "Broken 2.6 kernel without kallsyms, skipping calcgoo (Fedora rpm?)"
+-		else
+-               		setmodule
+-		fi
+-               	unset MODPATH MODULECONF        # no user overrides!
+-               	depmod -a >/dev/null 2>&1
+-               	modprobe -v ipsec
+-        	if test ! -f $ipsecversion
+-        	then
+-                	echo "kernel appears to lack IPsec support (neither CONFIG_KLIPS or CONFIG_NET_KEY are set)"
+-                	exit 1
+-        	fi
+-	fi
+-fi
+ # figure out debugging flags
+ case "$debug" in
+ '')	debug=none	;;
+@@ -349,12 +297,6 @@
+ 		done
+ 		;;
+ 	esac
+-elif $klips
+-then
+-	if test " $debug" != " none"
+-	then
+-		echo "klipsdebug=\`$debug' ignored, KLIPS lacks debug facilities"
+-	fi
+ fi
+ 
+ # figure out misc. kernel config
+@@ -371,12 +313,7 @@
+ 	# carry on
+ fi
+ 
+-if $klips
+-then
+-	# clear tables out in case dregs have been left over
+-	ipsec eroute --clear
+-	ipsec spi --clear
+-elif test $netkey
++if test $netkey
+ then
+ 	if ip xfrm state > /dev/null 2>&1
+ 	then
+--- openswan-2.4.7/programs/barf/barf.in.liss	2006-11-07 04:49:18.000000000 +0100
++++ openswan-2.4.7/programs/barf/barf.in	2007-04-24 15:47:21.000000000 +0200
+@@ -14,7 +14,7 @@
+ #
+ # RCSID $Id: barf.in,v 1.107.2.7 2006/11/07 03:49:18 paul Exp $
+ 
+-LOGS=${LOGS-/var/log}
++LOGS=${LOGS-/var/log/authpriv}
+ CONFS=${IPSEC_CONFS-/etc}
+ CONFDDIR=${IPSEC_CONFDDIR-/etc/ipsec.d}
+ me="ipsec barf"
+@@ -102,18 +102,18 @@
+ }
+ 
+ # try to guess where logs are
+-findlog "$fstart" "klips" messages syslog auth.log daemon.log
++findlog "$fstart" "klips" current syslog auth.log daemon.log
+ if test " $findlog_file" = " /dev/null" 
+ then
+-echo "Unable to find KLIPS messages, typically found in /var/log/messages or equivalent. You may need to run Openswan for the first time; alternatively, your log files have been emptied (ie, logwatch) or we do not understand your logging configuration."
++echo "Unable to find KLIPS messages, typically found in /var/log/authpriv/current or equivalent. You may need to run Openswan for the first time; alternatively, your log files have been emptied (ie, logwatch) or we do not understand your logging configuration."
+ fi
+ klog=$findlog_file
+ kline=$findlog_startline
+ 
+-findlog "$pstart" "Pluto" secure auth.log daemon.log debug
++findlog "$pstart" "Pluto" current auth.log daemon.log debug
+ if test " $findlog_file" = " /dev/null" 
+ then
+-echo "Unable to find Pluto messages, typically found in /var/log/secure or equivalent. You may need to run Openswan for the first time; alternatively, your log files have been emptied (ie, logwatch) or we do not understand your logging configuration."
++echo "Unable to find Pluto messages, typically found in /var/log/authpriv/current or equivalent. You may need to run Openswan for the first time; alternatively, your log files have been emptied (ie, logwatch) or we do not understand your logging configuration."
+ fi 
+ plog=$findlog_file
+ pline=$findlog_startline
+@@ -150,28 +150,6 @@
+ ipsec --version
+ _________________________ /proc/version
+ cat /proc/version
+-_________________________ /proc/net/ipsec_eroute
+-if test -r /proc/net/ipsec_eroute
+-then
+-	sort -sg +3 /proc/net/ipsec_eroute || cat /proc/net/ipsec_eroute
+-fi
+-_________________________ netstat-rn
+-netstat -nr|head -n $maxlines
+-_________________________ /proc/net/ipsec_spi
+-if test -r /proc/net/ipsec_spi
+-then
+-	cat /proc/net/ipsec_spi
+-fi
+-_________________________ /proc/net/ipsec_spigrp
+-if test -r /proc/net/ipsec_spigrp
+-then
+-	cat /proc/net/ipsec_spigrp
+-fi
+-_________________________ /proc/net/ipsec_tncfg
+-if test -r /proc/net/ipsec_tncfg
+-then
+-	cat /proc/net/ipsec_tncfg
+-fi
+ _________________________ /proc/net/pfkey
+ if test -r /proc/net/pfkey
+ then
+@@ -191,8 +169,6 @@
+ fi
+ _________________________ ipsec/status
+ ipsec auto --status
+-_________________________ ifconfig-a
+-ifconfig -a
+ _________________________ ip-addr-list
+ ip addr list
+ _________________________ ip-route-list
+@@ -201,22 +177,8 @@
+ ip rule list
+ _________________________ ipsec_verify
+ ipsec verify --nocolour
+-_________________________ mii-tool
+-if [ -x /sbin/mii-tool ] 
+-then
+-    /sbin/mii-tool -v
+-elif [ -x /usr/sbin/mii-tool ] 
+-then
+-    /usr/sbin/mii-tool -v
+-else
+-    mii-tool -v
+-fi
+ _________________________ ipsec/directory
+ ipsec --directory
+-_________________________ hostname/fqdn
+-hostname --fqdn
+-_________________________ hostname/ipaddress
+-hostname --ip-address
+ _________________________ uptime
+ uptime
+ _________________________ ps
+@@ -280,38 +242,11 @@
+ 	fi
+ done
+ _________________________ /proc/net/ipsec_version
+-if test -r /proc/net/ipsec_version
+-then
+-	cat /proc/net/ipsec_version
+-else
+-	if test -r /proc/net/pfkey
+-	then
+-		echo "NETKEY (`uname -r`) support detected "
+-	else
+-		echo "no KLIPS or NETKEY support detected"
+-	fi
+-fi
+-_________________________ ipfwadm
+-if test -r /sbin/ipfwadm
+-then
+-	ipfwadm -F -l -n -e
+-_________________________
+-	ipfwadm -I -l -n -e
+-_________________________
+-	ipfwadm -O -l -n -e
+-_________________________
+-	ipfwadm -M -l -n -e
+-else
+-	"no old-style linux 1.x/2.0 ipfwadm firewall support"
+-fi
+-_________________________ ipchains
+-if test -r /sbin/ipchains
++if test -r /proc/net/pfkey
+ then
+-	ipchains -L -v -n
+-_________________________
+-	ipchains -M -L -v -n
++	echo "NETKEY (`uname -r`) support detected "
+ else
+-	echo "no old-style linux 2.0 ipchains firewall support"
++	echo "no NETKEY support detected"
+ fi
+ _________________________ iptables
+ if test -r /sbin/iptables
+@@ -342,20 +277,6 @@
+ then
+ 	ls -l /proc/net/ipsec_*
+ fi
+-_________________________ usr/src/linux/.config
+-if test -f /proc/config.gz
+-then
+-	zcat /proc/config.gz | egrep 'CONFIG_IPSEC|CONFIG_KLIPS|CONFIG_NET_KEY|CONFIG_INET|CONFIG_IP|CONFIG_HW_RANDOM|CONFIG_CRYPTO_DEV|_XFRM' 
+-elif test -f /lib/modules/`uname -r`/build/.config
+-then
+-	cat /lib/modules/`uname -r`/build/.config | egrep 'CONFIG_IPSEC|CONFIG_KLIPS|CONFIG_NET_KEY|CONFIG_INET|CONFIG_IP|CONFIG_HW_RANDOM|CONFIG_CRYPTO_DEV|_XFRM'
+-else
+-	echo "no .config file found, cannot list kernel properties"
+-fi
+-_________________________ etc/syslog.conf
+-cat /etc/syslog.conf
+-_________________________ etc/syslog-ng/syslog-ng.conf
+-cat /etc/syslog-ng/syslog-ng.conf
+ _________________________ etc/resolv.conf
+ cat /etc/resolv.conf
+ _________________________ lib/modules-ls
+@@ -373,13 +294,6 @@
+ 	fi
+ fi
+ 	
+-_________________________ lib/modules-netif_rx
+-modulegoo kernel/net/ipv4/ipip.o netif_rx
+-_________________________ kern.debug
+-if test -f $LOGS/kern.debug
+-then
+-	tail -100 $LOGS/kern.debug
+-fi
+ _________________________ klog
+ sed -n $kline,'$'p $klog |
+ 	egrep -i 'ipsec|klips|pluto' |
+@@ -387,12 +301,5 @@
+ 	--short)	tail -500	;;
+ 	*)		cat		;;
+ 	esac
+-_________________________ plog
+-sed -n $pline,'$'p $plog |
+-	egrep -i 'pluto' |
+-	case "$1" in
+-	--short)	tail -500	;;
+-	*)		cat		;;
+-	esac
+ _________________________ date
+ date
+--- openswan-2.4.7/programs/setup/setup.in.liss	2006-10-27 01:54:32.000000000 +0200
++++ openswan-2.4.7/programs/setup/setup.in	2007-04-24 15:47:21.000000000 +0200
+@@ -66,6 +66,11 @@
+ 	exit 1
+ fi
+ 
++# update ipsec.secrets
++if [ -x /usr/libexec/liss/renew_ipsec.sh ]; then
++ 	/usr/libexec/liss/renew_ipsec.sh rewrite_secrets	
++fi
++
+ # accept a few flags
+ 
+ export IPSEC_setupflags
+@@ -139,6 +144,11 @@
+ 		cat ${outtmp} | logger -s -p $IPSECsyslog -t ipsec_setup 2>&1
+ 		rm -f ${outtmp}
+ 	fi
++
++	if [ -x /usr/libexec/liss/vpnmonitor.sh ]; then
++		/usr/libexec/liss/vpnmonitor.sh $1 &
++	fi
++
+ 	exit $st
+ 	;;
+ 

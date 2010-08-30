@@ -1,0 +1,21 @@
+diff -up source/client/mount.cifs.c.strl source/client/mount.cifs.c
+--- source/client/mount.cifs.c.strl	2008-11-05 13:32:11.000000000 +0100
++++ source/client/mount.cifs.c	2008-11-05 13:33:12.000000000 +0100
+@@ -89,6 +89,8 @@ static char * mountpassword = NULL;
+ char * domain_name = NULL;
+ char * prefixpath = NULL;
+ 
++#if 0
++
+ /* glibc doesn't have strlcpy, strlcat. Ensure we do. JRA. We
+  * don't link to libreplace so need them here. */
+ 
+@@ -127,6 +129,8 @@ static size_t strlcat(char *d, const cha
+ 	return ret;
+ }
+ 
++#endif
++
+ /* BB finish BB
+ 
+         cifs_umount

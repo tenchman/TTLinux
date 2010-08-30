@@ -1,0 +1,16 @@
+--- tcc-0.9.20/tcc.c.cast	2004-09-01 22:16:44.801881664 +0200
++++ tcc-0.9.20/tcc.c	2004-09-01 22:17:48.212241824 +0200
+@@ -5624,10 +5624,12 @@
+ {
+     int bt1, t1, t2;
+ 
++    /* type1 is destination, type2 is source */
++
+     t1 = type1->t & VT_TYPE;
+     t2 = type2->t & VT_TYPE;
+     /* XXX: bitfields ? */
+-    if (t1 != t2)
++    if (t1 != t2 && t1 != (t2 & (~(VT_CONSTANT | VT_VOLATILE))))
+         return 0;
+     /* test more complicated cases */
+     bt1 = t1 & VT_BTYPE;

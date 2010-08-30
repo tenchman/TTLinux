@@ -1,0 +1,10 @@
+#!/bin/sh
+export PATH=/opt/diet/xynth/bin:${PATH}
+export LD_LIBRARY_PATH=/opt/diet/xynth/lib-i386
+
+exec >~/.Xyntherrors 2>&1
+xynth &
+sleep 2
+desktop &
+exec term
+killall term xynth

@@ -1,0 +1,125 @@
+diff -up hddtemp-0.3-beta15/src/daemon.c.nofork hddtemp-0.3-beta15/src/daemon.c
+--- hddtemp-0.3-beta15/src/daemon.c.nofork	2006-04-26 05:04:46.000000000 +0200
++++ hddtemp-0.3-beta15/src/daemon.c	2007-11-05 16:08:36.000000000 +0100
+@@ -270,29 +270,32 @@ void do_daemon_mode(struct disk *ldisks)
+   fd_set             deffds;
+   time_t             next_time;
+ 
+-  switch(fork()) {
+-  case -1:
+-    perror("fork");
+-    exit(2);
+-    break;
+-  case 0:
+-    break;
+-  default:
+-    exit(0);
+-  }
+-  
+-  setsid();
+-  
+-  switch(fork()) {
+-  case -1:
+-    perror("fork");
+-    exit(2);
+-    break;
+-  case 0:
+-    break;
+-  default:
+-    exit(0);
++  if (!nofork) {
++    switch(fork()) {
++    case -1:
++      perror("fork");
++      exit(2);
++      break;
++    case 0:
++      break;
++    default:
++      exit(0);
++    }
++    
++    setsid();
++    
++    switch(fork()) {
++    case -1:
++      perror("fork");
++      exit(2);
++      break;
++    case 0:
++      break;
++    default:
++      exit(0);
++    }
+   }
++
+   chdir("/");
+   umask(0);
+   
+diff -up hddtemp-0.3-beta15/src/hddtemp.h.nofork hddtemp-0.3-beta15/src/hddtemp.h
+--- hddtemp-0.3-beta15/src/hddtemp.h.nofork	2006-04-19 04:40:11.000000000 +0200
++++ hddtemp-0.3-beta15/src/hddtemp.h	2007-11-05 16:08:36.000000000 +0100
+@@ -78,7 +78,7 @@ struct bustype {
+ 
+ extern struct bustype *   bus[BUS_TYPE_MAX];
+ extern char               errormsg[MAX_ERRORMSG_SIZE];
+-extern int                tcp_daemon, debug, quiet, wakeup, af_hint;
++extern int                tcp_daemon, debug, quiet, wakeup, af_hint, nofork;
+ extern char               separator;
+ extern long               portnum, syslog_interval;
+ extern char *             listen_addr;
+diff -up hddtemp-0.3-beta15/src/hddtemp.c.nofork hddtemp-0.3-beta15/src/hddtemp.c
+--- hddtemp-0.3-beta15/src/hddtemp.c.nofork	2007-11-05 16:10:14.000000000 +0100
++++ hddtemp-0.3-beta15/src/hddtemp.c	2007-11-05 16:14:26.000000000 +0100
+@@ -75,7 +75,7 @@ char *             listen_addr;
+ char               separator = SEPARATOR;
+ 
+ struct bustype *   bus[BUS_TYPE_MAX];
+-int                tcp_daemon, debug, quiet, numeric, wakeup, af_hint;
++int                tcp_daemon, debug, quiet, numeric, wakeup, af_hint, nofork;
+ 
+ static enum { DEFAULT, CELSIUS, FAHRENHEIT } unit;
+ 
+@@ -279,7 +279,7 @@ int main(int argc, char* argv[]) {
+   bindtextdomain (PACKAGE, LOCALEDIR);
+   textdomain (PACKAGE);
+   
+-  show_db = debug = numeric = quiet = wakeup = af_hint = syslog_interval = 0;
++  show_db = debug = numeric = quiet = wakeup = af_hint = syslog_interval = nofork = 0;
+   unit = DEFAULT;
+   portnum = PORT_NUMBER;
+   listen_addr = NULL;
+@@ -299,13 +299,14 @@ int main(int argc, char* argv[]) {
+       {"port",       1, NULL, 'p'},
+       {"separator",  1, NULL, 's'},
+       {"numeric",    0, NULL, 'n'},
++      {"nofork",     0, NULL, 'N'},
+       {"unit",       1, NULL, 'u'},
+       {"syslog",     1, NULL, 'S'},
+       {"wake-up",    0, NULL, 'w'},
+       {0, 0, 0, 0}
+     };
+  
+-    c = getopt_long (argc, argv, "bDdf:l:hp:qs:u:vnw46S:", long_options, &lindex);
++    c = getopt_long (argc, argv, "bDdf:l:hp:qs:u:vNnw46S:", long_options, &lindex);
+     if (c == -1)
+       break;
+     
+@@ -384,6 +385,7 @@ int main(int argc, char* argv[]) {
+ 		 "  -f   --file=FILE   :  specify database file to use.\n"
+ 		 "  -l   --listen=addr :  listen on a specific interface (in TCP/IP daemon mode).\n"
+                  "  -n   --numeric     :  print only the temperature.\n"
++                 "  -N   --nofork      :  do not fork to background (in TCP/IP daemon mode).\n"
+ 		 "  -p   --port=#      :  port to listen to (in TCP/IP daemon mode).\n"
+ 		 "  -s   --separator=C :  separator to use between fields (in TCP/IP daemon mode).\n"
+ 		 "  -S   --syslog=s    :  log temperature to syslog every s seconds.\n"
+@@ -403,6 +405,9 @@ int main(int argc, char* argv[]) {
+       case 'n':
+         numeric = 1;
+         break;
++      case 'N':
++        nofork = 1;
++        break;
+       case 'w':
+ 	wakeup = 1;
+ 	break;

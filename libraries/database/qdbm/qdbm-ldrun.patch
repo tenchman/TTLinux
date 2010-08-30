@@ -1,0 +1,27 @@
+--- qdbm-1.8.36/Makefile.in.ldrun	2005-11-29 18:14:55.000000000 +0100
++++ qdbm-1.8.36/Makefile.in	2005-12-22 14:54:25.000000000 +0100
+@@ -52,19 +52,19 @@
+ # Building binaries
+ CC = @CC@
+ RELCFLAGS = -O2 -fomit-frame-pointer -DNDEBUG
+-CPPFLAGS = -I$(srcdir) -I$(HOME)/include -I/usr/local/include @MYDEFS@ \
++CPPFLAGS = -I$(srcdir) -I$(HOME)/include -I/opt/diet/include @MYDEFS@ \
+   -D_XOPEN_SOURCE_EXTENDED=1 -D_GNU_SOURCE=1 -D__EXTENSIONS__=1 -D_HPUX_SOURCE=1 \
+   -D_POSIX_MAPPED_FILES=1 -D_POSIX_SYNCHRONIZED_IO=1 \
+   -DPIC=1 -D_REENTRANT=1
+ CFLAGS = -Wall -ansi -pedantic -fPIC -fsigned-char $(RELCFLAGS)
+ LD = @LD@
+ LIBS = -lqdbm @LIBS@
+-LIBLDFLAGS = -L. -L$(HOME)/lib -L/usr/local/lib @LIBS@
+-LDFLAGS = -L. -L$(HOME)/lib -L/usr/local/lib $(LIBS)
+-LDENV = LD_RUN_PATH=/lib:/usr/lib:$(HOME)/lib:/usr/local/lib:$(MYLIBDIR)
++LIBLDFLAGS = -L. -L$(HOME)/lib -L/opt/diet/lib-i386 @LIBS@
++LDFLAGS = -L. -L$(HOME)/lib -L/opt/diet/lib-i386 $(LIBS)
++LDENV = LD_RUN_PATH=/lib:/usr/lib:$(HOME)/lib:/opt/diet/lib-i386:$(MYLIBDIR)
+ AR = @AR@
+ ARFLAGS = rcsv
+-RUNENV = LD_LIBRARY_PATH=.:/lib:/usr/lib:$(HOME)/lib:/usr/local/lib
++RUNENV = LD_LIBRARY_PATH=.:/lib:/usr/lib:$(HOME)/lib:/opt/diet/lib-i386
+ 
+ 
+ 

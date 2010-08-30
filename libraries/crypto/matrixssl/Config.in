@@ -1,0 +1,5 @@
+config CONFIG_MATRIXSSL
+  bool "MatrixSSL"
+  default n
+  help
+    http://www.matrixssl.org/

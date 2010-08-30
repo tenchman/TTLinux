@@ -1,0 +1,93 @@
+--- /dev/null	2006-08-04 11:43:44.565456968 +0200
++++ squid-2.6.STABLE2/filters/searchengine.c	2006-09-13 00:34:07.000000000 +0200
+@@ -0,0 +1,79 @@
++/* mod_activex - remove ActiveX OBJECTs from HTML pages
++*/
++
++#include "squid.h"
++#include "module.h"
++#include "htmlfilter.h"
++#include "patfile.h"
++
++#define MODNAME         "mod_searchengine"
++
++#define ACTIVEX_C
++#include <classes.dh>
++
++static char *fake_attrs[] = { "A", "COMMENT" };
++static char *fake_valus[] = { NULL, "\"LINK_REMOVED_BY_PROXY\"" };
++#define fake_nattribs 2
++
++/*
++ * google: "search?q=cache"
++ * yahoo: "/search/cache?p="
++**/
++static int isCacheLink(char *value)
++{
++  char *hit, *decoded;
++  int len, retval = 0;
++  
++  if ((hit = strstr(value, "cache")) == NULL)
++    return 0;
++  
++  if ((decoded = url_convert_hex(value, 1)) == NULL) {
++    debug(93, 1) (MODNAME ": memory or decoding problem\n");
++    return 0;
++  }
++ 
++  /* MSN */
++  if (strstr(decoded, "cache.aspx?q="))
++    retval = 1;
++  /* Google */
++  else if (strstr(decoded, "search?q=cache"))
++    retval = 1;
++  /* YAHOO! */
++  else if (strstr(decoded, "/search/cache?p="))
++    retval = 1;
++
++  xfree(decoded);
++  return retval;
++}
++
++static int searchengineProcessTag(htmlFilterObject *cf, MemBuf *target,
++                            int nattribs, char *attrs[], char *valus[])
++{
++    int i;
++
++    /* Opening A tag: defang searchengines cache links */
++    if (!strcasecmp(attrs[0], "A"))
++        for (i=1; i<nattribs; ++i)
++            if (attrs[i] && valus[i] &&
++                !strcasecmp(attrs[i], "HREF")) {
++                char *p = valus[i];
++                if (isCacheLink(p)) {
++                    debug(93, 3) (MODNAME ": %s: removing searchengines cache link\n",
++                                  moduleUrlClean(cf->uri));
++                    insertTag(cf, target, fake_nattribs, fake_attrs, fake_valus);
++                    return 1;
++                }
++            }
++
++    return 0;
++}
++
++void moduleInit(const wordlist *args)
++{
++    htmlModuleObject *m = new(htmlModuleObject);
++    patFileObject *pf = args ? patfileNew(args->key, 0) : NULL;
++
++    m->patFile = REF(pf);
++    m->processTag = searchengineProcessTag;
++    htmlfilterRegister(m, "SearchEngine cache access filter");
++}
+--- squid-2.6.STABLE2/filters/Makefile.in.searchengines	2006-09-12 22:46:36.000000000 +0200
++++ squid-2.6.STABLE2/filters/Makefile.in	2006-09-12 22:46:36.000000000 +0200
+@@ -40,7 +40,7 @@
+ 
+ MODULES=redirect.so rejecttype.so allowtype.so cookies.so \
+ 	htmlfilter.so script.so activex.so gifanim.so bugfinder.so \
+-	urlfilter.so \
++	urlfilter.so searchengine.so  \
+ 	$(auth_modules) $(extra_modules)
+ 
+ OBJS=$(MODULES:.so=.o)

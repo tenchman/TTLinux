@@ -1,0 +1,9 @@
+# vim:set syntax=kconfig:
+config CONFIG_YWS
+  bool "yws - Yes, we scan"
+  select CONFIG_SQLITE_3
+  default n
+  help
+    A really nice Package description and everything about it
+
+    http://www.package.org/

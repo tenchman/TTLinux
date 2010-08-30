@@ -1,0 +1,12 @@
+diff -up util-linux-2.12r/mount/umount.c.umount util-linux-2.12r/mount/umount.c
+--- util-linux-2.12r/mount/umount.c.umount	2008-03-18 12:44:59.000000000 +0100
++++ util-linux-2.12r/mount/umount.c	2008-03-18 12:46:43.000000000 +0100
+@@ -31,7 +31,7 @@
+ #include <arpa/inet.h>
+ #endif
+ 
+-#if defined(MNT_FORCE) && !defined(__sparc__) && !defined(__arm__)
++#if defined(__dietlibc__) || (defined(MNT_FORCE) && !defined(__sparc__) && !defined(__arm__))
+ /* Interesting ... it seems libc knows about MNT_FORCE and presumably
+    about umount2 as well -- need not do anything */
+ #else /* MNT_FORCE */

@@ -1,0 +1,33 @@
+--- lm_sensors-3.0.2/prog/dump/isadump.c.io	2009-09-01 10:15:58.000000000 +0200
++++ lm_sensors-3.0.2/prog/dump/isadump.c	2009-09-01 10:16:44.000000000 +0200
+@@ -38,7 +38,7 @@
+ 
+ 
+ /* To keep glibc2 happy */
+-#if defined(__GLIBC__) && __GLIBC__ == 2 && __GLIBC_MINOR__ >= 0
++#if (defined(__GLIBC__) && __GLIBC__ == 2 && __GLIBC_MINOR__ >= 0) || defined(__DIETLIBC__)
+ #include <sys/io.h>
+ #else
+ #include <asm/io.h>
+--- lm_sensors-3.0.2/prog/dump/isaset.c.io	2009-09-01 10:16:59.000000000 +0200
++++ lm_sensors-3.0.2/prog/dump/isaset.c	2009-09-01 10:17:19.000000000 +0200
+@@ -34,7 +34,7 @@
+ 
+ 
+ /* To keep glibc2 happy */
+-#if defined(__GLIBC__) && __GLIBC__ == 2 && __GLIBC_MINOR__ >= 0
++#if (defined(__GLIBC__) && __GLIBC__ == 2 && __GLIBC_MINOR__ >= 0) || defined(__DIETLIBC__)
+ #include <sys/io.h>
+ #else
+ #include <asm/io.h>
+--- lm_sensors-3.0.2/prog/dump/superio.c.io	2009-09-01 10:23:18.000000000 +0200
++++ lm_sensors-3.0.2/prog/dump/superio.c	2009-09-01 10:23:34.000000000 +0200
+@@ -21,7 +21,7 @@
+ 
+ #include <stdlib.h>
+ 
+-#if defined(__GLIBC__) && __GLIBC__ == 2 && __GLIBC_MINOR__ >= 0
++#if (defined(__GLIBC__) && __GLIBC__ == 2 && __GLIBC_MINOR__ >= 0) || defined(__DIETLIBC__)
+ #include <sys/io.h>
+ #else
+ #include <asm/io.h>

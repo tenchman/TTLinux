@@ -1,0 +1,11 @@
+--- aescrypt-0.7/aesget.c.keysize	2008-08-25 15:18:06.000000000 +0200
++++ aescrypt-0.7/aesget.c	2008-08-25 15:18:21.000000000 +0200
+@@ -189,7 +189,7 @@ static void read_key(char *filename, int
+ int main(int argc, char **argv) {
+   
+   char * infile;
+-  int keysize, op;
++  int keysize = 128, op;
+ 
+   progname= argv[0];
+   infile = NULL;

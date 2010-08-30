@@ -1,0 +1,208 @@
+--- lilo-22.5.6/partition.h.diet	2003-06-06 21:07:45.000000000 +0200
++++ lilo-22.5.6/partition.h	2003-09-25 13:58:29.000000000 +0200
+@@ -22,9 +22,9 @@
+ #if 1
+ 
+ #define LLSECTORSIZE ((long long)SECTOR_SIZE)
+-
++#ifndef __dietlibc__
+        loff_t llseek(unsigned int fd, loff_t offs, unsigned int whence);
+-
++#endif
+ #endif
+ 
+ struct partition {
+--- lilo-22.5.6/boot.c.diet	2003-06-25 00:23:10.000000000 +0200
++++ lilo-22.5.6/boot.c	2003-09-25 13:58:29.000000000 +0200
+@@ -17,7 +17,11 @@
+ #include <ctype.h>
+ #include <fcntl.h>
+ #include <errno.h>
++#ifdef __dietlibc__
++#include <linux/a.out.h>
++#else
+ #include <a.out.h>
++#endif
+ #include <sys/stat.h>
+ 
+ #include "config.h"
+--- lilo-22.5.6/partition.c.diet	2003-06-15 00:49:51.000000000 +0200
++++ lilo-22.5.6/partition.c	2003-09-25 13:58:29.000000000 +0200
+@@ -9,7 +9,9 @@
+ 
+ */
+ 
+-
++//#ifdef __dietlibc__
++//#include <asm/posix_types.h>
++//#endif
+ #include <stdlib.h>
+ #include <unistd.h>
+ #include <stdio.h>
+@@ -17,7 +19,11 @@
+ #include <ctype.h>
+ #include <fcntl.h>
+ #include <errno.h>
++#ifdef __dietlibc__
++#include <linux/a.out.h>
++#else
+ #include <a.out.h>
++#endif
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ #include <asm/unistd.h>
+@@ -35,7 +41,7 @@
+ #include "loader.h"
+ 
+ 
+-       
++#ifndef __dietlibc__
+        _syscall5(int,  _llseek,  uint,  fd, ulong, hi, ulong, lo,
+        loff_t *, res, uint, wh);
+ 
+@@ -43,11 +49,18 @@
+        unsigned  long  offset_low,  loff_t * result, unsigned int
+        whence);
+        
+-       loff_t llseek(unsigned int fd, loff_t offs, unsigned int whence)
++       loff_t LLseek(unsigned int fd, loff_t offs, unsigned int whence)
+        { loff_t res;
+        	return _llseek(fd, offs>>32, offs, &res, whence) < 0  ?
+        			 (loff_t)(-1) : res;
+        }
++#else
++       loff_t LLseek(unsigned int fd, loff_t offs, unsigned int whence)
++       { loff_t res;
++       	return llseek(fd, offs>>32, offs, &res, whence) < 0  ?
++       			 (loff_t)(-1) : res;
++       }
++#endif
+ 
+ static
+ int anywhere(void *buf, unsigned char *str)
+@@ -185,8 +198,8 @@
+     }
+     i=5;
+     while (i<=pe && base) {
+-        if (llseek(fd, LLSECTORSIZE*(base+second) + PART_TABLE_OFFSET, SEEK_SET) < 0)
+-            die("secondary llseek failed");
++	if (LLseek(fd, LLSECTORSIZE*(base+second) + PART_TABLE_OFFSET, SEEK_SET) < 0)
++            die("secondary LLseek failed");
+ 	if (read(fd, part_table, sizeof(part_table)) != sizeof(part_table)) die("secondary read pt failed");
+ 	if ( read(fd, &boot_sig, sizeof(boot_sig)) != sizeof(boot_sig)  ||
+ 	    boot_sig != BOOT_SIGNATURE ) die("read second boot signature failed");
+@@ -609,7 +622,7 @@
+     	if (pt[count].sys_ind && pt[count].boot_ind != flag) {
+     	    pt[count].boot_ind = flag;
+ 	    printf("pt[%d] -> %2x\n", count+1, (int)flag);
+-	    if (llseek(fd, daddr[count], SEEK_SET) < 0) die("PT llseek failed");
++	    if (LLseek(fd, daddr[count], SEEK_SET) < 0) die("PT LLseek failed");
+ 	    if (!test)
+ 	    if (write(fd, &pt[count], sizeof(pt[0])) != sizeof(pt[0]) )
+ 		die("PT write failure");
+@@ -793,8 +806,8 @@
+     if (max>0)
+     while (base) {
+     	daddr = LLSECTORSIZE*(base+second) + PART_TABLE_OFFSET;
+-        if (llseek(fd, daddr, SEEK_SET) < 0)
+-            die("secondary llseek failed");
++        if (LLseek(fd, daddr, SEEK_SET) < 0)
++            die("secondary LLseek failed");
+ 	if (read(fd, pt, sizeof(pt)) != sizeof(pt)) die("secondary read pt failed");
+ 	if ( read(fd, &boot_sig, sizeof(boot_sig)) != sizeof(boot_sig)  ||
+ 	    boot_sig != BOOT_SIGNATURE ) die("read second boot signature failed");
+--- lilo-22.5.6/lilo.c.diet	2003-06-30 05:13:13.000000000 +0200
++++ lilo-22.5.6/lilo.c	2003-09-25 13:58:29.000000000 +0200
+@@ -667,9 +667,11 @@
+ 	printf(", Copyright (C) 1992-1998 Werner Almesberger\n"
+ 	       "Development beyond version 21 Copyright (C) 1999-2003 John Coffman\n"
+ 	       );
+-        if (verbose>0) printf("Released %s%s and compiled at %s on %s%s\n",
++#if 0
++	if (verbose>0) printf("Released %s%s and compiled at %s on %s%s\n",
+ 	        VERSION_DATE, comma ? "," : "", __TIME__, __DATE__, semi);
+-        printf("\n");
++#endif
++	printf("\n");
+         if (version) return 0;
+     }
+     preload_types();
+--- lilo-22.5.6/bsect.c.diet	2003-06-30 04:34:44.000000000 +0200
++++ lilo-22.5.6/bsect.c	2003-09-25 13:58:29.000000000 +0200
+@@ -12,7 +12,9 @@
+ 
+ #include <unistd.h>
+ #include <sys/types.h>
++#ifndef __dietlibc__
+ #include <sys/statfs.h>
++#endif
+ #include <sys/stat.h>
+ #include <stdio.h>
+ #include <fcntl.h>
+--- lilo-22.5.6/edit.c.diet	2003-02-23 20:14:12.000000000 +0100
++++ lilo-22.5.6/edit.c	2003-09-25 13:58:29.000000000 +0200
+@@ -10,7 +10,9 @@
+ 
+ #include <unistd.h>
+ #include <sys/types.h>
++#ifndef __dietlibc__
+ #include <sys/statfs.h>
++#endif
+ #include <sys/stat.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+--- lilo-22.5.6/Makefile.diet	2003-06-30 05:45:19.000000000 +0200
++++ lilo-22.5.6/Makefile	2003-09-25 13:58:29.000000000 +0200
+@@ -105,7 +105,7 @@
+ .SUFFIXES:	.img .b .com .S .s
+ 
+ all:	lilo bootsect.b disk.com pseudo.b  # $(BOOTS) edit dparam.com activate
+-	if [ -x /usr/bin/bcc -o -x /usr/local/bin/bcc ]; then make diagnostic; fi
++	# if [ -x /usr/bin/bcc -o -x /usr/local/bin/bcc ]; then make diagnostic; fi
+ 
+ #
+ # if you have the 'bcc' compiler, then you can make the diagnostics, too
+@@ -238,7 +238,7 @@
+ 		cp -p dparam.S dparam.s
+ 
+ lilo:		$(OBJS)
+-		$(CC) -o lilo $(LDFLAGS) $(OBJS)
++		$(CC) -o lilo $(OBJS) $(LDFLAGS)
+ 
+ boot-text.b:	first.b second.b
+ 		(dd if=first.b bs=512 conv=sync; dd if=second.b) >boot-text.b
+@@ -299,16 +299,16 @@
+ #  normal install, but doesn't make the diagnostic binaries
+ #
+ install:  all
+-	if [ ! -d $$ROOT$(SBIN_DIR) ]; then mkdir $$ROOT$(SBIN_DIR); fi
+-	if [ ! -d $$ROOT$(CFG_DIR) ]; then mkdir $$ROOT$(CFG_DIR); fi
+-	if [ ! -d $$ROOT$(BOOT_DIR) ]; then mkdir $$ROOT$(BOOT_DIR); fi
++	if [ ! -d $$ROOT$(SBIN_DIR) ]; then mkdir -p $$ROOT$(SBIN_DIR); fi
++	if [ ! -d $$ROOT$(CFG_DIR) ]; then mkdir -p $$ROOT$(CFG_DIR); fi
++	if [ ! -d $$ROOT$(BOOT_DIR) ]; then mkdir -p $$ROOT$(BOOT_DIR); fi
+ 	if [ ! -d $$ROOT$(USRSBIN_DIR) ]; then \
+ 	  mkdir -p $$ROOT$(USRSBIN_DIR); fi
+-	if [ ! -d $$ROOT$(MAN_DIR) ]; then mkdir $$ROOT$(MAN_DIR); fi  
++	if [ ! -d $$ROOT$(MAN_DIR) ]; then mkdir -p $$ROOT$(MAN_DIR); fi  
+ 	if [ ! -d $$ROOT$(MAN_DIR)/man5 ]; then \
+-	  mkdir $$ROOT$(MAN_DIR)/man5; fi  
++	  mkdir -p $$ROOT$(MAN_DIR)/man5; fi  
+ 	if [ ! -d $$ROOT$(MAN_DIR)/man8 ]; then \
+-	  mkdir $$ROOT$(MAN_DIR)/man8; fi  
++	  mkdir -p $$ROOT$(MAN_DIR)/man8; fi  
+ 	if [ -f diag1.img ]; then \
+ 	  cp -f diag1.img $$ROOT$(BOOT_DIR); fi
+ 	if [ -f diag2.img ]; then \
+--- lilo-22.5.6/etc/lilo.defines.diet	2003-09-25 14:10:59.000000000 +0200
++++ lilo-22.5.6/etc/lilo.defines	2003-09-25 10:46:31.000000000 +0200
+@@ -0,0 +1,9 @@
++-DBDATA
++-DDSECS=3
++-DIGNORECASE
++-DONE_SHOT
++-DPASS160
++-DREWRITE_TABLE
++-DSOLO_CHAIN
++-DVERSION
++-DVIRTUAL

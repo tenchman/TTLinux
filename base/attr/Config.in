@@ -1,0 +1,11 @@
+# vim:set syntax=kconfig:
+config CONFIG_ATTR
+  bool "attr - Utilities for managing filesystem extended attributes"
+  default n
+  help
+    A set of tools for manipulating extended attributes on filesystem
+    objects, in particular getfattr(1) and setfattr(1).
+    An attr(1) command is also provided which is largely compatible
+    with the SGI IRIX tool of the same name.
+
+    http://oss.sgi.com/projects/xfs/

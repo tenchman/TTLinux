@@ -1,0 +1,11 @@
+--- squid-3.0.STABLE1/src/ICAP/ICAPModXact.cc.memset	2008-02-16 20:41:14.000000000 +0100
++++ squid-3.0.STABLE1/src/ICAP/ICAPModXact.cc	2008-02-16 20:41:30.000000000 +0100
+@@ -34,7 +34,7 @@
+ 
+ ICAPModXact::State::State()
+ {
+-    memset(this, sizeof(*this), 0);
++    memset(this, 0, sizeof(*this));
+ }
+ 
+ ICAPModXact::ICAPModXact(ICAPInitiator *anInitiator, HttpMsg *virginHeader,

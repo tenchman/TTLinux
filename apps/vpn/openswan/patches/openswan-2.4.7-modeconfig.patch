@@ -1,0 +1,207 @@
+diff -uNr openswan-2.4.7/programs/auto/auto.in openswan-2.4.7-changed/programs/auto/auto.in
+--- openswan-2.4.7/programs/auto/auto.in	2006-01-05 22:50:45.000000000 +0000
++++ openswan-2.4.7-changed/programs/auto/auto.in	2006-12-05 10:17:17.000000000 +0000
+@@ -567,6 +567,18 @@
+ 		if ("rightmodecfgclient" in s)
+ 			rmodecfg = "--modecfgclient" 
+ 
++                if ("modecfgdns1" in s)
++                        settings = settings "--modecfgdns1 " qs("modecfgdns1")
++
++                if ("modecfgdns2" in s)
++                        settings = settings "--modecfgdns2 " qs("modecfgdns2")
++
++                if ("modecfgwins1" in s)
++                        settings = settings "--modecfgwins1 " qs("modecfgwins1")
++
++                if ("modecfgwins2" in s)
++                        settings = settings "--modecfgwins2 " qs("modecfgwins2")
++
+ 		if ("leftsendcert" in s)
+ 			lscert = "--sendcert " qs("leftsendcert")
+ 		if ("rightsendcert" in s)
+diff -uNr openswan-2.4.7/programs/_confread/_confread.in openswan-2.4.7-changed/programs/_confread/_confread.in
+--- openswan-2.4.7/programs/_confread/_confread.in	2006-04-12 20:55:42.000000000 +0100
++++ openswan-2.4.7-changed/programs/_confread/_confread.in	2006-12-01 20:43:04.000000000 +0000
+@@ -132,7 +132,7 @@
+ 
+ 	good = "also alsoflip type auto authby _plutodevel"
+ 	good = good " connaddrfamily forceencaps"
+-	good = good " modecfgpull"
++	good = good " modecfgpull modecfgdns1 modecfgdns2 modecfgwins1 modecfgwins2"
+ 	left = " left leftsubnet leftnexthop leftupdown"
+ 	akey = " keyexchange auth pfs pfsgroup keylife rekey rekeymargin"
+         akey = akey " rekeyfuzz dpddelay dpdtimeout dpdaction"
+diff -uNr openswan-2.4.7/programs/pluto/connections.c openswan-2.4.7-changed/programs/pluto/connections.c
+--- openswan-2.4.7/programs/pluto/connections.c	2006-09-04 18:00:01.000000000 +0100
++++ openswan-2.4.7-changed/programs/pluto/connections.c	2006-12-01 20:39:42.000000000 +0000
+@@ -1321,6 +1321,11 @@
+ 	else if (same_leftca)
+ 	    c->spd.this.ca = c->spd.that.ca;
+ 
++	c->modecfg_dns1 = wm->modecfg_dns1;
++        c->modecfg_dns2 = wm->modecfg_dns2;
++        c->modecfg_wins1 = wm->modecfg_wins1;
++        c->modecfg_wins2 = wm->modecfg_wins2;
++
+ 	default_end(&c->spd.this, &c->spd.that.host_addr);
+ 	default_end(&c->spd.that, &c->spd.this.host_addr);
+ 
+diff -uNr openswan-2.4.7/programs/pluto/connections.h openswan-2.4.7-changed/programs/pluto/connections.h
+--- openswan-2.4.7/programs/pluto/connections.h	2005-11-17 01:44:12.000000000 +0000
++++ openswan-2.4.7-changed/programs/pluto/connections.h	2006-12-01 20:36:16.000000000 +0000
+@@ -241,6 +241,11 @@
+ #ifdef XAUTH_USEPAM
+     pam_handle_t  *pamh;		/*  PAM handle for that connection  */
+ #endif
++
++    ip_address modecfg_dns1;
++    ip_address modecfg_dns2;
++    ip_address modecfg_wins1;
++    ip_address modecfg_wins2;
+ };
+ 
+ #define oriented(c) ((c).interface != NULL)
+diff -uNr openswan-2.4.7/programs/pluto/demux.c openswan-2.4.7-changed/programs/pluto/demux.c
+--- openswan-2.4.7/programs/pluto/demux.c	2005-10-06 01:57:26.000000000 +0100
++++ openswan-2.4.7-changed/programs/pluto/demux.c	2006-11-30 14:55:48.000000000 +0000
+@@ -1648,8 +1648,14 @@
+ #ifdef MODECFG	
+ 	    if(st->st_state == STATE_MODE_CFG_R2)   /* Have we just give an IP address to peer? */
+ 	    {
++                openswan_log("ISAKMP UP.");
+ 		st->st_state = STATE_MAIN_R3;	    /* ISAKMP is up... */
+ 	    }
++/*            if(st->st_state == STATE_MODE_CFG_R1)
++            {
++                openswan_log("Cannot do Quick Mode until MODECFG done.");
++                return;
++            }*/
+ #endif
+ 
+ 	    set_cur_state(st);
+diff -uNr openswan-2.4.7/programs/pluto/whack.c openswan-2.4.7-changed/programs/pluto/whack.c
+--- openswan-2.4.7/programs/pluto/whack.c	2006-10-27 21:05:09.000000000 +0100
++++ openswan-2.4.7-changed/programs/pluto/whack.c	2006-12-01 20:52:31.000000000 +0000
+@@ -82,6 +82,10 @@
+ #ifdef MODECFG
+ 	    " [--modecfgserver]"
+ 	    " [--modecfgclient]"
++	    " [--modecfgdns1]"
++	    " [--modecfgdns2]"
++	    " [--modecfgwins1]"
++	    " [--modecfgwins2]"
+ #endif
+ 	    " \\\n   "
+ 	    " [--updown <updown>]"
+@@ -111,6 +115,10 @@
+ #ifdef MODECFG
+ 	    " [--modecfgserver]"
+ 	    " [--modecfgclient]"
++	    " [--modecfgdns1]"
++	    " [--modecfgdns2]"
++	    " [--modecfgwins1]"
++	    " [--modecfgwins2]"
+ #endif
+ 	    " \\\n   "
+ 	    " [--updown <updown>]"
+@@ -447,6 +455,10 @@
+     CD_GROUPED,         /* same order as POLICY_* 15 */
+     CD_UP,              /* same order as POLICY_* 16 */
+     CD_DUMMY,           /* same order as POLICY_* 17 -- was XAUTH */
++    CD_MODECFGDNS1,
++    CD_MODECFGDNS2,
++    CD_MODECFGWINS1,
++    CD_MODECFGWINS2,
+     CD_MODECFGPULL,     /* same order as POLICY_* 18 */
+     CD_AGGRESSIVE,      /* same order as POLICY_* 19 */
+     CD_TUNNELIPV4,
+@@ -649,6 +661,10 @@
+     { "modecfgpull",   no_argument, NULL, CD_MODECFGPULL + OO },
+     { "modecfgserver", no_argument, NULL, END_MODECFGSERVER + OO },
+     { "modecfgclient", no_argument, NULL, END_MODECFGCLIENT + OO },
++    { "modecfgdns1", required_argument, NULL, CD_MODECFGDNS1 + OO },
++    { "modecfgdns2", required_argument, NULL, CD_MODECFGDNS2 + OO },
++    { "modecfgwins1", required_argument, NULL, CD_MODECFGWINS1 + OO },
++    { "modecfgwins2", required_argument, NULL, CD_MODECFGWINS2 + OO },
+     { "modeconfigserver", no_argument, NULL, END_MODECFGSERVER + OO },
+     { "modeconfigclient", no_argument, NULL, END_MODECFGCLIENT + OO },
+ #endif
+@@ -1316,6 +1332,31 @@
+ 	case END_MODECFGSERVER:
+ 	    msg.right.modecfg_server = TRUE;
+ 	    continue;
++
++	case CD_MODECFGDNS1:
++            af_used_by = long_opts[long_index].name; 
++	    diagq(ttoaddr(optarg, 0, msg.addr_family
++			, &msg.modecfg_dns1), optarg);
++	    continue;
++
++        case CD_MODECFGDNS2:
++            af_used_by = long_opts[long_index].name;
++            diagq(ttoaddr(optarg, 0, msg.addr_family
++                        , &msg.modecfg_dns2), optarg);
++            continue;
++
++        case CD_MODECFGWINS1:
++            af_used_by = long_opts[long_index].name;
++            diagq(ttoaddr(optarg, 0, msg.addr_family
++                        , &msg.modecfg_wins1), optarg);
++            continue;
++
++        case CD_MODECFGWINS2:
++            af_used_by = long_opts[long_index].name;
++            diagq(ttoaddr(optarg, 0, msg.addr_family
++                        , &msg.modecfg_wins2), optarg);
++            continue;
++
+ #endif
+ 
+ 	case END_SENDCERT:
+diff -uNr openswan-2.4.7/programs/pluto/whack.h openswan-2.4.7-changed/programs/pluto/whack.h
+--- openswan-2.4.7/programs/pluto/whack.h	2004-12-16 01:22:44.000000000 +0000
++++ openswan-2.4.7-changed/programs/pluto/whack.h	2006-12-01 20:33:42.000000000 +0000
+@@ -152,6 +152,12 @@
+     bool whack_oppo_initiate;
+     ip_address oppo_my_client, oppo_peer_client;
+ 
++    /* for MODECFG */
++    ip_address modecfg_dns1;
++    ip_address modecfg_dns2;
++    ip_address modecfg_wins1;
++    ip_address modecfg_wins2;
++
+     /* for WHACK_TERMINATE: */
+     bool whack_terminate;
+ 
+diff -uNr openswan-2.4.7/programs/pluto/xauth.c openswan-2.4.7-changed/programs/pluto/xauth.c
+--- openswan-2.4.7/programs/pluto/xauth.c	2005-07-26 03:11:23.000000000 +0100
++++ openswan-2.4.7-changed/programs/pluto/xauth.c	2006-12-01 20:42:13.000000000 +0000
+@@ -195,6 +195,18 @@
+     {
+ 	/** assumes IPv4, and also that the mask is ignored */
+ 	ia->ipaddr = con->spd.that.client.addr;
++	if (!isanyaddr(&con->modecfg_dns1)) {
++		ia->dns[0] = con->modecfg_dns1;
++	}
++        if (!isanyaddr(&con->modecfg_dns2)) {
++                ia->dns[1] = con->modecfg_dns2;
++        }
++        if (!isanyaddr(&con->modecfg_wins1)) {
++                ia->wins[0] = con->modecfg_wins1;
++        }
++        if (!isanyaddr(&con->modecfg_wins2)) {
++                ia->wins[1] = con->modecfg_wins2;
++        }
+ 
+     }
+     else
+@@ -492,6 +504,7 @@
+ 		}
+ 	}
+ 
++	init_phase2_iv(st, &st->st_msgid_phase15);
+ #define MODECFG_SET_ITEM ( LELEM(INTERNAL_IP4_ADDRESS) | LELEM(INTERNAL_IP4_SUBNET) | LELEM(INTERNAL_IP4_NBNS) | LELEM(INTERNAL_IP4_DNS) )
+ 
+ 	modecfg_resp(st

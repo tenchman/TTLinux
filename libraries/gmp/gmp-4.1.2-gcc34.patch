@@ -1,0 +1,66 @@
+--- gmp-4.1.2/mpz/cfdiv_q_2exp.c.gcc34	2004-06-10 08:59:40.402806336 +0200
++++ gmp-4.1.2/mpz/cfdiv_q_2exp.c	2004-06-10 09:00:13.773733184 +0200
+@@ -29,7 +29,7 @@
+ static void __gmpz_cfdiv_q_2exp _PROTO ((REGPARM_3_1 (mpz_ptr w, mpz_srcptr u, unsigned long cnt, int dir))) REGPARM_ATTR (1);
+ #define cfdiv_q_2exp(w,u,cnt,dir)  __gmpz_cfdiv_q_2exp (REGPARM_3_1 (w,u,cnt,dir))
+ 
+-static void
++REGPARM_ATTR (1) static void
+ cfdiv_q_2exp (mpz_ptr w, mpz_srcptr u, unsigned long cnt, int dir)
+ {
+   mp_size_t  wsize, usize, abs_usize, limb_cnt, i;
+--- gmp-4.1.2/mpz/aorsmul_i.c.gcc34	2004-06-10 08:56:12.349435256 +0200
++++ gmp-4.1.2/mpz/aorsmul_i.c	2004-06-10 08:58:55.030703944 +0200
+@@ -57,7 +57,7 @@
+    twos-complement negative y doesn't work, because it effectively adds an
+    extra x * 2^BITS_PER_MP_LIMB.  */
+ 
+-void
++REGPARM_ATTR (1) void
+ mpz_aorsmul_1 (mpz_ptr w, mpz_srcptr x, mp_limb_t y, mp_size_t sub)
+ {
+   mp_size_t  xsize, wsize, wsize_signed, new_wsize, min_size, dsize;
+--- gmp-4.1.2/mpz/aorsmul.c.gcc34	2004-06-10 08:55:19.970398080 +0200
++++ gmp-4.1.2/mpz/aorsmul.c	2004-06-10 08:55:58.255577848 +0200
+@@ -39,7 +39,7 @@
+ static void __gmpz_aorsmul _PROTO ((REGPARM_3_1 (mpz_ptr w, mpz_srcptr x, mpz_srcptr y, mp_size_t sub))) REGPARM_ATTR (1);
+ #define mpz_aorsmul(w,x,y,sub)  __gmpz_aorsmul (REGPARM_3_1 (w, x, y, sub))
+ 
+-static void
++REGPARM_ATTR (1) static void
+ mpz_aorsmul (mpz_ptr w, mpz_srcptr x, mpz_srcptr y, mp_size_t sub)
+ {
+   mp_size_t  xsize, ysize, tsize, wsize, wsize_signed;
+--- gmp-4.1.2/mpz/cfdiv_r_2exp.c.gcc34	2004-06-10 09:00:33.755695464 +0200
++++ gmp-4.1.2/mpz/cfdiv_r_2exp.c	2004-06-10 09:00:54.822492824 +0200
+@@ -32,7 +32,7 @@
+ static void __gmpz_cfdiv_r_2exp _PROTO ((REGPARM_3_1 (mpz_ptr w, mpz_srcptr u, unsigned long cnt, int dir))) REGPARM_ATTR (1);
+ #define cfdiv_r_2exp(w,u,cnt,dir)  __gmpz_cfdiv_r_2exp (REGPARM_3_1 (w, u, cnt, dir))
+ 
+-static void
++REGPARM_ATTR (1) static void
+ cfdiv_r_2exp (mpz_ptr w, mpz_srcptr u, unsigned long cnt, int dir)
+ {
+   mp_size_t  usize, abs_usize, limb_cnt, i;
+--- gmp-4.1.2/mpf/ceilfloor.c.gcc34	2004-06-10 09:05:24.388512560 +0200
++++ gmp-4.1.2/mpf/ceilfloor.c	2004-06-10 09:05:45.289335152 +0200
+@@ -31,7 +31,7 @@
+ static void __gmpf_ceil_or_floor _PROTO ((REGPARM_2_1 (mpf_ptr r, mpf_srcptr u, int dir))) REGPARM_ATTR (1);
+ #define mpf_ceil_or_floor(r,u,dir)  __gmpf_ceil_or_floor (REGPARM_2_1 (r, u, dir))
+ 
+-static void
++REGPARM_ATTR (1) static void
+ mpf_ceil_or_floor (mpf_ptr r, mpf_srcptr u, int dir)
+ {
+   mp_ptr     rp, up, p;
+--- gmp-4.1.2/mpq/aors.c.gcc34	2004-06-10 09:04:35.732909336 +0200
++++ gmp-4.1.2/mpq/aors.c	2004-06-10 09:04:58.893388408 +0200
+@@ -27,7 +27,7 @@
+ static void __gmpq_aors _PROTO ((REGPARM_3_1 (mpq_ptr w, mpq_srcptr x, mpq_srcptr y, void (*fun) _PROTO ((mpz_ptr, mpz_srcptr, mpz_srcptr))))) REGPARM_ATTR (1);
+ #define mpq_aors(w,x,y,fun)  __gmpq_aors (REGPARM_3_1 (w, x, y, fun))
+ 
+-static void
++REGPARM_ATTR (1) static void
+ mpq_aors (mpq_ptr rop, mpq_srcptr op1, mpq_srcptr op2,
+           void (*fun) _PROTO ((mpz_ptr, mpz_srcptr, mpz_srcptr)))
+ {

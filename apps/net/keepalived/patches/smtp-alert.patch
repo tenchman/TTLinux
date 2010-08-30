@@ -1,0 +1,21 @@
+--- keepalived-1.1.11.orig/keepalived/vrrp/vrrp_sync.c	2005-03-01 01:27:46.000000000 +0100
++++ keepalived-1.1.11/keepalived/vrrp/vrrp_sync.c	2006-10-24 17:01:15.000000000 +0200
+@@ -118,6 +118,10 @@
+ 			smtp_alert(NULL, NULL, vgroup,
+ 				   "Entering BACKUP state",
+ 				   "=> All VRRP group instances are now in BACKUP state <=");
++		if (GROUP_STATE(vgroup) == VRRP_STATE_FAULT)
++			smtp_alert(NULL, NULL, vgroup,
++				   "Entering FAULT state",
++				   "=> All VRRP group instances are now in FAULT state <=");
+ 	}
+ }
+ 
+@@ -255,5 +259,6 @@
+ 		}
+ 	}
+ 	vgroup->state = VRRP_STATE_FAULT;
++	vrrp_sync_smtp_notifier(vgroup);
+ 	notify_group_exec(vgroup, VRRP_STATE_FAULT);
+ }
+ 

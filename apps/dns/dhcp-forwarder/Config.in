@@ -1,0 +1,19 @@
+config CONFIG_DHCP_FWD
+  bool "DHCP Forwarder - forward DHCP messages between subnets"
+  default n
+  help
+    This program forwards DHCP messages between subnets with different sublayer
+    broadcast domains. It is similarly to the DHCP relay agent dhcrelay of
+    ISC's DHCP, but has the following features which are important for someone:
+      
+      * Runs as non-root in a chroot-jail
+      * Uses "normal" AF_INET sockets; this allows to uses packetfilters to
+	filter incoming messages.
+      * The DHCP agent IDs can be defined freely
+      * Has a small memory footprint when using dietlibc
+
+    It tries to be RFC 2131/2132 and 3046 compliant. Probably it works with
+    BOOTP (RFC 951) also, but since the handling of the giaddr field is
+    described misleading (see RFC 1542), there may occur problems.
+
+    http://www.nongnu.org/dhcp-fwd/

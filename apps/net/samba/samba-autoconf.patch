@@ -1,0 +1,67 @@
+--- source/configure.autoconf	2007-06-26 21:35:53.000000000 +0200
++++ source/configure	2007-07-16 16:19:57.000000000 +0200
+@@ -19434,64 +19434,6 @@ else
+ fi
+ done
+ 
+-
+-{ echo "$as_me:$LINENO: checking for broken readdir" >&5
+-echo $ECHO_N "checking for broken readdir... $ECHO_C" >&6; }
+-if test "${libreplace_cv_READDIR_NEEDED+set}" = set; then
+-  echo $ECHO_N "(cached) $ECHO_C" >&6
+-else
+-
+-	if test "$cross_compiling" = yes; then
+-  libreplace_cv_READDIR_NEEDED="assuming not"
+-else
+-  cat >conftest.$ac_ext <<_ACEOF
+-/* confdefs.h.  */
+-_ACEOF
+-cat confdefs.h >>conftest.$ac_ext
+-cat >>conftest.$ac_ext <<_ACEOF
+-/* end confdefs.h.  */
+-
+-#define test_readdir_os2_delete main
+-#include "$libreplacedir/test/os2_delete.c"
+-_ACEOF
+-rm -f conftest$ac_exeext
+-if { (ac_try="$ac_link"
+-case "(($ac_try" in
+-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
+-  *) ac_try_echo=$ac_try;;
+-esac
+-eval "echo \"\$as_me:$LINENO: $ac_try_echo\"") >&5
+-  (eval "$ac_link") 2>&5
+-  ac_status=$?
+-  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+-  (exit $ac_status); } && { ac_try='./conftest$ac_exeext'
+-  { (case "(($ac_try" in
+-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
+-  *) ac_try_echo=$ac_try;;
+-esac
+-eval "echo \"\$as_me:$LINENO: $ac_try_echo\"") >&5
+-  (eval "$ac_try") 2>&5
+-  ac_status=$?
+-  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+-  (exit $ac_status); }; }; then
+-  libreplace_cv_READDIR_NEEDED=no
+-else
+-  echo "$as_me: program exited with status $ac_status" >&5
+-echo "$as_me: failed program was:" >&5
+-sed 's/^/| /' conftest.$ac_ext >&5
+-
+-( exit $ac_status )
+-libreplace_cv_READDIR_NEEDED=yes
+-fi
+-rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext conftest.$ac_objext conftest.$ac_ext
+-fi
+-
+-
+-
+-fi
+-{ echo "$as_me:$LINENO: result: $libreplace_cv_READDIR_NEEDED" >&5
+-echo "${ECHO_T}$libreplace_cv_READDIR_NEEDED" >&6; }
+-
+ #
+ # try to replace with getdirentries() if needed
+ #

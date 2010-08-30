@@ -1,0 +1,25 @@
+--- c_icap-180407/os/unix/net_io.c.messages	2007-07-20 10:54:42.000000000 +0200
++++ c_icap-180407/os/unix/net_io.c	2007-07-20 10:53:13.000000000 +0200
+@@ -87,7 +87,7 @@ int icap_init_server(int port, int *prot
+ 
+      fd = socket(AF_INET, SOCK_STREAM, 0);
+      if (fd == -1) {
+-          ci_debug_printf(1, "Error opening socket ....\n");
++          ci_debug_printf(1, "Error opening socket: %m\n");
+           return CI_SOCKET_ERROR;
+      }
+ 
+@@ -98,11 +98,11 @@ int icap_init_server(int port, int *prot
+      addr.sin_addr.s_addr = INADDR_ANY;
+ 
+      if (bind(fd, (struct sockaddr *) &addr, sizeof(addr))) {
+-          ci_debug_printf(1, "Error bind  \n");;
++          ci_debug_printf(1, "Error bind: %m\n");
+           return CI_SOCKET_ERROR;
+      }
+      if (listen(fd, 512)) {
+-          ci_debug_printf(1, "Error listen .....\n");
++          ci_debug_printf(1, "Error listen: %m\n");
+           return CI_SOCKET_ERROR;
+      }
+      *protocol_family = AF_INET;

@@ -1,0 +1,140 @@
+--- dropbear-0.47/Makefile.in.blacklist	2006-01-24 22:56:37.000000000 +0100
++++ dropbear-0.47/Makefile.in	2006-01-24 22:59:15.000000000 +0100
+@@ -25,7 +25,7 @@
+ SVROBJS=svr-kex.o svr-algo.o svr-auth.o sshpty.o \
+ 		svr-authpasswd.o svr-authpubkey.o svr-session.o svr-service.o \
+ 		svr-chansession.o svr-runopts.o svr-agentfwd.o svr-main.o svr-x11fwd.o\
+-		svr-tcpfwd.o svr-authpam.o
++		svr-tcpfwd.o svr-authpam.o blacklist.o
+ 
+ CLIOBJS=cli-algo.o cli-main.o cli-auth.o cli-authpasswd.o cli-kex.o \
+ 		cli-session.o cli-service.o cli-runopts.o cli-chansession.o \
+--- /dev/null	2006-01-18 21:41:43.448391500 +0100
++++ dropbear-0.47/blacklist.c	2006-01-24 22:59:15.000000000 +0100
+@@ -0,0 +1,55 @@
++#include "includes.h"
++#include "options.h"
++#include "dbutil.h"
++
++#define LINE_LENGTH 50
++
++int is_blacklisted (char *remote_ip) {
++
++	char sz_tmp[LINE_LENGTH];
++	FILE *fp_blacklist = NULL;
++
++	fp_blacklist = fopen(BLACKLISTFILE, "r");
++	if (fp_blacklist == NULL) {
++		/* TODO: this could spew log messages. */
++		dropbear_log(LOG_INFO, "Could not open blacklist %s for reading.", BLACKLISTFILE);
++	} else {
++		while (fgets(sz_tmp, LINE_LENGTH - 1, fp_blacklist) != NULL) {
++			if (strlen(sz_tmp) > 0) {
++				sz_tmp[strlen(sz_tmp)-1] = '\0';
++				if (!strcmp(sz_tmp, remote_ip)) {
++					dropbear_log(LOG_INFO, "IP %s is forbidden!", remote_ip);
++					fclose (fp_blacklist);
++					return 1;
++				}
++			}
++		}
++		fclose (fp_blacklist);
++	}
++	return 0;
++}
++
++void blacklist (char *addrstring)
++{
++        int     i;
++        FILE    *fp_blacklist = NULL;
++        char    *remote_ip = NULL;
++
++        remote_ip = m_strdup (addrstring);
++        i = strlen (remote_ip);
++		/* This may not be IPv6 safe if addrstring doesn't have a :port suffix */
++        while (i--) {
++                if (remote_ip[i] == ':') {
++                        remote_ip[i] = '\0';
++                        break;
++                }
++        }
++        dropbear_log (LOG_INFO, "Blacklisting %s", remote_ip);
++        if ((fp_blacklist = fopen (BLACKLISTFILE, "a")) == NULL) {
++                dropbear_log (LOG_INFO, "Could not open blacklist %s for appending", BLACKLISTFILE);
++        } else {
++                fprintf (fp_blacklist, "%s\n", remote_ip);
++                fclose (fp_blacklist);
++        }
++        m_free (remote_ip);
++}
+--- /dev/null	2006-01-18 21:41:43.448391500 +0100
++++ dropbear-0.47/blacklist.h	2006-01-24 22:59:15.000000000 +0100
+@@ -0,0 +1,7 @@
++#ifndef _BLACKLIST_H_
++#define _BLACKLIST_H_
++
++int is_blacklisted (char *remote_ip);
++void blacklist (char *addrstring);
++
++#endif
+--- dropbear-0.47/options.h.blacklist	2006-01-24 22:56:37.000000000 +0100
++++ dropbear-0.47/options.h	2006-01-24 22:59:15.000000000 +0100
+@@ -22,6 +22,9 @@
+ #define RSA_PRIV_FILENAME "/etc/dropbear/dropbear_rsa_host_key"
+ #endif
+ 
++/* File to store blacklisted IPs */
++#define BLACKLISTFILE "/var/dropbear/blacklist"
++
+ /* Set NON_INETD_MODE if you require daemon functionality (ie Dropbear listens
+  * on chosen ports and keeps accepting connections. This is the default.
+  *
+@@ -167,7 +170,7 @@
+ 
+ /* Maximum number of failed authentication tries (server option) */
+ #ifndef MAX_AUTH_TRIES
+-#define MAX_AUTH_TRIES 10
++#define MAX_AUTH_TRIES 2
+ #endif
+ 
+ /* The file to store the daemon's process ID, for shutdown scripts etc */
+--- dropbear-0.47/svr-auth.c.blacklist	2005-12-09 06:42:33.000000000 +0100
++++ dropbear-0.47/svr-auth.c	2006-01-24 22:59:15.000000000 +0100
+@@ -33,6 +33,7 @@
+ #include "packet.h"
+ #include "auth.h"
+ #include "runopts.h"
++#include "blacklist.h"
+ 
+ static void authclear();
+ static int checkusername(unsigned char *username, unsigned int userlen);
+@@ -338,6 +339,7 @@
+ 		} else {
+ 			userstr = ses.authstate.printableuser;
+ 		}
++		blacklist(svr_ses.addrstring);
+ 		dropbear_exit("Max auth tries reached - user '%s' from %s",
+ 				userstr, svr_ses.addrstring);
+ 	}
+--- dropbear-0.47/svr-main.c.blacklist	2005-12-09 06:42:33.000000000 +0100
++++ dropbear-0.47/svr-main.c	2006-01-24 22:59:15.000000000 +0100
+@@ -28,6 +28,7 @@
+ #include "buffer.h"
+ #include "signkey.h"
+ #include "runopts.h"
++#include "blacklist.h"
+ 
+ static int listensockets(int *sock, int sockcount, int *maxfd);
+ static void sigchld_handler(int dummy);
+@@ -238,6 +239,11 @@
+ 				}
+ 			}
+ 
++			if (is_blacklisted(getaddrstring(&remoteaddr, 0)) == 1) {
++				close(childsock);
++				continue;
++			}
++
+ 			if (j == MAX_UNAUTH_CLIENTS) {
+ 				/* no free connections */
+ 				/* TODO - possibly log, though this would be an easy way

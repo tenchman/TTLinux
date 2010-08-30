@@ -1,0 +1,23 @@
+--- mini_httpd-1.19/mini_httpd.c.env	2006-02-20 13:44:48.000000000 +0100
++++ mini_httpd-1.19/mini_httpd.c	2006-02-20 13:47:01.000000000 +0100
+@@ -2179,7 +2179,10 @@
+ 
+     envn = 0;
+     envp[envn++] = build_env( "PATH=%s", CGI_PATH );
+-    envp[envn++] = build_env( "LD_LIBRARY_PATH=%s", CGI_LD_LIBRARY_PATH );
++    if ( getenv( "LD_LIBRARY_PATH" ) != (char*) 0 )
++	envp[envn++] = build_env( "LD_LIBRARY_PATH=%s", getenv( "LD_LIBRARY_PATH" ) );
++    else
++	envp[envn++] = build_env( "LD_LIBRARY_PATH=%s", CGI_LD_LIBRARY_PATH );
+     envp[envn++] = build_env( "SERVER_SOFTWARE=%s", SERVER_SOFTWARE );
+     if ( ! vhost )
+ 	cp = hostname;
+@@ -2225,6 +2228,8 @@
+ 	envp[envn++] = build_env( "AUTH_TYPE=%s", "Basic" );
+     if ( getenv( "TZ" ) != (char*) 0 )
+ 	envp[envn++] = build_env( "TZ=%s", getenv( "TZ" ) );
++    if ( getenv( "LANG" ) != (char*) 0 )
++	envp[envn++] = build_env( "LANG=%s", getenv( "LANG" ) );
+ 
+     envp[envn] = (char*) 0;
+     return envp;

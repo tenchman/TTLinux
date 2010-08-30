@@ -1,0 +1,36 @@
+#!/bin/sh
+# run this test without params for a test with the current ip command. For a
+# test of the patched ip command, give the path to the newly created ip
+# binary.
+
+IP=/sbin/ip
+if [ ! -z $1 -a -x $1 ]
+then
+  IP=$1
+fi
+
+ipxfrm=""
+ipxfrm2=""
+range=`seq 1 20`
+
+for i in $range; do
+  for j in $range; do
+    ipxfrm="${ipxfrm}xfrm policy add dir out src 192.168.1.$i/32 dst 192.168.2.$j/32 priority 3\n"
+  done
+done
+
+ipxfrm2="${ipxfrm2}xfrm policy deleteall priority 3\n"
+ipxfrm2="${ipxfrm2}xfrm policy add dir out src 192.168.2.2/32 dst 192.168.3.2/32 priority 2\n"
+ipxfrm2="${ipxfrm2}xfrm policy add dir out src 192.168.2.1/32 dst 192.168.3.1/32 priority 1\n"
+
+$IP xfrm policy flush
+
+echo -e "$ipxfrm" |$IP -b -
+echo -e "$ipxfrm2" |$IP -b -
+
+result=`$IP -o xfrm policy show|wc -l`
+if [ $result -ne 2 ]
+then
+  echo "test failed: policy count is $result, should be 2"
+fi
+$IP xfrm policy flush

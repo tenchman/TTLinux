@@ -1,0 +1,12 @@
+config CONFIG_IPTABLES
+  bool "iptables - Linux kernel (2.4+) firewall, NAT and packet mangling tools"
+  default y
+  help
+	iptables is the userspace command line program used to configure the Linux
+	2.4.x and 2.6.x IPv4 packet filtering ruleset. It is targeted towards system
+	administrators.
+
+	Since Network Address Translation is also configured from the packet filter
+	ruleset, iptables is used for this, too. 
+	
+	http://www.netfilter.org/projects/iptables/

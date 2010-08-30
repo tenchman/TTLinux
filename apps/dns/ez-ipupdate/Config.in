@@ -1,0 +1,20 @@
+config CONFIG_EZ_IPUPDATE
+  bool "ez-ipupdate - update a host name in a dynamic DNS service"
+  default n
+  help
+    'ez-ipupdate' is a small utility for updating your host name for the any of
+    the dynamic DNS service offered at:
+      * http://www.ez-ip.net
+      * http://www.justlinux.com
+      * http://www.dhs.org
+      * http://www.dyndns.org
+      * http://www.ods.org
+      * http://gnudip.cheapnet.net (GNUDip)
+      * http://www.dyn.ca (GNUDip)
+      * http://www.tzo.com
+      * http://www.easydns.com
+      * http://www.dyns.cx
+      * http://www.hn.org
+      * http://www.zoneedit.com
+
+    http://www.ez-ipupdate.com/

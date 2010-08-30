@@ -1,0 +1,31 @@
+--- linux-2.6.22.18/drivers/rtc/rtc-x1205.c.rtc	2008-02-11 08:31:19.000000000 +0100
++++ linux-2.6.22.18/drivers/rtc/rtc-x1205.c	2008-08-08 11:58:12.000000000 +0200
+@@ -208,7 +208,7 @@ static int x1205_set_datetime(struct i2c
+ 		/* year, since the rtc epoch*/
+ 		buf[CCR_YEAR] = BIN2BCD(tm->tm_year % 100);
+ 		buf[CCR_WDAY] = tm->tm_wday & 0x07;
+-		buf[CCR_Y2K] = BIN2BCD(tm->tm_year / 100);
++		buf[CCR_Y2K] = BIN2BCD((tm->tm_year + 1900) / 100);
+ 	}
+ 
+ 	/* this sequence is required to unlock the chip */
+@@ -348,7 +348,7 @@ static int x1205_validate_client(struct 
+ 
+ 	static const struct x1205_limit probe_limits_pattern[] = {
+ 		/* register, mask, min, max */
+-		{ X1205_REG_Y2K,	0xFF,	19,	20	},
++		{ X1205_REG_Y2K,	0xFF,	0,	40	},
+ 		{ X1205_REG_DW,		0xFF,	0,	6	},
+ 		{ X1205_REG_YR,		0xFF,	0,	99	},
+ 		{ X1205_REG_MO,		0xFF,	0,	12	},
+@@ -356,8 +356,8 @@ static int x1205_validate_client(struct 
+ 		{ X1205_REG_HR,		0x7F,	0,	23	},
+ 		{ X1205_REG_MN,		0xFF,	0,	59	},
+ 		{ X1205_REG_SC,		0xFF,	0,	59	},
+-		{ X1205_REG_Y2K1,	0xFF,	19,	20	},
+-		{ X1205_REG_Y2K0,	0xFF,	19,	20	},
++		{ X1205_REG_Y2K1,	0xFF,	0,	40	},
++		{ X1205_REG_Y2K0,	0xFF,	0,	40	},
+ 	};
+ 
+ 	/* check that registers have bits a 0 where expected */

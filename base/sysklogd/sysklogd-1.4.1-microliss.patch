@@ -1,0 +1,194 @@
+--- sysklogd-1.4.1rh/ksym.c.microliss	2002-03-12 22:31:15.000000000 +0100
++++ sysklogd-1.4.1rh/ksym.c	2004-09-20 14:25:05.337157016 +0200
+@@ -237,8 +237,14 @@
+ 	 */
+ 	while ( !feof(sym_file) )
+ 	{
++#if 1
++	  char buf[1024];
++	  if (fread(buf, 1, 11, sym_file)<11) break;
++	  if (!fgets(buf+11,1000, sym_file) || (sscanf(buf, "%lx %c %s\n", &address, &type, sym) != 3))
++#else
+ 		if ( fscanf(sym_file, "%lx %c %s\n", &address, &type, sym)
+ 		    != 3 )
++#endif
+ 		{
+ 			Syslog(LOG_ERR, "Error in symbol table input (#1).");
+ 			fclose(sym_file);
+@@ -536,8 +542,14 @@
+ 		version = 0;
+ 		while ( !feof(sym_file) && (version == 0) )
+ 		{
++#if 1
++		  char buf[1024];
++		  if (fread(buf, 1, 11, sym_file)<11) break;
++		  if (!fgets(buf+11,1000, sym_file) || (sscanf(buf, "%lx %c %s\n", &address, &type, sym) != 3))
++#else
+ 			if ( fscanf(sym_file, "%lx %c %s\n", &address, \
+ 				    &type, sym) != 3 )
++#endif
+ 			{
+ 				Syslog(LOG_ERR, "Error in symbol table input (#2).");
+ 				fclose(sym_file);
+--- sysklogd-1.4.1rh/syslogd.c.microliss	2004-08-03 00:02:35.000000000 +0200
++++ sysklogd-1.4.1rh/syslogd.c	2004-09-20 14:25:05.340156560 +0200
+@@ -468,7 +468,7 @@
+ #define SYSLOG_NAMES
+ #include <sys/syslog.h>
+ #include <sys/param.h>
+-#include <sys/errno.h>
++#include <errno.h>
+ #include <sys/ioctl.h>
+ #include <sys/stat.h>
+ #include <sys/wait.h>
+@@ -487,10 +487,10 @@
+ 
+ #include <netinet/in.h>
+ #include <netdb.h>
+-#include <syscall.h>
++#include <sys/syscall.h>
+ #include <arpa/nameser.h>
+ #include <arpa/inet.h>
+-#include <resolv.h>
++//#include <resolv.h>
+ #ifndef TESTING
+ #include "pidfile.h"
+ #endif
+@@ -613,7 +613,7 @@
+ 	short	f_type;			/* entry type, see below */
+ 	short	f_file;			/* file descriptor */
+ 	time_t	f_time;			/* time this was last written */
+-	u_char	f_pmask[LOG_NFACILITIES+1];	/* priority mask */
++	unsigned char	f_pmask[LOG_NFACILITIES+1];	/* priority mask */
+ 	union {
+ 		char	f_uname[MAXUNAMES][UNAMESZ+1];
+ 		struct {
+@@ -1980,13 +1980,16 @@
+ 	(void) signal(SIGCHLD, reapchild);	/* reset signal handler -ASP */
+ 	wait ((int *)0);
+ #else
++#ifdef linux
++	int status;
++	(void) signal(SIGCHLD, reapchild);	/* reset signal handler -ASP */
++	waitpid (-1, &status, WNOHANG);
++#else
+ 	union wait status;
+ 
+ 	while (wait3(&status, WNOHANG, (struct rusage *) NULL) > 0)
+ 		;
+ #endif
+-#ifdef linux
+-	(void) signal(SIGCHLD, reapchild);	/* reset signal handler -ASP */
+ #endif
+ 	errno = saved_errno;
+ }
+--- sysklogd-1.4.1rh/pidfile.c.microliss	2000-12-11 20:46:07.000000000 +0100
++++ sysklogd-1.4.1rh/pidfile.c	2004-09-20 14:25:05.342156256 +0200
+@@ -42,10 +42,12 @@
+ {
+   FILE *f;
+   int pid;
++  char buf[2048];
+ 
+   if (!(f=fopen(pidfile,"r")))
+     return 0;
+-  fscanf(f,"%d", &pid);
++  fread(buf,1,sizeof(buf),f);
++  sscanf(buf,"%d", &pid);
+   fclose(f);
+   return pid;
+ }
+@@ -94,7 +96,9 @@
+   }
+ 
+   if (flock(fd, LOCK_EX|LOCK_NB) == -1) {
+-      fscanf(f, "%d", &pid);
++      char buf[2048];
++      fread(buf,1,sizeof(buf),f);
++      sscanf(buf, "%d", &pid);
+       fclose(f);
+       printf("Can't lock, lock is held by pid %d.\n", pid);
+       return 0;
+--- sysklogd-1.4.1rh/Makefile.microliss	2004-02-12 16:49:20.000000000 +0100
++++ sysklogd-1.4.1rh/Makefile	2004-09-20 14:25:48.001671024 +0200
+@@ -112,14 +112,17 @@
+ 	rm -f syslogd klogd ksym syslog_tst oops_test TAGS tsyslogd tklogd
+ 
+ install_exec: syslogd klogd
+-	${INSTALL} -m 500 syslogd ${BINDIR}/syslogd
+-	${INSTALL} -m 500 klogd ${BINDIR}/klogd
++	${INSTALL} -d $(DESTDIR)${BINDIR}
++	${INSTALL} -m 500 syslogd $(DESTDIR)${BINDIR}/syslogd
++	${INSTALL} -m 500 klogd $(DESTDIR)${BINDIR}/klogd
+ 
+ install_man:
+-	${INSTALL} -m 644 sysklogd.8 ${MANDIR}/man8/sysklogd.8
+-	${INSTALL} -m 644 syslogd.8 ${MANDIR}/man8/syslogd.8
+-	${INSTALL} -m 644 syslog.conf.5 ${MANDIR}/man5/syslog.conf.5
+-	${INSTALL} -m 644 klogd.8 ${MANDIR}/man8/klogd.8
++	${INSTALL} -d $(DESTDIR)/${MANDIR}/man5
++	${INSTALL} -d $(DESTDIR)/${MANDIR}/man8
++	${INSTALL} -m 644 sysklogd.8 $(DESTDIR)${MANDIR}/man8/sysklogd.8
++	${INSTALL} -m 644 syslogd.8 $(DESTDIR)${MANDIR}/man8/syslogd.8
++	${INSTALL} -m 644 syslog.conf.5 $(DESTDIR)${MANDIR}/man5/syslog.conf.5
++	${INSTALL} -m 644 klogd.8 $(DESTDIR)${MANDIR}/man8/klogd.8
+ 
+ 
+ ## Red Hat specific additions
+--- sysklogd-1.4.1rh/syslog.c.microliss	2001-07-09 06:17:22.000000000 +0200
++++ sysklogd-1.4.1rh/syslog.c	2004-09-20 14:25:05.345155800 +0200
+@@ -133,8 +133,9 @@
+ 
+ 	/* substitute error message for %m */
+ 	{
+-		register char ch, *t1, *t2;
+-		char *strerror();
++		register char ch, *t1;
++		register const char *t2;
++		// const char *strerror();
+ 
+ 		for (t1 = fmt_cpy;
+ 		     (ch = *fmt) != '\0' && t1<fmt_cpy+sizeof(fmt_cpy);
+@@ -178,7 +179,7 @@
+ 		return;
+ 	(void)strcat(tbuf, "\r\n");
+ 	cnt += 2;
+-	p = index(tbuf, '>') + 1;
++	p = strchr(tbuf, '>') + 1;
+ 	(void)write(fd, p, cnt - (p - tbuf));
+ 	(void)close(fd);
+ }
+--- sysklogd-1.4.1rh/klogd.c.microliss	2002-04-17 16:49:34.000000000 +0200
++++ sysklogd-1.4.1rh/klogd.c	2004-09-20 14:25:05.348155344 +0200
+@@ -250,9 +250,9 @@
+ #include <unistd.h>
+ #include <signal.h>
+ #include <errno.h>
+-#include <sys/fcntl.h>
++#include <fcntl.h>
+ #include <sys/stat.h>
+-#if !defined(__GLIBC__)
++#if !defined(__GLIBC__) && !defined(__dietlibc__)
+ #include <linux/time.h>
+ #endif /* __GLIBC__ */
+ #include <stdarg.h>
+@@ -266,8 +266,8 @@
+ #include "version.h"
+ 
+ #define __LIBRARY__
+-#include <linux/unistd.h>
+-#if !defined(__GLIBC__)
++#include <sys/syscall.h>
++#if !defined(__GLIBC__) && !defined(__dietlibc__)
+ # define __NR_ksyslog __NR_syslog
+ _syscall3(int,ksyslog,int, type, char *, buf, int, len);
+ #else
+@@ -279,6 +279,8 @@
+ #define _PATH_KLOG  "/proc/kmsg"
+ #endif
+ 
++#define _PATH_KLOG "/proc/kmsg"
++
+ #define LOG_BUFFER_SIZE 4096
+ #define LOG_LINE_LENGTH 1000
+ 

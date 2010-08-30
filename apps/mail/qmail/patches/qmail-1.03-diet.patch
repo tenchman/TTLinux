@@ -1,0 +1,18 @@
+--- qmail-1.03/syncdir.c.diet	Fri Oct 18 18:35:01 2002
++++ qmail-1.03/syncdir.c	Fri Oct 18 18:35:19 2002
+@@ -25,7 +25,8 @@
+ #undef open
+ #include <unistd.h>
+ #include <string.h>
+-#include <syscall.h>
++#include <sys/syscall.h>
++#include <bits/syscall.h>
+ #include <stdio.h>
+ #include <errno.h>
+ 
+--- qmail-1.03/make-load.sh.diet	Fri Oct 18 18:35:40 2002
++++ qmail-1.03/make-load.sh	Fri Oct 18 18:36:05 2002
+@@ -1,2 +1,2 @@
+ echo 'main="$1"; shift'
+-echo exec "$LD" '-o "$main" "$main".o ${1+"$@"} -L. -lsyncdir'
++echo exec "$LD" '-o "$main" "$main".o ${1+"$@"} -L. -lsyncdir -lcompat'

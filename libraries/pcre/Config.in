@@ -1,0 +1,11 @@
+config CONFIG_PCRE
+  bool "pcre - Perl-compatible regular expression library"
+  default n
+  help
+    PCRE has its own native API, but a set of "wrapper" functions that are based on
+    the POSIX API are also supplied in the library libpcreposix. Note that this
+    just provides a POSIX calling interface to PCRE: the regular expressions
+    themselves still follow Perl syntax and semantics. The header file
+    for the POSIX-style functions is called pcreposix.h.
+
+    http://www.pcre.org

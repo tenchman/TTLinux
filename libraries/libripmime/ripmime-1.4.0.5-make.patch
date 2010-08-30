@@ -1,0 +1,68 @@
+--- ripmime-1.4.0.2/Makefile.make	2004-11-27 02:14:55.000000000 +0100
++++ ripmime-1.4.0.2/Makefile	2005-02-02 20:10:41.780480472 +0100
+@@ -27,6 +27,7 @@
+ #
+ COMPONENTS= -DRIPOLE
+ LIBS= 
++SHAREDLIB=libripmime.so.1.4.0.5
+ #COMPONENTS= 
+ 
+ #  DEBUGGING Related Flags
+@@ -42,10 +43,10 @@
+ 	./generate-buildcodes.sh
+ 
+ ripOLE/ole.o:
+-	./build_ripOLE
++	$(MAKE) -C ripOLE
+ 
+ tnef/tnef.o:
+-	./build_tnef
++	$(MAKE) -C tnef
+ 
+ .c.o:
+ 	${CC} ${CFLAGS} $(COMPONENTS) -c $*.c
+@@ -54,7 +55,7 @@
+ 
+ 
+ solib: ${OFILES} ripmime-api.o
+-	gcc --shared -Wl,-soname,libripmime.so.1 ${OFILES} ripmime-api.o -o libripmime.so.1.4.0 -lc
++	$(CC) --shared -Wl,-soname,libripmime.so.1 ${OFILES} ripmime-api.o -o $(SHAREDLIB) -lc
+ 
+ libripmime: ${OFILES} ripmime-api.o
+ 	ar ruvs libripmime.a ${OFILES}  ripmime-api.o
+@@ -71,11 +72,23 @@
+ riptest: ${OFILES}
+ 	${CC} ${CFLAGS} riptest.c ${OFILES} -o riptest
+ 
++install_lib: libripmime solib
++	mkdir -p ${LOCATION}$(LIBDIR)
++	install -m 644 libripmime.a ${LOCATION}$(LIBDIR)
++	install -m 644 $(SHAREDLIB) ${LOCATION}$(LIBDIR)
++	( \
++		cd ${LOCATION}$(LIBDIR); \
++		ln -sf $(SHAREDLIB) libripmime.so.1; \
++		ln -sf $(SHAREDLIB) libripmime.so \
++	);
++
+ install: ${OBJ}
++	mkdir -p ${LOCATION}/bin/
++	mkdir -p ${LOCATION}/man/man1
+ 	strip ripmime
+ 	cp ripmime ${LOCATION}/bin/
+-	cp ripmime.1  ${LOCATION}/man/man1
+-
++	cp ripmime.1 ${LOCATION}/man/man1
++	gzip ${LOCATION}/man/man1/ripmime.1
+ clean:
+ 	rm -f *.o *core ${OBJ} buildcodes.h
+ 	rm -f tnef/*.o
+--- ripmime-1.4.0.2/MIME_headers.h.make	2004-11-27 02:14:56.000000000 +0100
++++ ripmime-1.4.0.2/MIME_headers.h	2005-02-02 20:08:26.913983296 +0100
+@@ -84,6 +84,7 @@
+ #define MIMEH_DEFECT_MULTIPLE_NAMES 9
+ #define MIMEH_DEFECT_MULTIPLE_FILENAMES 10
+ 
++#include "strstack.h"
+ 
+ struct MIMEH_header_info
+ {

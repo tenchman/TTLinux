@@ -1,0 +1,13 @@
+--- src/Mutex.cc.mutex	2007-04-01 11:22:34.000000000 +0200
++++ src/Mutex.cc	2007-04-01 11:23:31.000000000 +0200
+@@ -39,8 +39,8 @@
+    // Set attribute for recursive mutex
+    if(pthread_mutexattr_init(&m_attr) != 0)
+       throw MutexError("pthread_mutexattr_init() failed");
+-   if(pthread_mutexattr_settype(&m_attr, PTHREAD_MUTEX_RECURSIVE) != 0)
+-      throw MutexError("pthread_mutexattr_settype() failed");
++   if(pthread_mutexattr_setkind_np(&m_attr, PTHREAD_MUTEX_RECURSIVE_NP) != 0)
++      throw MutexError("pthread_mutexattr_setkind_np() failed");
+ 
+    if(pthread_mutex_init(&m_mutex, &m_attr) != 0)
+       throw MutexError("pthread_mutex_init() failed");

@@ -1,0 +1,6 @@
+config CONFIG_SVNTRAC
+  bool "svntrac - A Web-Based Bug And Patch-Set Tracking System For Subversion"
+  select CONFIG_SQLITE_3
+  default n
+  help
+    http://www.cvstrac.org/

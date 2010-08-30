@@ -1,0 +1,17 @@
+# adaptation service parser malfunction. uri is ignored if parameters (key=value) are set
+
+diff -up squid-3.1.0.14/src/adaptation/ServiceConfig.cc.adaptation squid-3.1.0.14/src/adaptation/ServiceConfig.cc
+--- squid-3.1.0.14/src/adaptation/ServiceConfig.cc.adaptation	2009-09-29 12:46:52.000000000 +0200
++++ squid-3.1.0.14/src/adaptation/ServiceConfig.cc	2009-09-29 12:56:48.000000000 +0200
+@@ -78,6 +78,11 @@ Adaptation::ServiceConfig::parse()
+             continue;
+         }
+ 
++        if (NULL != strstr(option, "://")) {
++        	lastOption = option;
++        	break;
++        }
++
+         const char *name = option;
+         char *value = strstr(option, "=");
+         if (!value) {

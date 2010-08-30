@@ -1,0 +1,10 @@
+--- dietlibc-0.32/libcruft/dnscruft2.c.gethostbyx	2007-11-09 20:13:14.000000000 +0100
++++ dietlibc-0.32/libcruft/dnscruft2.c	2009-06-10 21:58:07.000000000 +0200
+@@ -158,6 +158,7 @@ int __dns_gethostbyx_r(const char* name,
+   while ((res=__dns_gethostbyx_r_inner(tmp,result,buf,buflen,RESULT,h_errnop,lookfor))) {
+     if (res==-1 && *h_errnop!=HOST_NOT_FOUND) break;
+     if (count==__dns_search) break;
++    if (len && Buf[len-1]=='.') break;
+     Buf[len]='.';
+ //    printf("appending %d: %p (%s)\n",count,__dns_domains[count],__dns_domains[count]);
+     memccpy(Buf+len+1,__dns_domains[count],0,MAXDNAME-len-1);

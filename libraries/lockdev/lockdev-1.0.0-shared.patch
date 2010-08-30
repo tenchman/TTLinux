@@ -1,0 +1,26 @@
+--- lockdev-1.0.0/Makefile.shared	2003-09-24 15:47:20.000000000 +0200
++++ lockdev-1.0.0/Makefile	2003-09-24 15:48:58.000000000 +0200
+@@ -50,8 +50,8 @@
+ 	cd LockDev && make
+ 	cd LockDev && make test
+ 
+-.PHONY: install install_dev install_dbg install_doc install_run 
+-install:	install_dev install_dbg install_doc install_run
++.PHONY: install install_dev install_dbg install_doc install_run install_shared
++install:	install_dev install_dbg install_doc install_run install_shared
+ 
+ install_dev:	${static} src/lockdev.h
+ 	install -m755 -d	${libdir}
+@@ -75,9 +75,11 @@
+ 	install -m755 -d	${mandir}/man3
+ 	install -m644 docs/lockdev.3	${mandir}/man3
+ 
+-install_run:	${shared}
++install_shared:	${shared}
+ 	install -m755 -d	${libdir}
+ 	install -m755 ${shared}	${libdir}
++
++install_run:	${shared}
+ 	install -m755 -d	${sbindir}
+ 	install -m755 lockdev	${sbindir}
+ 

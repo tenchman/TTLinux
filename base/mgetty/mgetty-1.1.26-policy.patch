@@ -1,0 +1,106 @@
+--- mgetty-1.1.26/voice/include/paths.h.policy	Mon Apr 16 10:53:07 2001
++++ mgetty-1.1.26/voice/include/paths.h	Mon Apr 16 10:53:34 2001
+@@ -16,10 +16,10 @@
+ 
+ /*
+  * Filename of the logfile for vgetty. The "%s" will be replaced by
+- * the device name.
++ * the device name.  We match the pattern used by mgetty for the name.
+  */
+ 
+-#define VGETTY_LOG_PATH "/var/log/vgetty.%s"
++#define VGETTY_LOG_PATH "/var/log/vgetty.log.%s"
+ 
+ /*
+  * Filename of the logfile for vm.
+--- mgetty-1.1.26/policy.h-dist.policy	Thu Nov  2 15:26:59 2000
++++ mgetty-1.1.26/policy.h-dist	Mon Apr 16 10:50:12 2001
+@@ -67,7 +67,7 @@
+  * ZyXELs use S40.2=1.
+  * If the path doesn't start with "/", it's relative to CONFDIR.
+  */
+-/* #define CNDFILE "dialin.config" */
++#define CNDFILE "dialin.config"
+ 
+ 
+ /* If you want to use /etc/gettydefs to set tty flags, define this
+@@ -96,7 +96,7 @@
+ /* group id that the device is chown()ed to. If not defined, the
+  * primary group of "DEVICE_OWNER" is used.
+  */
+-#define DEVICE_GROUP	"modem"
++#define DEVICE_GROUP	"uucp"
+ 
+ /* access mode for the line while getty has it - it should be accessible
+  * by uucp / uucp, but not by others (imagine someone dialing into your
+@@ -129,7 +129,7 @@
+  *
+  * if the directory does not exist, the log file goes to CONSOLE (!)
+  */
+-#define LOG_PATH "/var/log/mgetty.%s"
++#define LOG_PATH "/var/log/mgetty.log.%s"
+ 
+ /* Default log error level threshold. Possible error levels are
+  * L_FATAL, L_ERROR, L_AUDIT, L_WARN, L_MESG, L_NOISE, L_JUNK (see mgetty.h)
+@@ -154,15 +154,20 @@
+  * mgetty will use the facility "LOG_AUTH", and the priorities
+  * LOG_NOTICE, LOG_ERR and LOG_ALERT, respectively.
+  */
+-/* #define SYSLOG */
++#define SYSLOG
+ 
+ /* Syslog facility
+  *
+  * This is the facility mgetty uses for logging. Ususally, this will be
+  * LOG_AUTH, but on some systems, this may not exist, try LOG_DAEMON
+  * instead (or look into the syslog manpage for available options)
++ * Note that LOG_AUTH is deprecated where LOG_AUTHPRIV is defined.
+  */
++#ifdef LOG_AUTHPRIV
++#define SYSLOG_FC LOG_AUTHPRIV
++#else
+ #define SYSLOG_FC LOG_AUTH
++#endif
+ 
+ /* login stuff */
+ 
+@@ -175,8 +180,9 @@
+  * The "@", "\\D" and "\\T" escapes will be replaced by SYSTEM, the
+  * current date and time, respectively.
+  * override with "-p <prompt>" switch
++ * Modified to match the defaults for mingetty and login.
+  */
+-#define LOGIN_PROMPT	"@!login: "
++#define LOGIN_PROMPT	"@ login: "
+ 
+ /* On SVR4, maybe on other systems too, you can cause the 'login' program
+  * to prompt with the same string as mgetty did, instead of the standard
+@@ -246,7 +252,7 @@
+ 
+ /* if your system isn't listed above, change that line here */
+ #ifndef LOCK
+-#define LOCK "/usr/spool/uucp/LCK..%s"
++#define LOCK "/var/spool/uucp/LCK..%s"
+ #endif
+   
+ /* Set this to "1" if your system uses binary lock files (i.e., the pid
+@@ -525,8 +531,9 @@
+  * (with or without leading /dev/)
+  * If you don't adapt this for your needs, sendfax won't run (you can
+  * set it from the sendfax.config file, though)!
++ * We have no way of knowing.  Punt.
+  */
+-#define FAX_MODEM_TTYS	"tty4c:tty4d"
++#define FAX_MODEM_TTYS	"modem"
+ 
+ /* Xon or not?
+  *
+@@ -584,7 +591,7 @@
+  * If you don't want this type of service, do not define it at all
+  * Absolute path name has to be used here!
+  */
+-#define FAX_NOTIFY_PROGRAM "/usr/local/lib/mgetty+sendfax/new_fax"
++#define FAX_NOTIFY_PROGRAM "/etc/mgetty+sendfax/new_fax"
+ 
+ /* default minimum space required on spooling partition for receiving a FAX
+  * (in KILObytes)

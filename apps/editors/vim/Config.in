@@ -1,0 +1,11 @@
+config CONFIG_VIM
+  bool "VIM (VIsual editor iMproved) - The editor of choice"
+  default n
+  select CONFIG_NCURSES
+  help
+    VIM (VIsual editor iMproved) is an updated and improved version of the
+    vi editor.  Vi was the first real screen-based editor for UNIX, and is
+    still very popular.  VIM improves on vi by adding new features:
+    multiple windows, multi-level undo, block highlighting and more.
+
+    http://www.vim.org/

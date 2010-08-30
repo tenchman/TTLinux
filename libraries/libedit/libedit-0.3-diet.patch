@@ -1,0 +1,54 @@
+--- libedit-0.3/Makefile.in.diet	2001-07-09 15:04:54.000000000 +0200
++++ libedit-0.3/Makefile.in	2003-10-01 15:16:00.000000000 +0200
+@@ -96,10 +96,10 @@
+ .c.o:
+ 	${CC} ${CFLAGS} -c $<
+ 
+-libedit.a: ${OOBJS}
++libedit.a: .depend ${OOBJS}
+ 	ar -r $@ ${OOBJS}
+ 
+-libedit.so: ${OOBJS}
++libedit.so: .depend ${OOBJS}
+ 	${CC} --shared -o $@ ${OOBJS}
+ 
+ # minimal dependency to make "make depend" optional
+@@ -108,19 +108,26 @@
+ readline.o readline.po readline.so readline.ln:	\
+ 	common.h emacs.h fcns.h help.h vi.h
+ 
+-install: libedit.a libedit.so
+-	${INSTALL} -d ${LIBDIR}
+-	${INSTALL} libedit.a ${LIBDIR}
+-	${INSTALL} libedit.so ${LIBDIR}
+-	${INSTALL} -d ${INCDIR}
+-	${INSTALL} -m 644 histedit.h ${INCDIR}
+-	${INSTALL} -d ${INCDIR}/readline/
+-	${INSTALL} -m 644 readline/readline.h ${INCDIR}/readline/
+-	${INSTALL} -d ${MANDIR}/man3/
+-	${INSTALL} -m 644 editline.3 ${MANDIR}/man3/
+-	${INSTALL} -d ${MANDIR}/man5/
+-	${INSTALL} -m 644 editrc.5 ${MANDIR}/man5/
++install-shared: install-data libedit.so
++	${INSTALL} -d ${DESTDIR}${LIBDIR}
++	${INSTALL} libedit.so ${DESTDIR}${LIBDIR}
++
++install-static: install-data libedit.a
++	${INSTALL} -d ${DESTDIR}${LIBDIR}
++	${INSTALL} libedit.a ${DESTDIR}${LIBDIR}
++
++install-data:
++	${INSTALL} -d ${DESTDIR}${INCDIR}
++	${INSTALL} -m 644 histedit.h ${DESTDIR}${INCDIR}
++	${INSTALL} -d ${DESTDIR}${INCDIR}/readline/
++	${INSTALL} -m 644 readline/readline.h ${DESTDIR}${INCDIR}/readline/
++	${INSTALL} -d ${DESTDIR}${MANDIR}/man3/
++	${INSTALL} -m 644 editline.3 ${DESTDIR}${MANDIR}/man3/
++	${INSTALL} -d ${DESTDIR}${MANDIR}/man5/
++	${INSTALL} -m 644 editrc.5 ${DESTDIR}${MANDIR}/man5/
+ 
++install: install-data install-static install-shared
++ 
+ clean:
+ 	rm -f *.o
+ 	rm -f *~ \#*\#

@@ -1,0 +1,22 @@
+--- sysvinit-2.78/man/init.8.manpatch	Fri Feb 11 06:15:07 2000
++++ sysvinit-2.78/man/init.8	Wed Apr  4 01:43:58 2001
+@@ -64,7 +64,7 @@
+ .PP
+ Runlevel \fBS\fP or \fBs\fP bring the system to single user mode
+ and do not require an \fB/etc/inittab\fP file.  In single user mode,
+-\fB/sbin/sulogin\fP is invoked on \fB/dev/console\fP.
++a root shell is opened on \fB/dev/console\fP.
+ .PP
+ When entering single user mode, \fBinit\fP reads the console's \fIioctl\fP(2)
+ states from \fB/etc/ioctl.save\fP. If this file does not exist, \fBinit\fP
+--- sysvinit-2.78/man/sulogin.8.manpatch	Fri Nov 20 09:42:15 1998
++++ sysvinit-2.78/man/sulogin.8	Wed Apr  4 01:43:58 2001
+@@ -8,7 +8,7 @@
+ .RB [ " tty-device " ]
+ .SH DESCRIPTION
+ .I sulogin
+-is invoked by \fBinit(8)\fP when the system goes into single user mode
++can be invoked by \fBinit(8)\fP when the system goes into single user mode
+ (this is done through an entry in \fIinittab(5)\fP). \fBInit\fP also
+ tries to execute \fIsulogin\fP when it is passed the \fB-b\fP flag
+ from the bootmonitor (eg, LILO).

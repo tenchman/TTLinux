@@ -1,0 +1,11 @@
+--- dietlibc-0.30/libdl/dlclose.c.dlclose	2009-02-18 22:27:07.000000000 +0100
++++ dietlibc-0.30/libdl/dlclose.c	2009-02-18 22:27:46.000000000 +0100
+@@ -33,7 +33,7 @@ int dlclose(void*handle) {
+     if (munmap(dh->mem_base,dh->mem_size)==-1) return -1;
+ #endif
+     _dl_free_handle(handle);
+-#ifdef WANT_LD_SO_GDB_SUPPORT
++#if defined(__DIET_LD_SO__) && defined(WANT_LD_SO_GDB_SUPPORT)
+     _r_debug.r_state=RT_DELETE;
+     _dl_debug_state();
+     _r_debug.r_state=RT_CONSISTENT;

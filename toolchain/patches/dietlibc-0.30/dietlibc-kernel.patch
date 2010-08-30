@@ -1,0 +1,71 @@
+--- dietlibc-0.30/include/asm/types.h.kernel	2006-04-04 05:42:48.000000000 +0200
++++ dietlibc-0.30/include/asm/types.h	2010-08-05 08:28:13.610823618 +0200
+@@ -26,12 +26,6 @@ typedef int32_t __s32;
+ typedef int64_t __s64;
+ #endif
+ 
+-#if defined(__s390__) || (__WORDSIZE==64)
+-typedef unsigned long __kernel_size_t;
+-#else
+-typedef uint32_t __kernel_size_t;
+-#endif
+-
+ #define __force
+ typedef uint16_t __le16;
+ typedef uint16_t __be16;
+@@ -39,6 +33,9 @@ typedef uint32_t __le32;
+ typedef uint32_t __be32;
+ typedef uint64_t __le64;
+ typedef uint64_t __be64;
++typedef uint16_t __sum16;
++typedef uint32_t __wsum;
++
+ 
+ __END_DECLS
+ 
+diff -up dietlibc-0.30/include/sys/socket.h.kernel dietlibc-0.30/include/sys/socket.h
+--- dietlibc-0.30/include/sys/socket.h.kernel	2010-08-05 08:28:13.510823182 +0200
++++ dietlibc-0.30/include/sys/socket.h	2010-08-06 08:20:22.152187371 +0200
+@@ -253,7 +253,16 @@ struct ucred {
+ #define AF_IRDA		23	/* IRDA sockets			*/
+ #define AF_PPPOX	24	/* PPPoX sockets		*/
+ #define AF_WANPIPE	25	/* Wanpipe API Sockets */
+-#define AF_MAX		32	/* For now.. */
++#define AF_LLC          26      /* Linux LLC.  */
++#define AF_CAN          29      /* Controller Area Network.  */
++#define AF_TIPC         30      /* TIPC sockets.  */
++#define AF_BLUETOOTH    31      /* Bluetooth sockets.  */
++#define AF_IUCV         32      /* IUCV sockets.  */
++#define AF_RXRPC        33      /* RxRPC sockets.  */
++#define AF_ISDN         34      /* mISDN sockets.  */
++#define AF_PHONET       35      /* Phonet sockets.  */
++#define AF_IEEE802154   36      /* IEEE 802.15.4 sockets.  */
++#define AF_MAX		37	/* For now.. */
+ 
+ /* Protocol families, same as address families. */
+ #define PF_UNSPEC	AF_UNSPEC
+@@ -283,6 +292,15 @@ struct ucred {
+ #define PF_IRDA		AF_IRDA
+ #define PF_PPPOX	AF_PPPOX
+ #define PF_WANPIPE	AF_WANPIPE
++#define PF_LLC          AF_LLC
++#define PF_CAN          AF_CAN
++#define PF_TIPC         AF_TIPC
++#define PF_BLUETOOTH    AF_BLUETOOTH
++#define PF_IUCV         AF_IUVC
++#define PF_RXRPC        AF_RXRPC
++#define PF_ISDN         AF_ISDN
++#define PF_PHONET       AF_PHONET
++#define PF_IEEE802154   AF_IEEE802154
+ #define PF_MAX		AF_MAX
+ 
+ /* Maximum queue length specifiable by listen.  */
+@@ -481,7 +499,7 @@ int socketpair(int d, int type, int prot
+ 
+ #define SIOCDEVPRIVATE	0x89F0		/* to 89FF */
+ 
+-#define _LINUX_SOCKET_H
++// #define _LINUX_SOCKET_H
+ 
+ __END_DECLS
+ 

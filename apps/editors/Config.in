@@ -1,0 +1,4 @@
+menu "Text editors"
+  source "apps/editors/e3/Config.in"
+  source "apps/editors/vim/Config.in"
+endmenu

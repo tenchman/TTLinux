@@ -1,0 +1,16 @@
+diff -up drbd-8.2.4/user/drbdmeta.c.posix_memalign drbd-8.2.4/user/drbdmeta.c
+--- drbd-8.2.4/user/drbdmeta.c.posix_memalign	2008-03-07 12:56:25.000000000 +0100
++++ drbd-8.2.4/user/drbdmeta.c	2008-03-07 12:55:02.000000000 +0100
+@@ -2435,8 +2435,12 @@ struct format *new_cfg()
+ 		fprintf(stderr, "could not calloc() cfg\n");
+ 		exit(20);
+ 	}
++#ifdef __dietlibc__
++	err = (on_disk_buffer = malloc((buffer_size+pagesize-1)/pagesize*pagesize)) ? 0 : 1;
++#else
+ 	err = posix_memalign(&on_disk_buffer,pagesize,
+ 		(buffer_size+pagesize-1)/pagesize*pagesize);
++#endif
+ 	if (err) {
+ 		fprintf(stderr, "could not posix_memalign() on_disk_buffer\n");
+ 		exit(20);

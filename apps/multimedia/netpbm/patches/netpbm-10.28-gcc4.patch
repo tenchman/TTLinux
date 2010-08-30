@@ -1,0 +1,65 @@
+--- netpbm-10.28/converter/ppm/ppmtowinicon.c.gcc4	2005-06-10 10:34:45.341676768 +0200
++++ netpbm-10.28/converter/ppm/ppmtowinicon.c	2005-06-10 10:34:51.749702600 +0200
+@@ -745,7 +745,7 @@ addEntryToIcon(MS_Ico       const MSIcon
+     * Perhaps I should use something that allocs a decent amount at start...
+     */
+     MSIconData->entries = 
+-        realloc2 (MSIconData->entries, MSIconData->count * sizeof(IC_Entry *));
++        (IC_Entry*)realloc2 (MSIconData->entries, MSIconData->count * sizeof(IC_Entry *));
+     MSIconData->entries[MSIconData->count-1] = entry;
+ }
+ 
+--- netpbm-10.28/buildtools/typegen.c.gcc4	2005-04-27 18:24:29.000000000 +0200
++++ netpbm-10.28/buildtools/typegen.c	2005-06-10 10:34:51.749702600 +0200
+@@ -28,6 +28,7 @@
+   We also include the multiple inclusion guard ifdef.
+ -----------------------------------------------------------------------------*/
+ #include <stdio.h>
++#include <stdlib.h>
+ #include <unistd.h>
+ 
+ 
+--- netpbm-10.28/lib/pm.h.gcc4	2005-06-10 10:34:45.399667952 +0200
++++ netpbm-10.28/lib/pm.h	2005-06-10 10:34:51.750702448 +0200
+@@ -18,6 +18,7 @@
+ #include <sys/types.h>
+ #include <ctype.h>
+ #include <stdio.h>
++#include <string.h>
+ #include <errno.h>
+ #include <setjmp.h>
+ #include <sys/stat.h>
+--- netpbm-10.28/urt/rle_getrow.c.gcc4	2005-06-10 10:34:45.401667648 +0200
++++ netpbm-10.28/urt/rle_getrow.c	2005-06-10 10:34:51.751702296 +0200
+@@ -32,7 +32,8 @@
+  * $Id: rle_getrow.c,v 3.0.1.5 1992/03/04 19:33:08 spencer Exp spencer $
+  */
+ 
+-#include "stdio.h"
++#include <stdio.h>
++#include <string.h>
+ #include "rle.h"
+ #include "rle_code.h"
+ #include "vaxshort.h"
+--- netpbm-10.28/urt/rle.h.gcc4	2005-06-10 10:34:45.402667496 +0200
++++ netpbm-10.28/urt/rle.h	2005-06-10 10:34:51.752702144 +0200
+@@ -36,6 +36,7 @@
+ #include "rle_config.h"		/* Configuration parameters. */
+ 
+ #include <stdio.h>		/* Declare FILE. */
++#include <string.h>
+ 
+ #ifdef c_plusplus
+ #define USE_PROTOTYPES
+--- netpbm-10.28/urt/Runput.c.gcc4	2005-06-10 10:34:45.400667800 +0200
++++ netpbm-10.28/urt/Runput.c	2005-06-10 10:34:51.753701992 +0200
+@@ -92,7 +92,8 @@
+  * 		    follow the last byte in the run.
+  */
+ 
+-#include	"stdio.h"
++#include	<stdio.h>
++#include 	<string.h>
+ #include	"rle_put.h"
+ #include	"rle.h"
+ #include	"rle_code.h"

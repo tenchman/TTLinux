@@ -1,0 +1,12 @@
+diff -up collectd-4.5.2/src/types.db.types collectd-4.5.2/src/types.db
+--- collectd-4.5.2/src/types.db.types	2009-01-05 15:20:12.000000000 +0100
++++ collectd-4.5.2/src/types.db	2009-01-05 15:20:50.000000000 +0100
+@@ -10,7 +10,7 @@ charge			value:GAUGE:0:U
+ connections		value:COUNTER:0:U
+ counter			value:COUNTER:U:U
+ cpufreq			value:GAUGE:0:U
+-cpu			value:COUNTER:0:4294967295
++cpu			value:COUNTER:0:100
+ current			value:GAUGE:U:U
+ delay			seconds:GAUGE:-1000000:1000000
+ df			used:GAUGE:0:1125899906842623, free:GAUGE:0:1125899906842623

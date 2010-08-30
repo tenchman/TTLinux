@@ -1,0 +1,431 @@
+--- linux-2.6.22.18/arch/arm/kernel/setup.c.ixp400driver	2008-02-11 08:31:19.000000000 +0100
++++ linux-2.6.22.18/arch/arm/kernel/setup.c	2008-08-11 13:55:02.000000000 +0200
+@@ -60,6 +60,7 @@ extern int root_mountflags;
+ extern void _stext, _text, _etext, __data_start, _edata, _end;
+ 
+ unsigned int processor_id;
++EXPORT_SYMBOL(processor_id);
+ unsigned int __machine_arch_type;
+ EXPORT_SYMBOL(__machine_arch_type);
+ 
+--- linux-2.6.22.18/drivers/net/Kconfig.ixp400driver	2008-02-11 08:31:19.000000000 +0100
++++ linux-2.6.22.18/drivers/net/Kconfig	2008-08-11 13:55:02.000000000 +0200
+@@ -201,6 +201,102 @@ config MACB
+ 
+ source "drivers/net/arm/Kconfig"
+ 
++config IXP400_ETH
++	tristate "Intel IXP400 Ethernet Device support"
++	requires m
++	depends NET_ETHERNET && ARM && (ARCH_IXP4XX)
++	---help---
++	  If you select M here, the Intel IXP400 Ethernet driver will be
++	  compiled as part of the build.
++ 
++	  In order for the driver to build correctly you must set up some
++	  environment variables before building the kernel. See the README
++	  files that accompany the IXP400 software or Linux Ethernet Driver
++	  distribution for details.
++ 
++	  Note that this driver is Intel proprietary code and must be obtained
++	  from Intel Corp. See the README files that accompany the IXP400
++	  software or Linux Ethernet Driver distribution for details.
++ 
++	  The driver can be compiled only as a module, as linking it
++	  statically into the kernel would violate the GPL. The module will be
++	  called ixp400_eth.ko
++ 
++	  Select M if you have the IXP400 ethernet driver source code and wish
++	  to include it in your build.
++
++choice 
++	prompt "Intel IXP400 Ethernet Device Driver NPE support"
++	depends IXP400_ETH
++	default IXP400_ETH_ALL
++	---help---
++	  If you select 'All NPEs' option here, the Intel IXP400 Ethernet driver
++	  will be compiled to configure all Ethernet NPEs and map "ixp0" device
++	  to Ethernet NPE B, "ixp1" device to Ethernet NPE C, and "ixp2" device
++	  to Ethernet NPE A (for IXP455 & IXP465 silicon only).
++ 
++	  If you select 'NPEB-only' option here, the Intel IXP400 Ethernet driver
++	  will be compiled to map "ixp0" device to Ethernet NPE B only.
++ 
++	  If you select 'NPEC-only' option here, the Intel IXP400 Ethernet driver
++	  will be compiled to map "ixp1" device to Ethernet NPE C only.
++ 
++	  See the README files that accompany the IXP400
++	  software or Linux Ethernet Driver distribution for details.
++
++config IXP400_ETH_ALL
++	bool "All_NPEs"
++
++config IXP400_ETH_NPEB_ONLY
++	bool "NPEB-Only"
++
++config IXP400_ETH_NPEC_ONLY
++	bool "NPEC-Only"
++
++endchoice
++
++config IXP400_ETH_SKB_RECYCLE
++	depends IXP400_ETH
++	bool "Intel IXP400 Ethernet Device Driver Fast Skb Recycling support"
++	---help---
++	  If you select Y here, the Intel IXP400 Ethernet driver will be
++	  compiled to internally recycle skbufs.
++ 
++	  IMPORTANT: This option, if enabled, may NOT work with some
++	  patched kernels.
++ 
++	  If unsure select N here.
++ 
++	  See the README files that accompany the IXP400
++	  software or Linux Ethernet Driver distribution for details.
++
++config IXP400_ETH_QDISC_ENABLED
++	depends IXP400_ETH
++	bool "Intel IXP400 Ethernet Device Driver Fast QDisc support"
++	---help---
++	  If you select Y here, the Intel IXP400 Ethernet driver will be
++	  compiled to internally use its own queueing discipline (qdisc).
++ 
++	  IMPORTANT: This option may NOT work with some debug tools or
++	  some kernel features.
++ 
++	  If unsure select N here.
++ 
++	  See the README files that accompany the IXP400
++	  software or Linux Ethernet Driver distribution for details.
++
++config IXP400_NAPI
++	depends IXP400_ETH
++	bool "Intel IXP400 Ethernet Device Driver NAPI support"
++	---help---
++	  If you select Y here, the Intel IXP400 Ethernet driver will be
++	  compiled to use the Linux kernel's NAPI polling interface.
++ 
++	  If unsure select N here.
++ 
++	  See the README files that accompany the IXP400
++	  software or Linux Ethernet Driver distribution for details.
++
+ config MACE
+ 	tristate "MACE (Power Mac ethernet) support"
+ 	depends on NET_ETHERNET && PPC_PMAC && PPC32
+--- linux-2.6.22.18/drivers/net/Makefile.ixp400driver	2008-02-11 08:31:19.000000000 +0100
++++ linux-2.6.22.18/drivers/net/Makefile	2008-08-11 13:55:02.000000000 +0200
+@@ -1,6 +1,62 @@
+ #
+ # Makefile for the Linux network (ethercard) device drivers.
+ #
++IX_XSCALE_SW := drivers/ixp400/ixp400_xscale_sw
++OSAL_DIR := $(IX_XSCALE_SW)/../ixp_osal
++
++OSAL_INCLUDES += \
++	-I$(OSAL_DIR)/ \
++	-I$(OSAL_DIR)/common/include/ \
++	-I$(OSAL_DIR)/common/include/modules/ioMem \
++	-I$(OSAL_DIR)/common/include/modules/ddk \
++	-I$(OSAL_DIR)/common/include/modules/bufferMgt \
++	-I$(OSAL_DIR)/common/os/linux/include/modules/ioMem \
++	-I$(OSAL_DIR)/common/os/linux/include/modules/ddk \
++	-I$(OSAL_DIR)/common/os/linux/include/modules/bufferMgt \
++	-I$(OSAL_DIR)/common/os/linux/include/core
++
++OSAL_CFLAGS += \
++	-D__linux \
++	-DIX_TARGET=linuxbe \
++	-DIX_UTOPIAMODE=0 \
++	-DIX_MPHYSINGLEPORT=0 \
++	-D__LINUX_ARM_ARCH__=5 \
++	-DCPU=33 \
++	-DXSCALE=33 \
++	-DWall \
++	-DENABLE_IOMEM \
++	-DENABLE_BUFFERMGT
++
++ifeq ($(CONFIG_CPU_IXP46X),y)
++OSAL_CFLAGS += -D__ixp46X
++OSAL_INCLUDES += -I$(OSAL_DIR)/platforms/ixp46X/include
++OSAL_INCLUDES += -I$(OSAL_DIR)/platforms/ixp46X/os/linux/include
++else
++ifeq ($(CONFIG_CPU_IXP43X),y)
++OSAL_CFLAGS += -D__ixp43X
++OSAL_INCLUDES += -I$(OSAL_DIR)/platforms/ixp43X/include
++OSAL_INCLUDES += -I$(OSAL_DIR)/platforms/ixp43X/os/linux/include
++else
++OSAL_CFLAGS += -D__ixp42X
++OSAL_INCLUDES += -I$(OSAL_DIR)/platforms/ixp42X/include
++OSAL_INCLUDES += -I$(OSAL_DIR)/platforms/ixp42X/os/linux/include
++endif
++endif
++
++CFLAGS_ixp400_eth.o	= -DWall \
++			  -I$(IX_XSCALE_SW)/src/include \
++			  ${OSAL_INCLUDES} \
++			  ${OSAL_CFLAGS}
++	
++ifeq ($(CONFIG_CPU_IXP46X),y)
++CFLAGS_ixp400_eth.o += -D__ixp46X
++else
++ifeq ($(CONFIG_CPU_IXP43X),y)
++CFLAGS_ixp400_eth.o += -D__ixp43X
++else
++CFLAGS_ixp400_eth.o += -D__ixp42X
++endif
++endif
+ 
+ obj-$(CONFIG_E1000) += e1000/
+ obj-$(CONFIG_IBM_EMAC) += ibm_emac/
+@@ -38,6 +94,7 @@ obj-$(CONFIG_CASSINI) += cassini.o
+ obj-$(CONFIG_MACE) += mace.o
+ obj-$(CONFIG_BMAC) += bmac.o
+ 
++obj-$(CONFIG_IXP400_ETH) += ixp400_eth.o
+ obj-$(CONFIG_DGRS) += dgrs.o
+ obj-$(CONFIG_VORTEX) += 3c59x.o
+ obj-$(CONFIG_TYPHOON) += typhoon.o
+--- linux-2.6.22.18/drivers/net/ixp400_eth.c.ixp400driver	2008-08-11 13:55:02.000000000 +0200
++++ linux-2.6.22.18/drivers/net/ixp400_eth.c	2008-08-11 15:01:36.000000000 +0200
+@@ -72,7 +72,7 @@
+ /*
+  * System-defined header files
+  */
+-#include <linux/config.h>
++#include <linux/autoconf.h>
+ #include <linux/module.h>
+ #include <linux/kernel.h>
+ #include <linux/init.h>
+@@ -182,31 +182,31 @@ static int datapath_poll = 1;     /* def
+  * skbuf to push into the linux stack, and avoid the performance degradations 
+  * during overflow.
+  */
+-static int netdev_max_backlog = 290;
++int netdev_max_backlog = 290;
+ 
+-MODULE_PARM(netdev_max_backlog, "i");
++module_param(netdev_max_backlog, int, 0);
+ MODULE_PARM_DESC(netdev_max_backlog, "Should be set to the value of /proc/sys/net/core/netdev_max_backlog (perf affecting)");
+ #endif /* CONFIG_IXP400_NAPI */
+-MODULE_PARM(datapath_poll, "i");
++module_param(datapath_poll, int, 0);
+ MODULE_PARM_DESC(datapath_poll, "If non-zero, use polling method for datapath instead of interrupts");
+-MODULE_PARM(npe_learning, "i");
++module_param(npe_learning, int, 0);
+ MODULE_PARM_DESC(npe_learning, "If non-zero, NPE MAC Address Learning & Filtering feature will be enabled");
+-MODULE_PARM(log_level, "i");
++module_param(log_level, int, 0);
+ MODULE_PARM_DESC(log_level, "Set log level: 0 - None, 1 - Verbose, 2 - Debug");
+-MODULE_PARM(no_ixp400_sw_init, "i");
++module_param(no_ixp400_sw_init, int, 0);
+ MODULE_PARM_DESC(no_ixp400_sw_init, "If non-zero, do not initialise Intel IXP400 Software Release core components");
+-MODULE_PARM(no_phy_scan, "i");
++module_param(no_phy_scan, int, 0);
+ MODULE_PARM_DESC(no_phy_scan, "If non-zero, use hard-coded phy addresses");
+-MODULE_PARM(phy_reset, "i");
++module_param(phy_reset, int, 0);
+ MODULE_PARM_DESC(phy_reset, "If non-zero, reset the phys");
+-MODULE_PARM(dev_max_count, "i");
++module_param(dev_max_count, int, 0);
+ MODULE_PARM_DESC(dev_max_count, "Number of devices to initialize");
+-MODULE_PARM(npe_error_handler, "i");
++module_param(npe_error_handler, int, 0);
+ MODULE_PARM_DESC(npe_error_handler, "If non-zero, NPE error handling feature will be enabled");
+-MODULE_PARM(hss_coexist, "i");
++module_param(hss_coexist, int, 0);
+ MODULE_PARM_DESC(hss_coexist, "If non-zero, HSS-Ethernet coexist feature will be enabled");
+ /* devices will be called ixp0 and ixp1 */
+-#define DEVICE_NAME "ixp"
++#define DEVICE_NAME "eth"
+ 
+ /* boolean values for PHY link speed, duplex, and autonegotiation */
+ #define PHY_SPEED_10    		(0)
+@@ -487,6 +487,7 @@ typedef struct {
+ 
+     /* used to control the message output */
+     UINT32 devFlags;
++    struct net_device *ndev;
+ } priv_data_t;
+ 
+ /* Collection of boolean PHY configuration parameters */
+@@ -1109,12 +1114,9 @@ static inline void dev_skb_enqueue(priv_
+ 	 * The solution is to reset the following fields in the skbuff 
+ 	 * before re-using it on the Rx-path
+ 	 */
+-        skb->nfmark = 0;
++        skb->mark = 0;
+         nf_conntrack_put(skb->nfct);
+         skb->nfct = NULL;
+-#ifdef CONFIG_NETFILTER_DEBUG
+-        skb->nf_debug = 0;
+-#endif
+ #ifdef CONFIG_BRIDGE_NETFILTER
+ /* We need to free the memory attached to the nf_bridge pointer to avoid a memory leak */
+ 	nf_bridge_put(skb->nf_bridge);
+@@ -1496,7 +1498,7 @@ static int dev_media_check_thread (void*
+ 	    if (res != IX_SUCCESS)
+ 	    {
+ 		P_WARN("ixEthMiiLinkStatus failed on PHY%d.\n"
+-		       "\tCan't determine\nthe auto negotiated parameters. "
++		       "Can't determine the auto negotiated parameters. "
+ 		       "Using default values.\n",
+ 		       phyNum); 
+ 		/* something is bad, gracefully stops the loop */
+@@ -1648,8 +1650,7 @@ static void dev_pmu_timer_restart(void)
+     local_irq_restore(flags);
+ }
+ 
+-static irqreturn_t dev_pmu_timer_npemhpoll_os_isr(int irg, void *dev_id,
+-						  struct pt_regs *regs)
++static irqreturn_t dev_pmu_timer_npemhpoll_os_isr(int irg, void *dev_id)
+ {
+     dev_pmu_timer_restart(); /* set up the timer for the next interrupt */
+ 
+@@ -1658,8 +1659,7 @@ static irqreturn_t dev_pmu_timer_npemhpo
+     return IRQ_HANDLED;
+ }
+ 
+-static irqreturn_t dev_pmu_timer_datapathpoll_os_isr(int irg, void *dev_id, 
+-						     struct pt_regs *regs)
++static irqreturn_t dev_pmu_timer_datapathpoll_os_isr(int irg, void *dev_id)
+ {
+     dev_pmu_timer_restart(); /* set up the timer for the next interrupt */
+ 
+@@ -1751,7 +1751,7 @@ static int dev_pmu_timer_setup(void)
+ 	 */
+ 	if (request_irq(IX_OSAL_IXP400_XSCALE_PMU_IRQ_LVL,
+ 			dev_pmu_timer_npemhpoll_os_isr,
+-			SA_SHIRQ,
++			IRQF_SHARED,
+ 			"ixp400_eth PMU timer",
+ 			(void *)IRQ_ANY_PARAMETER))
+ 	{
+@@ -1768,7 +1768,7 @@ static int dev_pmu_timer_setup(void)
+ 	 */
+ 	if (request_irq(IX_OSAL_IXP400_XSCALE_PMU_IRQ_LVL,
+ 			dev_pmu_timer_datapathpoll_os_isr,
+-			SA_SHIRQ,
++			IRQF_SHARED,
+ 			"ixp400_eth PMU timer",
+ 			(void *)IRQ_ANY_PARAMETER))
+ 	{
+@@ -1801,8 +1801,7 @@ static void dev_pmu_timer_unload(void)
+ /* Internal ISR : run a few thousand times per second and calls 
+  * the queue manager dispatcher entry point.
+  */
+-static irqreturn_t dev_qmgr_os_isr( int irg, void *dev_id, struct pt_regs
+-					*regs)
++static irqreturn_t dev_qmgr_os_isr( int irg, void *dev_id)
+ {
+ #ifdef CONFIG_IXP400_NAPI
+     /* Note: there are 2 possible race conditions where the normal
+@@ -1874,10 +1873,10 @@ restart_poll:
+  * IX_ETH_DB_MAINTENANCE_TIME jiffies
+  */
+ 
+-static void maintenance_timer_task(void *data);
++static void maintenance_timer_task(struct work_struct *data);
+ 
+ /* task spawned by timer interrupt for EthDB maintenance */
+-static DECLARE_WORK(ethdb_maintenance_work, maintenance_timer_task, NULL);
++static DECLARE_DELAYED_WORK(ethdb_maintenance_work, maintenance_timer_task);
+ 
+ static void maintenance_timer_set(void)
+ {
+@@ -1891,7 +1890,7 @@ static void maintenance_timer_clear(void
+     flush_workqueue(maintenance_workq);
+ }
+ 
+-static void maintenance_timer_task(void *data)
++static void maintenance_timer_task(struct work_struct *data)
+ {
+     down(maintenance_mutex);
+     ixEthDBDatabaseMaintenance();
+@@ -1983,7 +1982,7 @@ static inline void dev_eth_type_trans(un
+ 				      struct net_device *dev)
+ {
+     unsigned header_len = dev->hard_header_len;
+-    skb->mac.raw=skb->data;
++    skb_reset_mac_header(skb);
+     /* skip the mac header : there is no need for length comparison since
+      * the skb during a receive is always greater than the header size and 
+      * runt frames are not enabled.
+@@ -1992,7 +1991,7 @@ static inline void dev_eth_type_trans(un
+     skb->len -= header_len;
+    
+     /* fill the pkt arrival time (set at the irq callback entry) */
+-    skb_set_timestamp(skb, &irq_stamp);
++    skb->tstamp = timeval_to_ktime(irq_stamp);
+  
+     /* fill the input device field */
+     skb->dev = dev;
+@@ -2529,7 +2528,7 @@ static void port_disable(struct net_devi
+ /* this function is called by the kernel to transmit packet 
+  * It is expected to run in the context of the ksoftirq thread.
+ */
+-static int dev_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
++static int dev_ixp400_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
+ {
+     int res;
+     IX_OSAL_MBUF *mbuf;
+@@ -2669,10 +2668,10 @@ static int do_dev_stop(struct net_device
+ }
+ 
+ static void
+-dev_tx_timeout_task(void *dev_id)
++dev_tx_timeout_task(struct work_struct *work)
+ {
+-    struct net_device *dev = (struct net_device *)dev_id;
+-    priv_data_t *priv = netdev_priv(dev);
++    priv_data_t *priv = container_of(work, priv_data_t, timeout_work);
++    struct net_device *dev = priv->ndev;
+ 
+     P_WARN("%s: Tx Timeout for port %d\n", dev->name, priv->port_id);
+ 
+@@ -2966,7 +2965,7 @@ static int qmgr_init(void)
+ 
+     if (request_irq(IX_OSAL_IXP400_QM1_IRQ_LVL,
+                     dev_qmgr_os_isr,
+-                    SA_SHIRQ,
++                    IRQF_SHARED,
+                     "ixp400_eth QM1",
+                     (void *)IRQ_ANY_PARAMETER))
+     {
+@@ -3259,7 +3258,7 @@ int ixp400_dev_set_mac_address(struct ne
+  */
+ static int dev_qdisc_no_enqueue(struct sk_buff *skb, struct Qdisc * qdisc)
+ {
+-        return dev_hard_start_xmit(skb, qdisc->dev);     
++        return dev_ixp400_hard_start_xmit(skb, qdisc->dev);     
+ }
+ 
+ static struct sk_buff *dev_qdisc_no_dequeue(struct Qdisc * qdisc)
+@@ -3919,7 +3918,7 @@ static int __devinit dev_eth_probe(struc
+     ndev->open = do_dev_open;
+     ndev->stop = do_dev_stop;
+ 
+-    ndev->hard_start_xmit = dev_hard_start_xmit;
++    ndev->hard_start_xmit = dev_ixp400_hard_start_xmit;
+ 
+     ndev->watchdog_timeo = DEV_WATCHDOG_TIMEO;
+     ndev->tx_timeout = dev_tx_timeout;
+@@ -3987,7 +3986,8 @@ static int __devinit dev_eth_probe(struc
+     priv->timeout_workq = create_singlethread_workqueue(MODULE_NAME);
+     BUG_ON(!priv->timeout_workq);
+ 
+-    INIT_WORK(&priv->timeout_work, dev_tx_timeout_task, (void *)ndev);
++    priv->ndev=ndev;
++    INIT_WORK(&priv->timeout_work, dev_tx_timeout_task);
+ 
+     /* set the internal maximum queueing capabilities */
+     ndev->tx_queue_len = TX_MBUF_POOL_SIZE;
+@@ -4017,7 +4017,7 @@ static int __devinit dev_eth_probe(struc
+     /* configure and enable a fast TX queuing discipline */
+     TRACE;
+ 
+-    priv->qdisc = qdisc_create_dflt(ndev, &dev_qdisc_ops);
++    priv->qdisc = qdisc_create_dflt(ndev, &dev_qdisc_ops, 0);
+     ndev->qdisc_sleeping = priv->qdisc;
+     ndev->qdisc = priv->qdisc;
+     

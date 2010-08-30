@@ -1,0 +1,13 @@
+--- dietlibc-0.32/lib/alloc.c.realloc	2009-06-10 22:14:04.000000000 +0200
++++ dietlibc-0.32/lib/alloc.c	2009-06-10 22:14:15.000000000 +0200
+@@ -274,9 +274,7 @@ retzero:
+     }
+   }
+   else { /* ptr==0 */
+-    if (size) {
+-      ptr=_alloc_libc_malloc(size);
+-    }
++    ptr=_alloc_libc_malloc(size);
+   }
+   return ptr;
+ }

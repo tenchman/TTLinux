@@ -1,0 +1,8 @@
+# vim:set syntax=kconfig:
+
+menu "Filesystem utils"
+source "apps/sys-fs/e2fsprogs/Config.in"
+source "apps/sys-fs/drbd/Config.in"
+source "apps/sys-fs/ocfs2/Config.in"
+source "apps/sys-fs/inotify-tools/Config.in"
+endmenu

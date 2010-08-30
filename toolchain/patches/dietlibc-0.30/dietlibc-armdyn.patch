@@ -1,0 +1,201 @@
+--- dietlibc-0.30/arm/Makefile.add.armdyn	2002-05-09 03:05:10.000000000 +0200
++++ dietlibc-0.30/arm/Makefile.add	2008-07-22 21:35:46.000000000 +0200
+@@ -1,5 +1,5 @@
+ 
+-LIBOBJ+=$(OBJDIR)/md5asm.o
+-CFLAGS+=-Os -fomit-frame-pointer -fstrict-aliasing -mhard-float
++LIBOBJ+=$(OBJDIR)/md5asm.o $(OBJDIR)/__aeabi_unwind_cpp.o
++CFLAGS+=-Os -march=armv5te -mbig-endian -mtune=xscale -fomit-frame-pointer -fstrict-aliasing
+ VPATH:=arm:syscalls.s:$(VPATH)
+ LIBGMON_OBJS+=$(OBJDIR)/mcount.o
+--- dietlibc-0.30/arm/dyn_syscalls.S.armdyn	2005-10-08 23:22:09.000000000 +0200
++++ dietlibc-0.30/arm/dyn_syscalls.S	2008-07-22 21:35:46.000000000 +0200
+@@ -289,3 +289,4 @@ __exit:
+ 
+ #include "__longjmp.S"
+ #include "setjmp.S"
++#include "__guard.S"
+--- dietlibc-0.30/arm/syscalls.h.armdyn	2005-10-08 23:22:09.000000000 +0200
++++ dietlibc-0.30/arm/syscalls.h	2008-07-22 21:38:30.000000000 +0200
+@@ -1,3 +1,6 @@
++#ifndef _ARM_SYSCALL_H
++#define _ARM_SYSCALL_H 1
++
+ #define __NR_SYSCALL_BASE	0x900000
+ 
+ #define __NR_exit			(__NR_SYSCALL_BASE+  1)
+@@ -617,6 +620,7 @@
+ .else
+ 	b	__unified_syscall
+ .endif
++.size \sym,.-\sym
+ .endm
+ 
+ #define syscall(name,sym) __syscall $__NR_##name, sym, __ARGS_##name
+@@ -636,6 +640,8 @@
+ .else
+ 	b	__unified_syscall
+ .endif
++.size \sym,.-\sym
+ .endm
+ 
+ #endif
++#endif
+--- dietlibc-0.30/arm/__aeabi_unwind_cpp.S.armdyn	2008-07-22 21:35:46.000000000 +0200
++++ dietlibc-0.30/arm/__aeabi_unwind_cpp.S	2008-07-22 21:35:46.000000000 +0200
+@@ -0,0 +1,21 @@
++.text
++.global __aeabi_unwind_cpp_pr0
++.hidden __aeabi_unwind_cpp_pr0
++.type __aeabi_unwind_cpp_pr0, %function
++
++.global __aeabi_unwind_cpp_pr1
++.hidden __aeabi_unwind_cpp_pr1
++.type __aeabi_unwind_cpp_pr1, %function
++
++.global __aeabi_unwind_cpp_pr2
++.hidden __aeabi_unwind_cpp_pr2
++.type __aeabi_unwind_cpp_pr2, %function
++
++__aeabi_unwind_cpp_pr0:
++__aeabi_unwind_cpp_pr1:
++__aeabi_unwind_cpp_pr2:
++	mov	pc, lr	@ return from subroutine
++
++.size __aeabi_unwind_cpp_pr0,.-__aeabi_unwind_cpp_pr0
++.size __aeabi_unwind_cpp_pr1,.-__aeabi_unwind_cpp_pr1
++.size __aeabi_unwind_cpp_pr2,.-__aeabi_unwind_cpp_pr2
+--- dietlibc-0.30/dyn_start.c.armdyn	2008-07-22 21:35:46.000000000 +0200
++++ dietlibc-0.30/dyn_start.c	2008-07-22 21:35:46.000000000 +0200
+@@ -71,8 +71,10 @@ int _dyn_start(int argc, char **argv, ch
+ {
+   int main(int argc, char **argv, char **envp);
+ 
++#ifdef WANT_LIBGCC_EH_SUPPORT
+   void _dl_aux_init_from_envp(char **envp);
+   _dl_aux_init_from_envp(envp);
++#endif
+ 
+   if (dl_init) atexit(dl_init);
+   _init();
+--- dietlibc-0.30/libdl/dlerror.c.armdyn	2005-05-13 14:22:32.000000000 +0200
++++ dietlibc-0.30/libdl/dlerror.c	2008-07-22 21:35:46.000000000 +0200
+@@ -35,7 +35,7 @@ const char *dlerror(void) {
+   buf[len]=0;
+   --_dl_error;
+ 
+-  if (_dl_error>=(sizeof(_dl_error_msg)/sizeof(struct _dl_err_msg)))
++  if (_dl_error>=DIV(sizeof(_dl_error_msg),sizeof(struct _dl_err_msg)))
+     return "HAE ?!?";
+ 
+   if (_dl_error_location) {
+--- dietlibc-0.30/libdl/_dl_math.c.armdyn	2008-07-22 21:35:46.000000000 +0200
++++ dietlibc-0.30/libdl/_dl_math.c	2008-07-22 21:35:46.000000000 +0200
+@@ -0,0 +1,33 @@
++static unsigned int _dl_div(
++	unsigned int num, 
++	unsigned int den,
++	unsigned int * rem)
++{
++  unsigned int quot = 0, qbit = 1;
++
++  if (den == 0)
++    return 0;
++  /* Left-justify denominator and count shift */
++  while ((int) den >= 0) {
++    den <<= 1;
++    qbit <<= 1;
++  }
++  while (qbit) {
++    if (den <= num) {
++      num -= den;
++      quot += qbit;
++    }
++    den >>= 1;
++    qbit >>= 1;
++  }
++  if (rem)
++    *rem = num;
++  return quot;
++}
++
++static unsigned int _dl_mod(unsigned int num, unsigned int den)
++{
++  unsigned int rem;
++  _dl_div(num, den, &rem);
++  return rem;
++}
+--- dietlibc-0.30/libdl/_dl_alloc.c.armdyn	2005-10-07 21:33:34.000000000 +0200
++++ dietlibc-0.30/libdl/_dl_alloc.c	2008-07-22 21:35:46.000000000 +0200
+@@ -41,7 +41,7 @@ struct _dl_handle*_dl_get_handle() {
+     register int i,m;
+ #ifdef __DIET_LD_SO__
+     tmp = (struct _dl_handle*)_dl_sys_mmap(0,at_pagesize,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
+-    m=at_pagesize/sizeof(struct _dl_handle);
++    m=DIV(at_pagesize,sizeof(struct _dl_handle));
+ #else
+     int ps=getpagesize();
+     tmp = (struct _dl_handle*)mmap(0,ps,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
+--- dietlibc-0.30/libdl/_dl_main.c.armdyn	2005-10-07 21:33:34.000000000 +0200
++++ dietlibc-0.30/libdl/_dl_main.c	2008-07-22 21:35:46.000000000 +0200
+@@ -371,20 +371,20 @@ asm(".text \n"
+ "_dl_sys_mmap: \n"
+ "	stmdb	sp!,{r0,r1,r2,r3} \n"
+ "	mov	r0, sp \n"
+-"	swi	#0x900090		@ mmap \n"
++"	swi	#0x90005a		@ mmap \n"
+ "	add	sp, sp, #16 \n"
+ "	mov	pc, lr \n"
+ ".type	_dl_sys_munmap,function \n"
+ "_dl_sys_munmap: \n"
+-"	swi	#0x900091		@ munmap \n"
++"	swi	#0x90005b		@ munmap \n"
+ "	mov	pc, lr \n"
+ ".type	_dl_sys_fstat,function \n"
+ "_dl_sys_fstat: \n"
+-"	swi	#0x900108		@ fstat \n"
++"	swi	#0x90006c		@ fstat \n"
+ "	mov	pc, lr \n"
+ ".type	_dl_sys_mprotect,function \n"
+ "_dl_sys_mprotect: \n"
+-"	swi	#0x900125		@ mprotect \n"
++"	swi	#0x90007d		@ mprotect \n"
+ "	mov	pc, lr \n"
+ 
+ ".type	_dl_jump,function \n"
+@@ -689,6 +689,15 @@ static void _dl_debug_state(void) {
+ #endif
+ 
+ /* now reuse some unchanged sources */
++#ifdef __arm__
++#include "_dl_math.c"
++#define MOD(a,b) _dl_mod(a,b)
++#define DIV(a,b) _dl_div(a,b,NULL)
++#else
++#define MOD(a,b) (a % b)
++#define DIV(a,b) (a / b)
++#endif
++
+ #include "dlerror.c"
+ #include "_dl_alloc.c"
+ 
+@@ -1086,7 +1095,7 @@ static struct _dl_handle* _dl_dyn_scan(s
+ #ifdef DEBUG
+     pf(__FUNCTION__); pf(": try to relocate some values\n");
+ #endif
+-    if (_dl_relocate(dh,rel,relsize/relent)) return 0;
++    if (_dl_relocate(dh,rel,DIV(relsize,relent))) return 0;
+   }
+ 
+   /* do PTL / GOT relocation */
+--- dietlibc-0.30/libdl/dlsym.c.armdyn	2005-10-07 21:33:34.000000000 +0200
++++ dietlibc-0.30/libdl/dlsym.c	2008-07-22 21:35:46.000000000 +0200
+@@ -10,7 +10,7 @@ void *_dlsym(void* handle,const unsigned
+   if (handle) {
+     struct _dl_handle*dh=(struct _dl_handle*)handle;
+     unsigned int hash =elf_hash(symbol);
+-    unsigned int bhash=hash%HASH_BUCKET_LEN(dh->hash_tab);
++    unsigned int bhash=MOD(hash, HASH_BUCKET_LEN(dh->hash_tab));
+     unsigned int*chain=HASH_CHAIN(dh->hash_tab);
+     unsigned int ind;
+     unsigned char*name=(unsigned char*)dh->dyn_str_tab;

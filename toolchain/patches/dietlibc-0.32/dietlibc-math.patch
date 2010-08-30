@@ -1,0 +1,52 @@
+--- dietlibc-0.30/lib/__finite.c.math	2008-03-18 23:34:49.000000000 +0100
++++ dietlibc-0.30/lib/__finite.c	2008-03-18 23:36:48.000000000 +0100
+@@ -1,7 +1,18 @@
+ #include <math.h>
++#include <inttypes.h>
+ 
+ int finite(double d) {
+   return isinf(d)==0 && isnan(d)==0;
+ }
+ 
++int finitef(float f) {
++  union {
++    float value;
++    uint32_t word;
++  } u;
++  u.value = f;
++  return (int)((uint32_t)((u.word&0x7fffffff)-0x7f800000)>>31);
++}
++
+ int __finite(double d) __attribute__((alias("finite")));
++int __finitef(float d) __attribute__((alias("finitef")));
+--- dietlibc-0.30/include/math.h.math	2004-08-04 00:28:46.000000000 +0200
++++ dietlibc-0.30/include/math.h	2008-03-18 23:39:21.000000000 +0100
+@@ -72,14 +72,12 @@
+ 
+ double copysign(double value, double sign) __attribute__((__const__));
+ 
+-#  define HUGE_VAL \
+-  (__extension__ \
+-   ((union { unsigned long long __ll; double __d; }) \
+-    { __ll: 0x7ff0000000000000ULL }).__d)
+-#  define HUGE_VALF \
+-  (__extension__ \
+-   ((union { unsigned int __i; float __f; }) \
+-    { __i: 0x7f800000UL }).__f)
++#ifndef HUGE_VAL
++#  define HUGE_VAL (__extension__ ((union { unsigned long long __ll; double __d; }) { __ll: 0x7ff0000000000000ULL }).__d)
++#endif
++#ifndef HUGE_VALF
++#  define HUGE_VALF (__extension__ ((union { unsigned int __i; float __f; }) { __i: 0x7f800000UL }).__f)
++#endif
+ 
+ #ifdef _GNU_SOURCE
+ void sincos(double x, double* sinx, double* cosx);
+@@ -89,6 +87,7 @@
+ int isnan(double d) __attribute__((__const__));
+ int isinf(double d) __attribute__((__const__));
+ int finite(double d) __attribute__((__const__));
++int finitef(float d) __attribute__((__const__));
+ 
+ double j0(double x);
+ double j1(double x);

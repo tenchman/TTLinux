@@ -1,0 +1,10 @@
+--- conntrackd-0.9.2/src/main.c.diet	2007-03-26 21:41:30.000000000 +0200
++++ conntrackd-0.9.2/src/main.c	2007-03-26 21:41:50.000000000 +0200
+@@ -17,6 +17,7 @@
+  */
+ 
+ #include <stdlib.h>
++#include <limits.h>
+ #include "conntrackd.h"
+ #include "log.h"
+ #include <sys/types.h>

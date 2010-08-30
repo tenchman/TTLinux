@@ -1,0 +1,11 @@
+--- csync2-1.32/configure.ac.gnutls	2006-10-11 15:12:30.000000000 +0200
++++ csync2-1.32/configure.ac	2006-10-11 15:17:39.000000000 +0200
+@@ -60,7 +60,7 @@
+ then
+ 
+ 	# Check for gnuTLS.
+-	AM_PATH_LIBGNUTLS(1.0.0, , [ AC_MSG_ERROR([[gnutls not found; install gnutls, gnutls-openssl and libtasn1 packages for your system or run configure with --disable-gnutls]]) ])
++	AC_CHECK_LIB([gnutls], [gnutls_x509_privkey_sign_data], , [ AC_MSG_ERROR([[gnutls not found; install gnutls, gnutls-openssl and libtasn1 packages for your system or run configure with --disable-gnutls]]) ])
+ 
+ 	# This is a bloody hack for fedora core
+ 	CFLAGS="$CFLAGS $LIBGNUTLS_CFLAGS"

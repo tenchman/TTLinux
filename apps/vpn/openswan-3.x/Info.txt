@@ -1,0 +1,16 @@
+# $Id: Info.txt 1042 2007-05-09 14:47:15Z frank $
+Dinge:
+- openswan-3.0.06.tar.gz nach /opt/ttlinux/nexgen/distfiles ablegen
+- in /opt/ttlinux/nexgen/makefiles/packages.mk Pfade eintragen:
+  SUBDIRS-$(CONFIG_OPENSWAN)    += apps/vpn/openswan-3.x
+- mkdir /opt/ttlinux/nexgen/apps/vpn/openswan-3.x/
+  Makefile und Config.in anpassen
+- in /opt/ttlinux/nexgen/apps/vpn/Config.in folgendes eintragen:
+  source "apps/vpn/openswan-3.x/Config.in"
+
+Patchen:
+- Originaldatei nach Originaldatei.frank kopieren
+- Änderungen in Originaldatei vornehmen
+- gendiff openswan-3.0.06 .frank > openswan-3.0.06-frank.patch
+- cd /opt/ttlinux/nexgen/
+- make

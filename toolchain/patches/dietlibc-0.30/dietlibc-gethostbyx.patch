@@ -1,0 +1,75 @@
+diff -up dietlibc-0.30/libcruft/dnscruft2.c.gethostbyx dietlibc-0.30/libcruft/dnscruft2.c
+--- dietlibc-0.30/libcruft/dnscruft2.c.gethostbyx	2005-05-01 22:08:25.000000000 +0200
++++ dietlibc-0.30/libcruft/dnscruft2.c	2009-06-26 10:40:06.000000000 +0200
+@@ -36,7 +36,6 @@ int __dns_gethostbyx_r(const char* name,
+ 			struct hostent **RESULT, int *h_errnop, int lookfor) {
+ #endif
+   int names,ips;
+-  char *cur;
+   char *max;
+   char inpkg[1500];
+   char* tmp;
+@@ -49,11 +48,6 @@ int __dns_gethostbyx_r(const char* name,
+     result->h_addrtype=AF_INET6;
+     result->h_length=16;
+   }
+-  result->h_aliases=(char**)(buf+8*sizeof(char*));
+-  result->h_addr_list=(char**)buf;
+-  result->h_aliases[0]=0;
+-
+-  cur=buf+16*sizeof(char*);
+   max=buf+buflen;
+   names=ips=0;
+ 
+@@ -65,6 +59,7 @@ invalidpacket:
+   {
+     tmp=inpkg+12;
+     {
++      char *cur;
+       unsigned char Name[257];
+       unsigned short q=((unsigned short)inpkg[4]<<8)+inpkg[5];
+       while (q>0) {
+@@ -76,6 +71,12 @@ invalidpacket:
+       if (tmp>inpkg+size) goto invalidpacket;
+       q=((unsigned short)inpkg[6]<<8)+inpkg[7];
+       if (q<1) goto nodata;
++      /* use 'anscnt' to calculate the offsets */
++      result->h_addr_list = (char**)buf;
++      result->h_aliases = (char**)(buf + (q + 1) * sizeof(char*));
++      cur = buf + ((q + 1)<<1) * sizeof(char*);
++      result->h_aliases[0] = 0;
++
+       while (q>0) {
+ 	int decofs=__dns_decodename((unsigned char*)inpkg,(size_t)(tmp-(char*)inpkg),Name,256,(unsigned char*)inpkg+size);
+ 	if (decofs<0) break;
+@@ -111,19 +112,17 @@ invalidpacket:
+ 	    result->h_name=cur;
+ 	  else
+ 	    result->h_aliases[names-1]=cur;
+-	  result->h_aliases[names]=0;
+-	  if (names<8) ++names;
+-/*		cur+=slen+1; */
++	  result->h_aliases[names++]=0;
++	  
+ 	  cur+=(slen|3)+1;
+ 	  result->h_addr_list[ips++] = cur;
++	  result->h_addr_list[ips]=0;
+ 	  if (lookfor==1) /* A */ {
+ 	    memcpy(cur,tmp,4);
+ 	    cur+=4; tmp+=4;
+-	    result->h_addr_list[ips]=0;
+ 	  } else if (lookfor==28) /* AAAA */ {
+ 	    memcpy(cur,tmp,16);
+ 	    cur+=16; tmp+=16;
+-	    result->h_addr_list[ips]=0;
+ 	  }
+ 	}
+ /*	      puts(Name); */
+@@ -159,6 +158,7 @@ int __dns_gethostbyx_r(const char* name,
+   while ((res=__dns_gethostbyx_r_inner(tmp,result,buf,buflen,RESULT,h_errnop,lookfor))) {
+     if (res==-1 && *h_errnop!=HOST_NOT_FOUND) break;
+     if (count==__dns_search) break;
++    if (len && Buf[len-1]=='.') break;
+     Buf[len]='.';
+ //    printf("appending %d: %p (%s)\n",count,__dns_domains[count],__dns_domains[count]);
+     memccpy(Buf+len+1,__dns_domains[count],0,MAXDNAME-len-1);

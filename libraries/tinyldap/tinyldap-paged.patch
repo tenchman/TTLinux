@@ -1,0 +1,274 @@
+diff -up tinyldap-20080311/scan_asn1transparent.c.paged tinyldap-20080311/scan_asn1transparent.c
+--- tinyldap-20080311/scan_asn1transparent.c.paged	2008-03-11 14:08:01.000000000 +0100
++++ tinyldap-20080311/scan_asn1transparent.c	2008-03-11 14:08:01.000000000 +0100
+@@ -0,0 +1,15 @@
++#include "asn1.h"
++#include "byte.h"
++
++size_t scan_asn1transparent(const char* src, const char *max,
++    enum asn1_tagclass *tc, enum asn1_tagtype *tt, enum asn1_tag *tag,
++    size_t *l)
++{
++  size_t len=0;
++  
++  if (!(len=scan_asn1tag(src,max,tc,tt,tag)))
++    return 0;
++  if (!(len+=scan_asn1length(src+len,max,l)))
++    return 0;
++  return len;
++}
+diff -up tinyldap-20080311/controls.h.paged tinyldap-20080311/controls.h
+--- tinyldap-20080311/controls.h.paged	2008-03-11 14:08:01.000000000 +0100
++++ tinyldap-20080311/controls.h	2008-03-11 14:08:01.000000000 +0100
+@@ -0,0 +1,8 @@
++#ifndef _CONTROLS_H
++#define _CONTROLS_H
++
++
++#define CONTROL_TYPE_PAGED "1.2.840.113556.1.4.319"
++
++
++#endif /* _CONTROLS_H */
+diff -up tinyldap-20080311/fmt_paged.c.paged tinyldap-20080311/fmt_paged.c
+--- tinyldap-20080311/fmt_paged.c.paged	2008-03-11 14:08:01.000000000 +0100
++++ tinyldap-20080311/fmt_paged.c	2008-03-11 14:08:01.000000000 +0100
+@@ -0,0 +1,62 @@
++#include <stdlib.h>
++#include <string.h>
++#include "asn1.h"
++#include "ldap.h"
++#include "controls.h"
++
++
++int fmt_pagedResult(char *dest, struct PagedResult *rp) {
++  int l=0, sum;
++  char *tmp;
++
++  if (!rp)
++    return 0;
++  l=fmt_asn1INTEGER(NULL,rp->size);  
++  l+=fmt_asn1OCTETSTRING(NULL,rp->cookie.s,rp->cookie.l);
++  sum=l+fmt_asn1SEQUENCE(NULL,l);
++  if (dest) {
++    tmp = dest;
++    tmp+=fmt_asn1SEQUENCE(tmp,l);
++    tmp+=fmt_asn1INTEGER(tmp,rp->size);  
++    tmp+=fmt_asn1OCTETSTRING(tmp,rp->cookie.s,rp->cookie.l);
++  }
++  return sum;
++}
++
++
++/* extend to array of controls */
++size_t fmt_control(char *dest, struct Control *c) {
++  int l=0, sum=0,zsum=0,vlen=0;
++  char *tmp,*val;
++  char *ctrl = CONTROL_TYPE_PAGED;
++  enum asn1_tagclass tc=PRIVATE;
++  enum asn1_tagtype tt=CONSTRUCTED;
++  unsigned long tag=0;
++
++  if (!c)
++    return 0;
++
++  vlen=fmt_pagedResult(NULL,c->rp);
++  if (!(val=malloc(vlen)))
++    return 0;
++  fmt_pagedResult(val,c->rp);
++  
++  l=0;
++  l+=fmt_asn1OCTETSTRING(NULL,ctrl,strlen(ctrl));
++  l+=fmt_asn1OCTETSTRING(NULL,val,vlen);
++  zsum=l+fmt_asn1SEQUENCE(NULL,l);
++  sum=zsum+fmt_asn1transparent(NULL,tc,tt,tag,zsum);
++  
++  if (dest) {
++    tmp=dest;
++    tmp+=fmt_asn1transparent(tmp,tc,tt,tag,zsum);
++    tmp+=fmt_asn1SEQUENCE(tmp,l);
++    tmp+=fmt_asn1OCTETSTRING(tmp,ctrl,strlen(ctrl));
++    tmp+=fmt_asn1OCTETSTRING(tmp,val,vlen); 
++  }
++
++  free(val);
++  return sum;
++}
++
++
+diff -up tinyldap-20080311/asn1.h.paged tinyldap-20080311/asn1.h
+--- tinyldap-20080311/asn1.h.paged	2008-03-11 12:28:37.000000000 +0100
++++ tinyldap-20080311/asn1.h	2008-03-11 14:08:01.000000000 +0100
+@@ -113,6 +113,9 @@ size_t scan_asn1string(const char* src,c
+ 		    enum asn1_tagclass* tc,enum asn1_tagtype* tt,unsigned long* tag,
+ 		    const char** s,size_t* l);
+ 
++size_t scan_asn1transparent(const char* src,const char *max,enum asn1_tagclass *tc,
++			 enum asn1_tagtype *tt,enum asn1_tag *tag,size_t *l);
++
+ /* the following expect a specific universal type and return a parse
+  * error if the tag does not match that type */
+ size_t scan_asn1BOOLEAN(const char* src,const char* max,unsigned long* l);
+diff -up tinyldap-20080311/scan_paged.c.paged tinyldap-20080311/scan_paged.c
+--- tinyldap-20080311/scan_paged.c.paged	2008-03-11 14:08:01.000000000 +0100
++++ tinyldap-20080311/scan_paged.c	2008-03-11 14:10:52.000000000 +0100
+@@ -0,0 +1,77 @@
++#include <stdlib.h>
++#include <string.h>
++#include "asn1.h"
++#include "ldap.h"
++#include "controls.h"
++
++size_t scan_pagedResult(const char *src, const char *max, struct PagedResult *rp) {
++  size_t len=0;
++  long ilen=0;
++  int l=0, t;
++  char *tmp, *buf;
++  
++  t=scan_asn1SEQUENCE(src,max,&len);
++  if (!t || src + len > max || !rp)
++    return 0;
++  l=t;
++
++  t=scan_asn1INTEGER(src+l,max,&ilen);
++  if (!t) return 0;
++  l+=t;
++  rp->size=ilen;
++
++  if (!(t=scan_asn1STRING(src+l,max,(const char **)&tmp,&len)))
++    return 0;
++  rp->cookie.l=len;
++  
++  if (!(buf=malloc(rp->cookie.l)))
++    return 0;
++  memcpy(buf, tmp, rp->cookie.l);
++  rp->cookie.s = (const char *)buf;
++  
++  l+=t;
++  return l;
++}
++
++size_t scan_control(const char *src, const char *max, struct Control *c, unsigned long *len) {
++  enum asn1_tagclass tc = PRIVATE;
++  enum asn1_tagtype tt = CONSTRUCTED;
++  enum asn1_tag tag;
++  size_t ilen;
++  int l=0, t;
++  char *tmp;
++
++  if (!(t = scan_asn1transparent(src, max, &tc, &tt, &tag, (size_t *)len)) ||
++      tc != PRIVATE || tt != CONSTRUCTED ) 
++    return 0;
++  l += t;
++
++  if (!c || src + *len > max)
++    return l;
++
++  /* first control */
++  if (!(t = scan_asn1SEQUENCE(src+l,max,&ilen)))
++    return 0; 
++  l += t;
++
++  /* type */
++  if (!(t = scan_asn1STRING(src+l, max, (const char **)&tmp, &ilen)))
++    return 0;
++  l += t;
++  /*   l+=scan_asn1BOOLEAN(src+l,max,&ilen); */ /* optional? */
++
++  if (!strncmp(tmp, CONTROL_TYPE_PAGED, ilen))
++    c->type = pagedResult;
++
++  /* Control value */
++  if (!(t = scan_asn1STRING(src+l, max, (const char **)&tmp, &ilen)))
++    return 0;
++  l += t;
++
++  if (c->type == pagedResult) 
++    l+=scan_pagedResult(tmp, max, c->rp);
++  else /* unsupported type, quit */
++    return 0;
++  
++  return l;
++}
+diff -up tinyldap-20080311/fmt_ldapsearchrequest.c.paged tinyldap-20080311/fmt_ldapsearchrequest.c
+--- tinyldap-20080311/fmt_ldapsearchrequest.c.paged	2008-03-11 12:28:37.000000000 +0100
++++ tinyldap-20080311/fmt_ldapsearchrequest.c	2008-03-11 14:08:01.000000000 +0100
+@@ -18,5 +18,9 @@ size_t fmt_ldapsearchrequest(char* dest,
+   l=fmt_ldapsearchfilter(dest,sr->filter);
+   sum+=l; if (dest) dest+=l;
+   l=fmt_ldapadl(dest,sr->attributes);
+-  return sum+l;
++  sum+=l; if (dest) dest+=l;
++  if (sr->extension) { 
++    l=fmt_control(dest,sr->extension);
++    sum+=l;
++  } return sum;
+ }
+diff -up tinyldap-20080311/Makefile.paged tinyldap-20080311/Makefile
+--- tinyldap-20080311/Makefile.paged	2008-03-11 12:28:37.000000000 +0100
++++ tinyldap-20080311/Makefile	2008-03-11 14:08:01.000000000 +0100
+@@ -23,7 +23,8 @@ matchprefix.o matchcasestring.o matchcas
+ scan_ldapmodifyrequest.o scan_ldapaddrequest.o bstrlen.o bstrfirst.o \
+ bstrstart.o free_ldapadl.o free_ldappal.o free_ldapsearchfilter.o \
+ scan_ldapsearchfilterstring.o free_ldapsearchresultentry.o \
+-fmt_ldapsearchfilterstring.o ldap_match_sre.o
++fmt_ldapsearchfilterstring.o ldap_match_sre.o \
++scan_asn1transparent.o scan_paged.o fmt_paged.o
+ 
+ ldif.a: ldif_parse.o ldap_match_mapped.o
+ 
+diff -up tinyldap-20080311/ldap.h.paged tinyldap-20080311/ldap.h
+--- tinyldap-20080311/ldap.h.paged	2008-03-11 12:28:37.000000000 +0100
++++ tinyldap-20080311/ldap.h	2008-03-11 14:08:01.000000000 +0100
+@@ -24,6 +24,7 @@ struct AttributeDescriptionList {
+   struct AttributeDescriptionList *next;
+ };
+ 
++
+ struct PartialAttributeList {
+   struct string type;
+   struct AttributeDescriptionList* values;
+@@ -52,6 +53,20 @@ struct Filter {
+     /* next is used to form a linked list of subjects */
+ };
+ 
++struct PagedResult {
++  struct string cookie;
++  unsigned long size;
++};
++
++struct Control {
++/*   struct string string; */ /* only "1.2.840.113556.1.4.319" */
++  int critcality;
++  enum { 
++    pagedResult=0
++  } type;
++  struct PagedResult *rp;
++};
++
+ struct SearchRequest {
+   struct string baseObject;
+   enum { baseObject=0, singleLevel=1, wholeSubtree=2 } scope;
+@@ -64,6 +79,7 @@ struct SearchRequest {
+   unsigned long sizeLimit, timeLimit, typesOnly;
+   struct Filter* filter;
+   struct AttributeDescriptionList* attributes;
++  struct Control *extension;
+ };
+ 
+ struct SearchResultEntry {
+@@ -173,6 +189,7 @@ size_t scan_ldapresult(const char* src,c
+ size_t scan_ldapmodifyrequest(const char* src,const char* max,struct ModifyRequest* m);
+ size_t scan_ldapaddrequest(const char* src, const char * max, struct AddRequest * a);
+ size_t scan_ldapsearchfilterstring(const char* src,struct Filter** f);
++size_t scan_control(const char *src, const char *max, struct Control *c,unsigned long *len);
+ 
+ size_t fmt_ldapstring(char* dest,struct string* s);
+ size_t fmt_ldapmessage(char* dest,long messageid,long op,size_t len);
+@@ -187,6 +204,7 @@ size_t fmt_ldapadl(char* dest,struct Att
+ size_t fmt_ldapavl(char* dest,struct AttributeDescriptionList* adl);
+ size_t fmt_ldapmodifyrequest(char* dest,struct ModifyRequest* m);
+ size_t fmt_ldapsearchfilterstring(char* dest,struct Filter* f);
++size_t fmt_control(char *dest, struct Control *c);
+ 
+ #define fmt_ldapbindresponse(a,b,c,d,e) fmt_ldapresult(a,b,c,d,e)
+ #define fmt_ldapsearchresultdone(a,b,c,d,e) fmt_ldapresult(a,b,c,d,e)

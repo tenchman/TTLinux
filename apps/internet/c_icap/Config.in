@@ -1,0 +1,10 @@
+# vim:set syntax=kconfig:
+config CONFIG_C_ICAP
+  bool "C-icap - an ICAP server coded in C"
+  default n
+  help
+
+    http://sourceforge.net/projects/c-icap/
+
+source "apps/internet/c_icap-contentfilter/Config.in"
+source "apps/internet/c_icap-ofcd/Config.in"

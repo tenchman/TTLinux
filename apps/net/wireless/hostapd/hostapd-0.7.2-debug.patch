@@ -1,0 +1,35 @@
+diff -up hostapd-0.7.2/src/ap/ap_drv_ops.c.debug hostapd-0.7.2/src/ap/ap_drv_ops.c
+--- hostapd-0.7.2/src/ap/ap_drv_ops.c.debug	2010-08-18 09:33:27.376675179 +0200
++++ hostapd-0.7.2/src/ap/ap_drv_ops.c	2010-08-18 09:40:38.635674861 +0200
+@@ -195,7 +195,11 @@ static int hostapd_set_bss_params(struct
+ 	int preamble;
+ #ifdef CONFIG_IEEE80211N
+ 	u8 buf[60], *ht_capab, *ht_oper, *pos;
++#endif /* CONFIG_IEEE80211N */
++
++	wpa_printf(MSG_ERROR, "entering %s", __func__);
+ 
++#ifdef CONFIG_IEEE80211N
+ 	pos = buf;
+ 	ht_capab = pos;
+ 	pos = hostapd_eid_ht_capabilities(hapd, pos);
+@@ -244,6 +248,7 @@ static int hostapd_set_bss_params(struct
+ 		ret = -1;
+ 	}
+ 
++	wpa_printf(MSG_ERROR, "leaving %s", __func__);
+ 	return ret;
+ }
+ 
+diff -up hostapd-0.7.2/src/drivers/driver_nl80211.c.debug hostapd-0.7.2/src/drivers/driver_nl80211.c
+--- hostapd-0.7.2/src/drivers/driver_nl80211.c.debug	2010-08-18 13:46:16.108674032 +0200
++++ hostapd-0.7.2/src/drivers/driver_nl80211.c	2010-08-18 13:45:54.711674777 +0200
+@@ -4276,6 +4276,8 @@ static int i802_set_ap_isolate(void *pri
+ 	genlmsg_put(msg, 0, 0, genl_family_get_id(drv->nl80211), 0, 0,
+ 		    NL80211_CMD_SET_BSS, 0);
+ 
++	wpa_printf(MSG_DEBUG, "%s: %s val: %d", __func__, bss->ifname, val);
++	
+ 	NLA_PUT_U8(msg, NL80211_ATTR_AP_ISOLATE, !!val);
+ 
+ 	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, if_nametoindex(bss->ifname));

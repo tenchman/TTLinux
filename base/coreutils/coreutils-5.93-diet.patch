@@ -1,0 +1,35 @@
+--- coreutils-5.93/src/paste.c.diet	2005-05-14 09:58:37.000000000 +0200
++++ coreutils-5.93/src/paste.c	2006-03-09 18:41:10.000000000 +0100
+@@ -37,8 +37,12 @@
+    If no FILEs are given, standard input is used. */
+ 
+ #include <config.h>
+-
++/* don't ask */
++#ifndef __dietlibc__
+ #include <stdio.h>
++#else
++typedef struct __stdio_file FILE;
++#endif
+ #include <getopt.h>
+ #include <sys/types.h>
+ #include "system.h"
+--- coreutils-5.93/man/Makefile.am.diet	2005-10-13 16:12:51.000000000 +0200
++++ coreutils-5.93/man/Makefile.am	2006-03-09 18:58:49.000000000 +0100
+@@ -3,7 +3,7 @@
+   basename.1 cat.1 chgrp.1 chmod.1 chown.1 chroot.1 cksum.1 comm.1 \
+   cp.1 csplit.1 cut.1 date.1 dd.1 df.1 dir.1 dircolors.1 dirname.1 du.1 \
+   echo.1 env.1 expand.1 expr.1 factor.1 false.1 fmt.1 fold.1 groups.1 \
+-  head.1 hostid.1 hostname.1 id.1 install.1 join.1 kill.1 \
++  head.1 hostname.1 id.1 install.1 join.1 kill.1 \
+   link.1 ln.1 logname.1 \
+   ls.1 md5sum.1 mkdir.1 mkfifo.1 mknod.1 mv.1 nice.1 nl.1 nohup.1 od.1 \
+   paste.1 pathchk.1 pinky.1 pr.1 printenv.1 printf.1 ptx.1 pwd.1 readlink.1 \
+@@ -51,7 +51,6 @@
+ fold.1:		$(common_dep)	$(srcdir)/fold.x	../src/fold.c
+ groups.1:	$(common_dep)	$(srcdir)/groups.x	../src/groups.sh
+ head.1:		$(common_dep)	$(srcdir)/head.x	../src/head.c
+-hostid.1:	$(common_dep)	$(srcdir)/hostid.x	../src/hostid.c
+ hostname.1:	$(common_dep)	$(srcdir)/hostname.x	../src/hostname.c
+ id.1:		$(common_dep)	$(srcdir)/id.x		../src/id.c
+ install.1:	$(common_dep)	$(srcdir)/install.x	../src/install.c

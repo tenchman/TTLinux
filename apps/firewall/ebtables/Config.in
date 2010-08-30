@@ -1,0 +1,11 @@
+# vim:set syntax=kconfig:
+config CONFIG_EBTABLES
+  bool "ebtables - A filtering tool for a bridging firewall."
+  default y
+  help
+    ebtables program is a filtering tool for a bridging firewall. The
+    filtering is focused on the Link Layer Ethernet frame fields. Apart
+    from filtering, it also gives the ability to alter Ethernet MAC
+    addresses and implement a brouter.
+
+    http://ebtables.sourceforge.net/

@@ -1,0 +1,11 @@
+# vim: set syntax=kconfig:
+config CONFIG_KERBEROS5
+  bool "Kerberos 5 - Kerberos network authentication system"
+  default n
+  select CONFIG_LIBCOMERR
+  help
+    Kerberos is a network authentication system. The krb5-libs package
+    contains the shared libraries needed by Kerberos 5. If you are using
+    Kerberos, you need to install this package.
+
+    http://web.mit.edu/kerberos/www/

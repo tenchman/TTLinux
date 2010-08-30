@@ -1,0 +1,45 @@
+--- cvstrac-2.0.1/db.c.diet	2007-01-28 19:40:07.000000000 +0100
++++ cvstrac-2.0.1/db.c	2007-03-29 22:31:10.000000000 +0200
+@@ -923,6 +923,7 @@
+   sqlite3_result_text(context, zResult, -1, SQLITE_TRANSIENT);
+ }
+ 
++#ifdef CVSTRAC_I18N
+ /*
+ ** Implementation of the length() function for local encoding
+ */
+@@ -1003,6 +1004,7 @@
+   }
+   sqlite3_result_text(context, (char*)&z[pz1], pz2, SQLITE_TRANSIENT);
+ }
++#endif
+ 
+ /*
+ ** This routine adds the extra SQL functions to the SQL engine.
+--- cvstrac-2.0.1/config.h.diet	2007-01-28 00:29:40.000000000 +0100
++++ cvstrac-2.0.1/config.h	2007-03-29 22:32:52.000000000 +0200
+@@ -9,7 +9,7 @@
+ #include <stdarg.h>
+ #include <sqlite3.h>
+ #include <assert.h>
+-#if defined(__linux__) || defined(__sun__)
++#if (defined(__linux__) || defined(__sun__)) && !defined(__dietlibc__)
+ #include <crypt.h>
+ #endif
+ 
+@@ -81,15 +81,10 @@
+ /* #define USE_STRICT_AUTHORIZER 1 */
+ 
+ /* Unset the following to disable internationalization code. */
+-#ifndef CVSTRAC_I18N
+-# define CVSTRAC_I18N 1
+-#endif
+-
+ #if CVSTRAC_I18N
+ # include <locale.h>
+ # include <langinfo.h>
+ #endif
+ #ifndef CODESET
+ # undef CVSTRAC_I18N
+-# define CVSTRAC_I18N 0
+ #endif

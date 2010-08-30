@@ -1,0 +1,29 @@
+--- dcron-3.2/subs.c.diet	2009-12-22 21:35:10.000000000 +0100
++++ dcron-3.2/subs.c	2009-12-22 21:35:44.000000000 +0100
+@@ -11,7 +11,6 @@
+ Prototype void logn(int level, const char *ctl, ...);
+ Prototype void log9(const char *ctl, ...);
+ Prototype void logfd(int fd, const char *ctl, ...);
+-Prototype void fdprintf(int fd, const char *ctl, ...);
+ Prototype int ChangeUser(const char *user, short dochdir);
+ Prototype void vlog(int level, int fd, const char *ctl, va_list va);
+ Prototype int slog(char *buf, const char *ctl, int nmax, va_list va, short useDate);
+@@ -46,18 +45,6 @@ logfd(int fd, const char *ctl, ...)
+     va_end(va);
+ }
+ 
+-void 
+-fdprintf(int fd, const char *ctl, ...)
+-{
+-    va_list va;
+-    char buf[2048];
+-
+-    va_start(va, ctl);
+-    vsnprintf(buf, sizeof(buf), ctl, va);
+-    write(fd, buf, strlen(buf));
+-    va_end(va);
+-}
+-
+ void
+ vlog(int level, int fd, const char *ctl, va_list va)
+ {

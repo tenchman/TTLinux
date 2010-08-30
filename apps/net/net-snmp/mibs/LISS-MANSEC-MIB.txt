@@ -1,0 +1,292 @@
+-- -*- asn1 -*-
+-- $Id: LISS-MANSEC-MIB.txt 1192 2007-11-22 12:25:43Z manfred $ --
+LISS-MANSEC-MIB DEFINITIONS ::= BEGIN
+
+IMPORTS
+    sysName
+        FROM SNMPv2-MIB
+
+    IpAddress,
+    TimeTicks,
+    OBJECT-TYPE,
+    MODULE-IDENTITY,
+    NOTIFICATION-TYPE
+        FROM SNMPv2-SMI
+
+    MODULE-COMPLIANCE, 
+    OBJECT-GROUP,
+    NOTIFICATION-GROUP
+        FROM SNMPv2-CONF
+
+    CounterBasedGauge64
+        FROM HCNUM-TC
+
+    lissMIB,
+    lissVersion,
+    lissVersionMajor,
+    lissVersionMinor,
+    lissVersionPatch,
+    lissSerialNumber
+        FROM LISS-MIB
+        ;
+
+
+    --
+    -- A brief description and update information about this mib.
+    --
+    lissMansecMIB MODULE-IDENTITY
+    LAST-UPDATED "200710021200Z"            -- 02 October 2007, high noon
+    ORGANIZATION "TELCO TECH GmbH"
+    CONTACT-INFO "postal:   
+    Potsdamer Str. 18a
+    Teltow
+
+    email:    support@telco-tech.de
+    "
+    DESCRIPTION  "The MIB module for LiSS(TM) devices supporting Managed Security 
+    by TELCO TECH GmbH.
+    "
+    REVISION     "200710021200Z"            -- 02 October 2007, high noon
+    DESCRIPTION  "Initial release."
+    ::= { lissMIB 4 }
+    
+
+    -- Recommended OIDs from RFC 4181 appendix D
+    lissMansecNotifications OBJECT IDENTIFIER ::= { lissMansecMIB 0 }
+    lissMansecObjects       OBJECT IDENTIFIER ::= { lissMansecMIB 1 }
+    lissMansecConformance   OBJECT IDENTIFIER ::= { lissMansecMIB 2 }
+    lissMansecCompliances   OBJECT IDENTIFIER ::= { lissMansecConformance 1 }
+    lissMansecGroups        OBJECT IDENTIFIER ::= { lissMansecConformance 2 }
+    
+    -- a subtree for objects that do not fit into a more specific category
+    lissMansecSystem        OBJECT IDENTIFIER ::= { lissMansecObjects 1 }
+    -- a subtree for objects related to the devices firmware
+    lissMansecFirmware      OBJECT IDENTIFIER ::= { lissMansecObjects 2 }    
+    
+    --
+    -- Notifications
+    --
+    lissMansecBootupNotification NOTIFICATION-TYPE
+    OBJECTS {
+        lissSerialNumber,
+        lissVersion,
+        lissMansecIP,
+        sysName
+    }
+    STATUS      current
+    DESCRIPTION "
+    This Notification indicates a LiSS(TM) devices is booted.
+    "
+    ::= { lissMansecNotifications 1 }
+    
+    
+    lissMansecShutdownNotification NOTIFICATION-TYPE
+    OBJECTS {
+        lissSerialNumber
+    }
+    STATUS      current
+    DESCRIPTION "
+    This Notification indicates a LiSS(TM) devices is being (properly) shut down.
+    "
+    ::= { lissMansecNotifications 2 }
+    
+    
+    lissMansecDialinNotification NOTIFICATION-TYPE
+    OBJECTS {
+        lissSerialNumber,
+        lissMansecIP,
+        sysName
+    }
+    STATUS      current
+    DESCRIPTION "
+    This Notification indicates a LiSS(TM) devices is being (properly) shut down.
+    "
+    ::= { lissMansecNotifications 3 }
+
+    --
+    -- The system subtree
+    --
+    
+    lissMansecIP OBJECT-TYPE
+    SYNTAX      IpAddress
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "
+    IP address of the first network interface through which the traffic to the
+    configured management server is routed.
+    "
+    ::= { lissMansecSystem 1 }
+
+    lissMansecStatus OBJECT-TYPE
+    SYNTAX      INTEGER {
+        other(1),
+        inactive(2),
+        active(3),
+        polled(4)
+    }
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION "
+    Managed status of the LiSS(TM) device.
+
+    1) None of the other statuses.
+    2) The device does not generate any SNMP traffic (notifications) and is not
+       polled by a monitor.
+    3) The device sends SNMP notifications to the monitor, if there is one 
+       configured on the device.
+    4) The device sends notifications like under 3) and is polled for health status
+       information by the monitor.
+    "
+    ::= { lissMansecSystem 2 }
+
+    --
+    -- The Firmware subtree
+    --
+
+    lissMansecHardwareCode OBJECT-TYPE
+    SYNTAX      CounterBasedGauge64
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "
+    The devices hardware code.
+    "
+    ::= { lissMansecFirmware 1 }
+    
+    
+    lissMansecSoftwareCode OBJECT-TYPE
+    SYNTAX      CounterBasedGauge64
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "
+    The devices software code.
+    "
+    ::= { lissMansecFirmware 2 }
+    
+
+    lissMansecNextVersion OBJECT IDENTIFIER ::= { lissMansecFirmware 3 }
+
+    -- The subtree defining the version number parts
+    lissMansecNextVersionMajor OBJECT-TYPE
+    SYNTAX INTEGER {
+        unknown(1),
+        series(3)
+    }
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION "
+    The major (most significant) version number part.
+    "
+    ::= { lissMansecNextVersion 1 }
+
+    lissMansecNextVersionMinor OBJECT-TYPE
+    SYNTAX Integer32 (1..999)
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION "
+    The minor version number part.
+    "
+    ::= { lissMansecNextVersion 2 }
+
+    lissMansecNextVersionPatch OBJECT-TYPE
+    SYNTAX Integer32 (1..999)
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION "
+    The least significant version number part.
+    "
+    ::= { lissMansecNextVersion 3 }
+
+    lissMansecNextVersionState OBJECT-TYPE
+    SYNTAX INTEGER {
+      other(1),
+      alpha(8),
+      beta(9),
+      pre-rel(10),
+      release(11)
+    }
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION "
+    The release status. As the SNMP representation cannot use the same
+    values the LiSS(TM) build system uses the indexes are selected from
+    a completely distinct set of numbers, leaving some space for future
+    additions.
+    "
+    ::= { lissMansecNextVersion 4 }
+    -- end version number subtree
+
+    lissMansecNextUpdate OBJECT-TYPE
+    SYNTAX      TimeTicks
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION "
+    Time ticks until the next scheduled firmware update will be performed.
+    "
+    ::= { lissMansecFirmware 4 }
+    
+    --
+    -- MIB Compliance statements.
+    --
+
+    lissMansecFullCompliance MODULE-COMPLIANCE
+    STATUS      current
+    DESCRIPTION "
+    When this MIB is implemented with support for read-write, then
+    such an implementation can claim full compliance. Such devices
+    can then be both monitored and configured with this MIB.
+
+    Full compliance for this module further requires a read/write compliantly
+    implemented LISS-MIB module.
+    "
+    MODULE -- This module
+    MANDATORY-GROUPS { lissMansecPrimaryGroup, lissMansecNotificationGroup }
+
+
+    GROUP lissMansecPrimaryGroup
+    DESCRIPTION "
+    This group is mandatory for LiSS(TM) devices supporting managed security.
+    "
+
+
+    GROUP lissMansecNotificationGroup
+    DESCRIPTION "
+    This group is mandatory for LiSS(TM) devices supporting managed security.
+    "
+    ::= { lissMansecCompliances 1 }
+
+    --
+    -- Groups
+    --
+
+    lissMansecPrimaryGroup OBJECT-GROUP
+    OBJECTS {
+        lissMansecHardwareCode,
+        lissMansecSoftwareCode,
+        lissMansecNextVersion,
+        lissMansecNextVersionMajor,
+        lissMansecNextVersionMinor,
+        lissMansecNextVersionPatch,
+        lissMansecNextVersionState,
+        lissMansecNextUpdate,
+        lissMansecIP
+    }
+    STATUS      current
+    DESCRIPTION "
+    The primary group for LiSS(TM) managed security objects.
+    "
+    ::= { lissMansecGroups 1 }
+
+    
+    lissMansecNotificationGroup NOTIFICATION-GROUP
+    NOTIFICATIONS {
+        lissMansecShutdownNotification,
+        lissMansecBootupNotification,
+        lissMansecDialinNotification
+    }
+    STATUS      current
+    DESCRIPTION "
+    A group for notification objects.
+    "
+    ::= { lissMansecGroups 2 }
+
+END

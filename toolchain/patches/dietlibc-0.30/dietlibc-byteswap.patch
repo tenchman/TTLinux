@@ -1,0 +1,12 @@
+diff -up dietlibc-0.30/include/byteswap.h.byteswap dietlibc-0.30/include/byteswap.h
+--- dietlibc-0.30/include/byteswap.h.byteswap	2008-03-18 11:53:34.000000000 +0100
++++ dietlibc-0.30/include/byteswap.h	2008-03-18 11:54:06.000000000 +0100
+@@ -15,4 +15,8 @@ static inline unsigned long long bswap_6
+   return (((unsigned long long)bswap_32(x&0xffffffffull))<<32) | (bswap_32(x>>32));
+ }
+ 
++#define __bswap_16(x) bswap_16 (x)
++#define __bswap_32(x) bswap_32 (x)
++#define __bswap_64(x) bswap_64 (x)
++
+ #endif

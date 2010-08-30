@@ -1,0 +1,4 @@
+http://packages.debian.org/stable/ca-certificates
+-----
+Actually, there is nothing to stabilize, so unstable version (currently debian sid) is also possible.
+http://packages.debian.org/unstable/ca-certificates 

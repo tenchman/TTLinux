@@ -1,0 +1,54 @@
+--- drbd-8.2.5/user/drbdtool_common.c.diet	2007-11-01 18:36:38.000000000 +0100
++++ drbd-8.2.5/user/drbdtool_common.c	2007-11-28 12:15:59.000000000 +0100
+@@ -14,7 +14,12 @@
+ #include <stdlib.h>
+ #include <ctype.h>
+ #include <linux/drbd.h>
++#ifdef __dietlibc__
++#define BLKGETSIZE _IO(0x12,96)
++#define BLKGETSIZE64 _IOR(0x12,114,size_t)
++#else
+ #include <linux/fs.h>           /* for BLKGETSIZE64 */
++#endif
+ #include <string.h>
+ 
+ #include "drbdtool_common.h"
+
+--- drbd-8.2.5/user/drbdmeta.c.diet	2007-11-01 18:36:38.000000000 +0100
++++ drbd-8.2.5/user/drbdmeta.c	2007-11-28 12:15:59.000000000 +0100
+@@ -45,7 +45,11 @@
+ #include <fcntl.h>
+ 
+ #include <linux/drbd.h>		/* only use DRBD_MAGIC from here! */
++#ifdef __dietlibc__
++#define BLKFLSBUF  _IO(0x12,97)
++#else
+ #include <linux/fs.h>           /* for BLKFLSBUF */
++#endif
+ 
+ #include "drbd_endian.h"
+ #include "drbdtool_common.h"
+--- drbd-8.2.5/user/Makefile.diet	2007-11-28 12:17:21.000000000 +0100
++++ drbd-8.2.5/user/Makefile	2007-11-28 12:18:41.000000000 +0100
+@@ -43,7 +43,7 @@
+ 	cp $^ $@
+ 
+ drbdadm: $(drbdadm-obj)
+-	$(CC) -o $@ $^
++	$(CC) -o $@ $^ -L/opt/diet/lib-$(ARCH) -lcompat
+ 
+ # for debugging:
+ # 	LANG=C LC_ALL=C flex -d -b -s -odrbdadm_scanner.c drbdadm_scanner.fl
+@@ -55,10 +55,10 @@
+ 	flex -s -odrbdmeta_scanner.c drbdmeta_scanner.fl
+ 
+ drbdsetup: $(drbdsetup-obj)
+-	$(CC) -o $@ $^
++	$(CC) -o $@ $^ -L/opt/diet/lib-$(ARCH) -lcompat
+ 
+ drbdmeta: $(drbdmeta-obj)
+-	$(CC) -o $@ $^
++	$(CC) -o $@ $^ -L/opt/diet/lib-$(ARCH) -lcompat
+ 
+ drbdmeta_unfinished_rewrite: CFLAGS += -fno-strict-aliasing
+ drbdmeta_unfinished_rewrite: drbdmeta_unfinished_rewrite.o drbdmeta_scanner.o drbdtool_common.o drbd_buildtag.o

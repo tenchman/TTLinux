@@ -1,0 +1,17 @@
+--- wakelan-1.1/Makefile.in.DESTDIR	2007-03-18 12:35:10.000000000 +0100
++++ wakelan-1.1/Makefile.in	2007-03-18 12:36:15.000000000 +0100
+@@ -54,10 +54,12 @@
+ install: install.bin install.man
+ 
+ install.bin: wakelan
+-	$(INSTALL_PROGRAM) wakelan $(bindir)
++	$(INSTALL) -d $(DESTDIR)$(bindir)
++	$(INSTALL_PROGRAM) wakelan $(DESTDIR)$(bindir)
+ 
+ install.man: wakelan.1
+-	$(INSTALL_PROGRAM) wakelan.1 $(mandir)/man1
++	$(INSTALL) -d $(DESTDIR)$(mandir)/man1
++	$(INSTALL_PROGRAM) wakelan.1 $(DESTDIR)$(mandir)/man1
+ 
+ distclean: clean
+ 	rm -rf Makefile config.h config.log config.cache config.status

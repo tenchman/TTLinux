@@ -1,0 +1,204 @@
+--- dietlibc-0.30/arm/unified.S.armasm	2002-02-28 17:13:20.000000000 +0100
++++ dietlibc-0.30/arm/unified.S	2008-04-01 23:04:54.000000000 +0200
+@@ -5,7 +5,9 @@
+ 	.align 2
+ 	
+ 	.global __unified_syscall
++	.type __unified_syscall, %function
+ 	.global __unified_syscall4
++	.type __unified_syscall4, %function
+ 
+ __unified_syscall4:
+ 	ldmia	sp!, {r4, r5, r6}
+@@ -28,6 +30,9 @@ __unified_syscall:
+ #include "dietuglyweaks.h"
+ 
+ 	mov	pc, lr			@ return
++.Lend:
++.size __unified_syscall,.Lend-__unified_syscall
++.size __unified_syscall4,.Lend-__unified_syscall4
+ 
+ #ifndef WANT_THREAD_SAFE
+ .L0:	.long 	errno
+--- dietlibc-0.30/arm/setjmp.S.armasm	2001-07-02 18:06:48.000000000 +0200
++++ dietlibc-0.30/arm/setjmp.S	2008-04-01 23:04:54.000000000 +0200
+@@ -1,17 +1,26 @@
+-.text
+-.weak setjmp
++  .text
++  .balign 4
++  .weak setjmp
++  .type setjmp, %function
+ setjmp:
+-.global __setjmp
++  .global __setjmp
++  .type __setjmp, %function
+ __setjmp:
+ 	mov	r1, #0
+-.global __sigsetjmp
+-__sigsetjmp:
+-.weak sigsetjmp
++  .weak sigsetjmp
++  .type sigsetjmp, %function
+ sigsetjmp:
++  .global __sigsetjmp
++  .type __sigsetjmp, %function
++__sigsetjmp:
++	mov	ip, r0
++	stmia   ip!, {v1-v6, sl, fp, sp, lr}
+ #ifndef	__SOFTFP__
+-	sfm	f4, 4, [r0], #48
++	sfmea   f4, 4, [ip]!
+ #endif
+-	stmia	r0, {r4-r11, sp, lr}
+-	sub	r0, r0, #30
+ 	b	__sigjmp_save
++  .size __setjmp,.-__setjmp;
++  .size setjmp,.-setjmp;
++  .size	__sigsetjmp, .-__sigsetjmp
++  .size	sigsetjmp, .-sigsetjmp
+ 
+--- dietlibc-0.30/arm/start.S.armasm	2006-04-04 07:35:14.000000000 +0200
++++ dietlibc-0.30/arm/start.S	2008-04-02 16:21:57.000000000 +0200
+@@ -6,8 +6,11 @@
+ 	.align 2
+ 
+ 	.global _start
++	.type _start, %function
+ 	.weak 	exit
++	.type exit, %function
+ 	.global _exit
++	.type _exit, %function
+ 
+ _start:
+ 
+@@ -58,6 +61,9 @@ _exit:
+ #endif
+ 	swi	$__NR_exit		@ never returns.
+ 
++.size	_start, .-_start
++.size	_exit, .-_exit
++.size	exit, .-exit
+ 
+ #ifdef __DYN_LIB
+ .L3:	.word 	environ(GOT)
+@@ -71,5 +77,3 @@ _exit:
+ .L6:	.word	_etext
+ #endif
+ 
+-
+-
+--- dietlibc-0.30/arm/dyn_syscalls.S.armasm	2005-10-08 23:22:09.000000000 +0200
++++ dietlibc-0.30/arm/dyn_syscalls.S	2008-04-01 23:04:54.000000000 +0200
+@@ -10,6 +10,10 @@
+ #include "syscalls.h"
+ 
+ .text
++.global __unified_syscall4
++.type   __unified_syscall4,%function
++.global __unified_syscall
++.type   __unified_syscall,%function
+ __unified_syscall4:
+ 	ldmfd	sp!, {r4, r5, r6}
+ __unified_syscall:
+@@ -26,6 +30,9 @@ __unified_syscall:
+ 	mvn	r0, #0
+ #include "dietuglyweaks.h"
+ 	mov	pc, lr
++.Lend:
++.size __unified_syscall,.Lend-__unified_syscall
++.size __unified_syscall4,.Lend-__unified_syscall4
+ 
+ /* ok now include all syscalls.s (*.S) and sysdep *.S */
+ #include "mmap.S"
+@@ -56,6 +63,7 @@ __unified_syscall:
+ #include "../syscalls.s/fstat64.S"
+ #include "../syscalls.s/fstatfs.S"
+ #include "../syscalls.s/fsync.S"
++#include "../syscalls.s/fdatasync.S"
+ #include "../syscalls.s/ftruncate.S"
+ #include "../syscalls.s/getcwd.S"
+ #include "../syscalls.s/getdents.S"
+@@ -88,6 +96,8 @@ __unified_syscall:
+ #include "../syscalls.s/lseek.S"
+ #include "../syscalls.s/lstat.S"
+ #include "../syscalls.s/lstat64.S"
++#include "../syscalls.s/madvise.S"
++#include "../syscalls.s/prctl.S"
+ #include "../syscalls.s/mkdir.S"
+ #include "../syscalls.s/mknod.S"
+ #include "../syscalls.s/mlock.S"
+@@ -246,6 +256,8 @@ __unified_syscall:
+ #include "../syscalls.s/mbind.S"
+ #include "../syscalls.s/get_mempolicy.S"
+ #include "../syscalls.s/futex.S"
++#include "../syscalls.s/sched_setaffinity.S"
++#include "../syscalls.s/sched_getaffinity.S"
+ #include "../syscalls.s/fadvise64.S"
+ #include "../syscalls.s/fadvise64_64.S"
+ #include "../syscalls.s/vserver.S"
+@@ -278,9 +290,16 @@ __unified_syscall:
+ #include "../syscalls.s/fgetxattr.S"
+ 
+ /* other asm-files w.o. changes ... */
++.global _exit
++.type   __exit,%function
++.type   _exit,%function
+ __exit:
++_exit:
+ 	swi	$__NR_exit
+ 	eor	pc,lr,lr
++.size	__exit, .-__exit
++.size	_exit, .-_exit
++
+ #define _exit __exit
+ #include "clone.S"
+ #undef _exit
+--- dietlibc-0.30/arm/mmap.S.armasm	2002-02-18 20:57:39.000000000 +0100
++++ dietlibc-0.30/arm/mmap.S	2008-04-01 23:04:54.000000000 +0200
+@@ -14,11 +14,12 @@
+ @
+ 
+ .global mmap
+-
++.type mmap, %function
+ mmap:
+ 	stmdb	sp!, {r0, r1, r2, r3}
+ 	mov	r0, sp
+ 	swi	__NR_mmap
+ 	add	sp, sp, #16
+ 	b	__unified_syscall
++.size	mmap, .-mmap
+ 
+--- dietlibc-0.30/arm/clone.S.armasm	2002-02-28 17:27:02.000000000 +0100
++++ dietlibc-0.30/arm/clone.S	2008-04-01 23:04:54.000000000 +0200
+@@ -4,7 +4,9 @@
+ 
+ 	.text
+ 	.weak 	clone
++	.type	clone, %function
+ 	.global __clone
++	.type	__clone, %function
+ 	
+ @
+ @ Some slightly tricky stuff here... edit with care :-)
+@@ -31,4 +33,4 @@ __clone:
+ 	ldmia	sp!, { r0, pc } 	@ load function param and jump to thread function
+ 
+ 1:	b	_exit			@ branch to _exit (PIC safe)
+-
++.size	clone, .-clone
+--- dietlibc-0.30/arm/__longjmp.S.armasm	2001-07-02 18:06:48.000000000 +0200
++++ dietlibc-0.30/arm/__longjmp.S	2008-04-01 23:04:54.000000000 +0200
+@@ -5,7 +5,9 @@ __longjmp:
+ 	mov	ip, r0
+ 	movs	r0, r1
+ 	moveq	r0, #1
++	ldmia   ip!, {v1-v6, sl, fp, sp, lr}
+ #ifndef	__SOFTFP__
+-	lfm	f4, 4, [ip], #48
++	lfmfd   f4, 4, [ip] !   /* load the floating point regs */
+ #endif
+-	ldmia   ip, {r4-r11, sp, pc}
++	mov pc, lr
++.size __longjmp, .-__longjmp

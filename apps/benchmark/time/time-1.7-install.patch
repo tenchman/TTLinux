@@ -1,0 +1,42 @@
+--- time-1.7/Makefile.in.install	2006-10-13 10:15:04.000000000 +0200
++++ time-1.7/Makefile.in	2006-10-13 10:19:53.000000000 +0200
+@@ -114,16 +114,16 @@
+ maintainer-clean-binPROGRAMS:
+ 
+ install-binPROGRAMS: $(bin_PROGRAMS)
+-	$(mkinstalldirs) $(bindir)
++	$(mkinstalldirs) $(DESTDIR)$(bindir)
+ 	list="$(bin_PROGRAMS)"; for p in $$list; do \
+ 	  if test -f $$p; then \
+-	    $(INSTALL_PROGRAM) $$p $(bindir)/`echo $$p|sed '$(transform)'`; \
++	    $(INSTALL_PROGRAM) $$p $(DESTDIR)$(bindir)/`echo $$p|sed '$(transform)'`; \
+ 	  else :; fi; \
+ 	done
+ 
+ uninstall-binPROGRAMS:
+ 	list="$(bin_PROGRAMS)"; for p in $$list; do \
+-	  rm -f $(bindir)/`echo $$p|sed '$(transform)'`; \
++	  rm -f $(DESTDIR)$(bindir)/`echo $$p|sed '$(transform)'`; \
+ 	done
+ 
+ .c.o:
+@@ -176,16 +176,16 @@
+ 	TEXINPUTS=$(srcdir):$$TEXINPUTS $(TEXI2DVI) $<
+ 
+ install-info: $(INFO_DEPS)
+-	$(mkinstalldirs) $(infodir)
++	$(mkinstalldirs) $(DESTDIR)$(infodir)
+ 	for file in $(INFO_DEPS); do		\
+ 	  for ifile in `cd $(srcdir) && echo $$file*`; do \
+-	    $(INSTALL_DATA) $(srcdir)/$$ifile $(infodir)/$$ifile; \
++	    $(INSTALL_DATA) $(srcdir)/$$ifile $(DESTDIR)$(infodir)/$$ifile; \
+ 	  done;					\
+ 	done
+ 
+ uninstall-info:
+ 	cd $(srcdir) && for file in *.info*; do	\
+-	  rm -f $(infodir)/$$file; \
++	  rm -f $(DESTDIR)$(infodir)/$$file; \
+ 	done
+ 
+ mostlyclean-info:

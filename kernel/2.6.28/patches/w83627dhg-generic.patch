@@ -1,0 +1,1019 @@
+--- linux-2.6.22.18/drivers/char/Makefile.generic	2008-02-11 08:31:19.000000000 +0100
++++ linux-2.6.22.18/drivers/char/Makefile	2008-09-03 16:01:38.000000000 +0200
+@@ -93,6 +93,7 @@ obj-$(CONFIG_NSC_GPIO)		+= nsc_gpio.o
+ obj-$(CONFIG_GPIO_VR41XX)	+= vr41xx_giu.o
+ obj-$(CONFIG_GPIO_TB0219)	+= tb0219.o
+ obj-$(CONFIG_VT1211_GPIO)	+= vt1211_gpio.o
++obj-$(CONFIG_W83627DHG_GPIO)	+= w83627dhg_gpio.o
+ obj-$(CONFIG_TELCLOCK)		+= tlclk.o
+ 
+ obj-$(CONFIG_WATCHDOG)		+= watchdog/
+--- linux-2.6.22.18/drivers/char/Kconfig.generic	2008-02-11 08:31:19.000000000 +0100
++++ linux-2.6.22.18/drivers/char/Kconfig	2008-09-03 16:00:32.000000000 +0200
+@@ -1000,6 +1000,14 @@ config GPIO_VR41XX
+ 
+ 	  If compiled as a module, it will be called vt1211_gpio.
+ 
++config W83627DHG_GPIO
++	tristate "WINBOND W83627DHG GPIO support"
++	depends on X86_32
++	help
++	  WINBOND W83627DHG GPIO support
++
++	  If compiled as a module, it will be called w83627dhg_gpio.
++
+ config RAW_DRIVER
+ 	tristate "RAW driver (/dev/raw/rawN) (OBSOLETE)"
+ 	depends on BLOCK
+--- linux-2.6.22.18/include/linux/w83627dhg_gpio.h.generic	2008-09-03 16:00:32.000000000 +0200
++++ linux-2.6.22.18/include/linux/w83627dhg_gpio.h	2008-09-03 16:00:32.000000000 +0200
+@@ -0,0 +1,23 @@
++/*
++ * WINBOND W83627DHG GPIO driver.
++ *
++ * Copyright (c) 2007 Manfred Wassmann <info@berlinos.de>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the smems of the GNU General Public License as published by
++ * the Free Software Foundation; version 2 of the License.
++ */
++
++/* W83627DHG Super I/O chip number of GPIO lines. */
++#define GPIO_MAX 40
++
++
++#ifndef IN_W83627DHG_GPIO_C
++extern int w83627dhg_gpio_line_avail(unsigned char line, int direction);
++
++extern int w83627dhg_gpio_set(unsigned char line, unsigned int state);
++
++extern int w83627dhg_gpio_get(unsigned char line, unsigned int *state);
++
++#endif /* IN_W83627DHG_GPIO_C */
++
+--- linux-2.6.22.18/drivers/char/w83627dhg_gpio.c.generic	2008-09-04 13:35:45.000000000 +0200
++++ linux-2.6.22.18/drivers/char/w83627dhg_gpio.c	2008-10-09 13:35:38.000000000 +0200
+@@ -0,0 +1,963 @@
++/*
++ * WINBOND W83627DHG GPIO driver.
++ *
++ * Copyright (c) 2007 Manfred Wassmann <info@berlinos.de>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the smems of the GNU General Public License as published by
++ * the Free Software Foundation; version 2 of the License.
++ */
++
++/* 
++ * Minor device numbers are allocated sequentially starting from zero,
++ * GPIO pins are numbered 20 - 27 for port 2, 30 - 37 port 3 etc, thus
++ * the minor device number corresponds to the pin number interpreted as
++ * octal with 020 (octal) subtracted.
++ *   port #2:  0 -  7
++ *   port #3:  8 - 15
++ *   ...
++ *   port #6: 40 - 47
++ */
++
++#include <linux/fs.h>
++#include <linux/module.h>
++#include <linux/errno.h>
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <linux/platform_device.h>
++#include <linux/cdev.h>
++#include <linux/ioport.h>
++#include <linux/pci.h>
++#include <linux/delay.h> /* msleep() */
++#include <asm/uaccess.h>
++#include <asm/io.h>
++#include <linux/spinlock.h>
++#define IN_W83627DHG_GPIO_C
++#include "linux/w83627dhg_gpio.h"
++
++#define DRVNAME "w83627dhg-gpio"
++
++/* GPIO port count */
++#define W83627DHG_GPIO_COUNT 5
++
++/* I/O block size, only ports 2-6 are mapped, 1 byte for each port */
++#define W83627DHG_GPIO_SIZE 5
++
++/* lock for accessing configuration mode */
++static spinlock_t gpio_lock;
++
++MODULE_AUTHOR("Manfred Wassmann <info@berlinos.de>");
++MODULE_DESCRIPTION("WINBOND W83627DHG GPIO Driver");
++MODULE_LICENSE("GPL");
++
++static int paranoid;
++module_param(paranoid, bool, 0);
++MODULE_PARM_DESC(paranoid,
++		 " Make sure input pins are configured as input when reading");
++
++static unsigned int debug;
++module_param(debug, uint, 0664);
++MODULE_PARM_DESC(debug, " Debugging level");
++
++static int major;
++module_param(major, int, 0444);
++MODULE_PARM_DESC(major, " Major device number");
++
++static unsigned char cir_addr;
++module_param(cir_addr, byte, 0);
++MODULE_PARM_DESC(cir_addr, " W83627DHG control index register address (0x2E or 0x4E)");
++
++static uint gpio_base;
++module_param(gpio_base, uint, 0440);
++MODULE_PARM_DESC(gpio_base, " GPIO base address");
++
++static unsigned char portmask = 0x04;
++module_param(portmask, byte, 0);
++MODULE_PARM_DESC(portmask, " GPIO port mask (default 0x04: port 3 enabled)");
++
++/* handling nonexistent port 1 here makes life easier ??? */
++static unsigned char outmask[1 + W83627DHG_GPIO_COUNT];
++module_param_array(outmask, byte, NULL, 0);
++MODULE_PARM_DESC(outmask, " GPIO output lines bitmasks, one for each port");
++
++static unsigned char polarity[1 + W83627DHG_GPIO_COUNT];
++module_param_array(polarity, byte, NULL, 0);
++MODULE_PARM_DESC(polarity, " GPIO polarity bitmasks (0=normal, 1=inverted)");
++
++static int debounce = 1;
++module_param(debounce, bool, 0640);
++MODULE_PARM_DESC(debounce, " Debounce input lines (default: on)");
++
++
++/* Get the port index from the minor device number */
++#define W83627DHG_PORT(minor) ((minor) >> 3)
++
++/* Get the port number from the minor device number */
++#define W83627DHG_PORTNO(minor) (W83627DHG_PORT(minor) + 1)
++
++/* Get configuration data register address from configuration index
++ * register address
++ */
++#define CDR_ADDR(cirAddr) ((cirAddr) + 1)
++
++/* convert outmask for writing into the control register:
++ *   ones in the parameter are zeroes in the register and vice versa.
++ */
++#define OUTPUT_MASK(portindex) (~outmask[portindex])
++
++
++struct devcount {
++	int in;
++	int out;
++};
++
++enum gpio_dir {
++	GPIO_INPUT = -1,
++	GPIO_NC,
++	GPIO_OUTPUT
++};
++
++typedef enum set_reg_mode {
++	SET_REG_SET,
++	SET_REG_AND,
++	SET_REG_OR,
++} set_reg_mode_t;
++
++struct gpio_iomap {
++	enum gpio_dir direction;
++	char name[8];
++};
++
++/* allocate port 1 too though it doesn't exist, to make it easier */
++static struct gpio_iomap iomap[8 + GPIO_MAX];
++
++static struct platform_device *pdevin;
++static struct platform_device *pdevout;
++static struct cdev w83627dhg_gpio_cdev;
++static u32 firstminor, numdevs;
++static unsigned short gpio_mapped;
++
++
++static void selCtlReg(unsigned char reg)
++{
++	outb(reg, cir_addr);
++	//msleep(20);
++}
++
++
++static int writeCtlReg(unsigned char value)
++{
++	int rc = 0;
++
++	outb(value, CDR_ADDR(cir_addr));
++	//msleep(20);
++
++	if (debug) {
++		unsigned char reg = inb(cir_addr);
++		unsigned char newval = inb(CDR_ADDR(cir_addr));
++
++		rc = newval == value;
++		if (rc) {
++			printk(KERN_DEBUG
++			       "register 0x%02X updated: 0x%02X       OK\n",
++			       reg, value);
++		} else {
++			printk(KERN_DEBUG
++			       "register 0x%02X update 0x%02X -> 0x%02X"
++			       " FAILED\n", reg, value, newval);
++		}
++	}
++
++	return(rc);
++}
++
++
++static unsigned char readCtlReg(void)
++{
++	return(inb(CDR_ADDR(cir_addr)));
++}
++
++
++static
++int setRegister(unsigned char reg, unsigned char value, set_reg_mode_t mode)
++{
++	int rc = 0;
++	unsigned char oldval = ~0;
++	outb(reg, cir_addr);
++	//msleep(20);
++
++	if (mode != SET_REG_SET || debug) {
++		oldval = inb(CDR_ADDR(cir_addr));
++	}
++
++	switch (mode) {
++		case SET_REG_SET:
++			break;
++		case SET_REG_AND:
++			value &= oldval;
++			break;
++		case SET_REG_OR:
++			value |= oldval;
++			break;
++	}
++	outb(value, CDR_ADDR(cir_addr));
++
++	if (debug) {
++		unsigned char newval = inb(CDR_ADDR(cir_addr));
++
++		rc = newval == value;
++		if (rc) {
++			printk(KERN_DEBUG
++			       "register 0x%02X update 0x%02X -> 0x%02X OK\n",
++			       reg, oldval, value);
++		} else if (0xFF == newval && newval == oldval) {
++			printk(KERN_DEBUG
++			       "register 0x%02X update 0x%02X -> 0x%02X"
++			       " now 0x%02X maybe W/O\n",
++			       reg, oldval, value, newval);
++		} else {
++			printk(KERN_DEBUG
++			       "register 0x%02X update 0x%02X -> 0x%02X"
++			       " FAILED (now 0x%02X)\n",
++			       reg, oldval, value, newval);
++		}
++	}
++
++	return(rc);
++}
++
++
++static int getRegister(unsigned char reg)
++{
++	outb(reg, cir_addr);
++	//msleep(20);
++
++	return(inb(CDR_ADDR(cir_addr)));
++}
++
++
++static void w83627dhg_enterConfig(unsigned char cirAddress)
++{
++	outb_p(0x87, cirAddress);
++	outb_p(0x87, cirAddress);
++}
++
++
++static void w83627dhg_exitConfig(unsigned char cirAddress)
++{
++	outb(0xAA, cirAddress);
++}
++
++
++static unsigned char w83627dhg_cfg_offset(unsigned char port)
++{
++	switch (port) {
++	case 2:
++		return(0xE3);
++		break;
++	case 3:
++		return(0xF0);
++		break;
++	case 4:
++		return(0xF4);
++		break;
++	case 5:
++		return(0xE0);
++		break;
++	case 6:
++		return(0xF4);
++		break;
++	default:
++		return(0x0);
++		break;
++	}
++}
++
++
++static u32 w83627dhg_portaddr(u32 minor)
++{
++	u32 rc = W83627DHG_PORT(minor);
++
++	switch (rc) {
++		case 1: /* FALLTHROUGH */
++		case 2: /* FALLTHROUGH */
++		case 3: /* FALLTHROUGH */
++		case 4: /* FALLTHROUGH */
++		case 5:
++			rc = (w83627dhg_cfg_offset(W83627DHG_PORTNO(minor))
++			      + 0x1);
++			break;
++		default:
++			rc = 0;
++			break;
++	}
++
++	return(rc);
++}
++
++
++static int w83627dhg_select_ldn_gpio(unsigned char port)
++{
++	int rc = 0;
++
++	switch (port) {
++	case 2: /* FALLTHROUGH */
++	case 3: /* FALLTHROUGH */
++	case 4: /* FALLTHROUGH */
++	case 5: /* FALLTHROUGH */
++		setRegister(0x7, 0x9, SET_REG_SET);
++		break;
++	case 6:
++		setRegister(0x7, 0x7, SET_REG_SET);
++		break;
++	default:
++		printk(KERN_ERR "invalid port number: %u\n", port);
++		rc = -1;
++		break;
++	}
++
++	if (rc == 0 && debug) {
++		printk(KERN_DEBUG "LDN select %u\n", inb(CDR_ADDR(cir_addr)));
++	}
++
++	return(rc);
++}
++
++
++static unsigned int w83627dhg_gpiobase(void)
++{
++	unsigned int baseaddr;
++
++	// CHECKME: the W83627dhg does not seem to have a GPIO base address
++
++	baseaddr  = getRegister(0x60) << 8;
++	baseaddr += getRegister(0x61);
++	if (baseaddr) {
++		printk(KERN_DEBUG
++		       "WINBOND W83627DHG GPIO at base address 0x%04X\n",
++		       baseaddr);
++	} else {
++		printk(KERN_WARNING
++		       "WINBOND W83627DHG GPIO no base address found\n");
++	}
++
++	return(baseaddr);
++}
++
++
++static void w83627dhg_enable_gpio(unsigned char port, int pinSel)
++{
++	unsigned char byte;
++
++	byte = getRegister(0x30);
++	switch (port) {
++	case 2: /* FALLTHROUGH */
++	case 3: /* FALLTHROUGH */
++	case 4: /* FALLTHROUGH */
++	case 5:
++		byte |= 0x1 << (port - 2);
++		switch (pinSel ? port : 0) {
++		case 2:
++			// CHECKME:
++			printk(KERN_WARNING "Unimplemented (%d)\n", __LINE__);
++			break;
++		case 3:
++			/* pin select GPIO */
++			setRegister(0x2A, 0xFD, SET_REG_AND);
++			setRegister(0x2C, 0x1F, SET_REG_AND);
++			/* set debouncer and trigger type for ports
++			 * 30, 31 and 35 */
++			setRegister(0xFE, 0x07, SET_REG_SET);
++			break;
++		case 4:
++			// CHECKME:
++			printk(KERN_WARNING "Unimplemented (%d)\n", __LINE__);
++			break;
++		case 5:
++			// FIXME:
++			printk(KERN_WARNING "Unimplemented (%d)\n", __LINE__);
++			setRegister(0x2D, 0xFF, SET_REG_SET);
++			break;
++		}
++		break;
++	case 6:
++			printk(KERN_WARNING "Unimplemented (%d)\n", __LINE__);
++		byte |= 0x8;	/* bit 3 */
++		break;
++	default:
++		printk(KERN_ERR "invalid port number: %u\n", port);
++		return;
++	}
++	setRegister(0x30, byte, SET_REG_SET);
++
++	if (debug) {
++		printk(KERN_DEBUG
++		       "GPIO port #%u enabled (CIR=0x%02X, CDR=0x%02X)\n",
++		       port, inb(cir_addr), inb(CDR_ADDR(cir_addr)));
++	}
++}
++
++
++/** Set up gpio pins direction and polarity.
++ *
++ * LDN 7 (GPIO 6) or 9 (GPIO 2 to 5) must be selected
++ */
++static void setup_gpio(unsigned char port, int check)
++{
++	unsigned char offset, portidx = port - 1;
++
++	offset = w83627dhg_cfg_offset(port);
++
++	if (debug) {
++		printk(KERN_DEBUG
++		       "W83627DHG %s GPIO port #%u (CR base 0x%02X):\n",
++		       check ? "checking" : "setting up", port, offset);
++	}
++
++	/* set polarity */
++	selCtlReg(offset + 0x2);
++	if (check) {
++		unsigned char pol = inb(CDR_ADDR(cir_addr));
++
++		if (pol != polarity[portidx]) {
++			printk(KERN_WARNING
++			       "GPIO port %u polarity setting has changed"
++			       " 0x%02X -> 0x%02X -- resetting\n",
++			       port, pol, polarity[portidx]);
++			writeCtlReg(polarity[portidx]);
++		}
++	} else {
++		writeCtlReg(polarity[portidx]);
++	}
++
++	if (debug) {
++		printk(KERN_DEBUG
++		       "  polarity:  set/read 0x%02X/0x%02X\n",
++		       polarity[portidx], inb(CDR_ADDR(cir_addr)));
++	}
++
++	/* set direction */
++	selCtlReg(offset + 0x0);
++	if (check) {
++		unsigned char direction = inb(CDR_ADDR(cir_addr));
++
++		if (direction != outmask[portidx]) {
++			printk(KERN_WARNING
++			       "GPIO port %u I/O direction setting has changed"
++			       " 0x%02X -> 0x%02X -- resetting\n",
++			       port, direction, outmask[portidx]);
++			writeCtlReg(OUTPUT_MASK(portidx));
++		}
++	} else {
++		writeCtlReg(OUTPUT_MASK(portidx));
++	}
++
++	if (debug) {
++		printk(KERN_DEBUG
++		       "  direction: set/read 0x%02X/0x%02X\n",
++		       outmask[portidx], inb(CDR_ADDR(cir_addr)));
++	}
++}
++
++
++static int w83627dhg_test(unsigned char cirAddress)
++{
++	unsigned short dev_id;
++
++	w83627dhg_enterConfig(cirAddress);
++	outb(0x20, cirAddress);
++	dev_id = inb(CDR_ADDR(cirAddress)) << 8;
++	outb(0x21, cirAddress);
++	dev_id |= inb(CDR_ADDR(cirAddress));
++
++	printk(KERN_DEBUG "Read device ID 0x%04X at 0x%02X\n",
++	       dev_id, cirAddress);
++
++	return((dev_id & 0xFFF0) == 0xA020);
++}
++
++
++static int w83627dhg_find(unsigned char * cirAddress)
++{
++	int rc = 0;
++
++	if (w83627dhg_test(0x2E)) {
++		*cirAddress = 0x2E;
++	}
++	else if (w83627dhg_test(0x4E)) {
++		*cirAddress = 0x4E;
++	}
++	else {
++		printk(KERN_WARNING "WINBOND W83627DHG chip not found!\n");
++		rc = -ENODEV;
++	}
++
++	if (rc == 0) {
++		printk(KERN_INFO
++		       "Found WINBOND W83627DHG chip, CIR address 0x%02X\n",
++		       *cirAddress);
++	}
++
++	return(rc);
++}
++
++
++/** Set the specified gpio line to the specified state.
++ *
++ */
++int w83627dhg_gpio_set(unsigned char minor, unsigned char state)
++{
++	int rc = 0;
++	u32 base = w83627dhg_portaddr(minor);
++	unsigned char mask;
++	unsigned long flags;
++
++	spin_lock_irqsave(&gpio_lock, flags);
++	if (0 == base) {
++		rc = -EINVAL;
++		printk(KERN_ERR "invalid GPIO line: %u\n", minor);
++	} else {
++		w83627dhg_enterConfig(cir_addr);
++		rc = w83627dhg_select_ldn_gpio(W83627DHG_PORTNO(minor));
++		w83627dhg_enable_gpio(W83627DHG_PORTNO(minor), 0);
++
++		if (debug) {
++			printk(KERN_DEBUG
++			       "GPIO port %u "
++			       "direction / inversion mask = 0x%02X / 0x%02X\n",
++			       W83627DHG_PORTNO(minor),
++			       getRegister(base - 1), getRegister(base + 1));
++		}
++
++		/* Attn: Must stay in config mode with the w83627dhg
++		 * to be able to read/write to the GPIO ports
++		 */
++		if (rc) {
++			w83627dhg_exitConfig(cir_addr);
++		}
++	}
++
++	if (rc == 0) {
++		mask = 0x1 << (minor & 0x7);
++		if (state) {
++			setRegister(base, mask, SET_REG_OR);
++		} else {
++			setRegister(base, ~mask, SET_REG_AND);
++		}
++
++		if (debug) {
++			printk(KERN_DEBUG
++			       "W83627DHG GPIO pin #%o at 0x%04X set o%s\n",
++			       minor + 8, base, state ? "n" : "ff");
++		}
++
++		w83627dhg_exitConfig(cir_addr);
++	}
++	spin_unlock_irqrestore(&gpio_lock, flags); 
++
++	return(rc);
++}
++
++
++/** get the specified gpio line state.
++ *
++ */
++int w83627dhg_gpio_get(unsigned char minor, unsigned char *state)
++{
++	int rc = -EINVAL;
++	u32 base = w83627dhg_portaddr(minor);
++	unsigned char inbyte, mask = 0x1 << (minor & 0x7);
++	static unsigned char lastbyte = 0;
++	unsigned long flags;
++
++	spin_lock_irqsave(&gpio_lock, flags);
++	if (0 == base) {
++		printk(KERN_ERR DRVNAME "invalid GPIO line: %u\n", minor);
++	} else {
++		/* enter configuration mode */
++		w83627dhg_enterConfig(cir_addr);
++		rc = w83627dhg_select_ldn_gpio(W83627DHG_PORTNO(minor));
++		w83627dhg_enable_gpio(W83627DHG_PORTNO(minor), 0);
++
++		if (debug) {
++			printk(KERN_DEBUG
++			       "GPIO port %u "
++			       "direction / inversion mask = 0x%02X / 0x%02X\n",
++			       W83627DHG_PORTNO(minor),
++			       getRegister(base - 1), getRegister(base + 1));
++		}
++
++		if (paranoid
++		    && 0 == (outmask[W83627DHG_PORT(minor)] & mask)) {
++			/* input line: double check I/O mode */
++			setup_gpio(W83627DHG_PORTNO(minor), 1);
++		}
++
++		/* Attn: Must stay in config mode with the w83627dhg
++		 * to be able to read/write to the GPIO ports
++		 */
++		if (rc) {
++			w83627dhg_exitConfig(cir_addr);
++		}
++	}
++
++	if (0 == rc) {
++		selCtlReg(base);
++		inbyte = inb(CDR_ADDR(cir_addr));
++		if ( inbyte == 0xff ){
++			*state = lastbyte & mask ? 1 : 0;
++			printk(KERN_DEBUG DRVNAME": skipping irregular value 0x%02X minor=%d, lastbyte=0x%02X.\n",inbyte,minor,lastbyte);
++		}else{
++			*state = inbyte & mask ? 1 : 0;
++			lastbyte = inbyte;
++		}
++
++		if (debug) {
++			printk(KERN_DEBUG
++			       "W83627DHG GPIO pin #%o"
++			       " at 0x%04X state = %u (o%s)\n",
++			       minor + 8, base, *state, *state ? "n" : "ff");
++		}
++		/* leave configuration mode */
++		w83627dhg_exitConfig(cir_addr);
++		rc = 0;
++	}
++	spin_unlock_irqrestore(&gpio_lock, flags); 
++	return(rc);
++}
++
++
++static ssize_t w83627dhg_gpio_write(struct file *file, const char __user *data,
++				    size_t len, loff_t *ppos)
++{
++	ssize_t rc = len;
++	u32 minor = iminor(file->f_path.dentry->d_inode);
++	unsigned char cdata;
++
++	if (get_user(cdata, data)) {
++		rc = -EFAULT;
++	} else {
++		w83627dhg_gpio_set(minor, cdata != '0');
++	}
++	*ppos = 0;
++
++	return len;
++}
++
++
++static ssize_t w83627dhg_gpio_read(struct file *file, char __user *buf,
++				   size_t len, loff_t *ppos)
++{
++	ssize_t rc = 0;
++	u32 minor = iminor(file->f_path.dentry->d_inode);
++	unsigned char out;
++	ssize_t	count = 0;
++
++	if (*ppos == 0) {
++		if ((rc = w83627dhg_gpio_get(minor, &out))) {
++			printk(KERN_ERR
++			       "w83627dhg GPIO get from minor dev %u: %d\n",
++			       minor, rc);
++		} else {
++			out = out ? '1' : '0';
++
++			if (put_user(out, buf)) {
++				rc = -EFAULT;
++			} else if (++count < len) {
++				/* add a line-feed if there is room */
++				put_user('\n', buf + count++);
++			}
++		}
++	}
++	*ppos += count;
++
++	return count;
++}
++
++
++static int w83627dhg_gpio_open(struct inode *inode, struct file *file)
++{
++	int rc = -EINVAL;
++	u32 minor = iminor(inode);
++
++	if (! (1 < W83627DHG_PORTNO(minor) || W83627DHG_PORTNO(minor) < 7)) {
++		printk(KERN_DEBUG "invalid GPIO port %u\n",
++		       W83627DHG_PORTNO(minor));
++		rc = -ENODEV;
++	} else if (portmask & (1 << (W83627DHG_PORT(minor)))) {
++		/* The portmask carries a bit for each enabled port */
++		rc = nonseekable_open(inode, file);
++	} else {
++		printk(KERN_DEBUG
++		"W83627DHG gpio line not enabled: minor %u (portmask bit 0x%02X)\n",
++		       minor, (1 << (W83627DHG_PORT(minor))));
++	}
++
++	return(rc);
++}
++
++
++static const struct file_operations w83627dhg_gpio_fops = {
++	.owner	= THIS_MODULE,
++	.write	= w83627dhg_gpio_write,
++	.read	= w83627dhg_gpio_read,
++	.open	= w83627dhg_gpio_open
++};
++
++
++static inline void w83627dhg_devmap(unsigned char pn,
++				    struct devcount * devcount)
++{
++	unsigned char mask = 0x80, base = pn * 8;
++	struct gpio_iomap * map = iomap + base;
++        char *lissnames[6] = { "unlock", "masterr", "state","lock","masterg","ready"};
++	int i=0; // if you dont want liss-leds initialize i to 6
++	
++
++	//printk(KERN_DEBUG "Generating GPIO port %u device map\n", pn + 1);
++	map += 7;
++
++	while (mask) {
++		if (outmask[pn] & mask) {
++			++devcount->out;
++			map->direction = GPIO_OUTPUT;
++			/* this way we get the leds named as the leds are on liss systems */
++			if ( i < 6 ) {
++				snprintf(map->name, sizeof(map->name),"%s",lissnames[i]);
++				i++;
++			}else{
++			/* this way we get the leds numbered like the GPIO pins on
++			 * the w83627dhg.
++			 */
++			snprintf(map->name, sizeof(map->name), "gpio%o",
++				 8 + (map - iomap));
++			}
++		} else {
++			snprintf(map->name, sizeof(map->name), "gpio%o",
++				 8 + (map - iomap));
++			++devcount->in;
++			map->direction = GPIO_INPUT;
++		}
++		//printk(KERN_DEBUG "  line %s: %sput\n", map->name,
++		//       map->direction == GPIO_INPUT ? "in" : "out");
++		mask >>= 1;
++		--map;
++	}
++}
++
++
++static int w83627dhg_setup_platform_devs(struct devcount * devcount)
++{
++	int rc = 0;
++	struct resource ires[devcount->in];
++	struct resource ores[devcount->out];
++	int i, o, m;
++
++	for (i = 0, o = 0, m = 8; m < 8 + GPIO_MAX; m++) {
++		//printk(KERN_DEBUG "Setting up platform device #%d: %s\n",
++		//       m, (iomap[m].direction == GPIO_NC ? "NC" :
++		//	   (iomap[m].direction == GPIO_INPUT
++		//	    ? "Input"
++		//	    : "Output")));
++		switch (iomap[m].direction) {
++			case GPIO_NC:
++				/* NOP */
++				break;
++			case GPIO_INPUT:
++				ires[i].name = iomap[m].name;
++				ires[i].start = ires[i].end = m;
++				ires[i].flags = 1;
++				ires[i].parent = ires[i].sibling = ires[i].child
++					= NULL;
++				++i;
++				break;
++			case GPIO_OUTPUT:
++				ores[o].name = iomap[m].name;
++				ores[o].start = ores[i].end = m;
++				ores[o].flags = 1;
++				ores[o].parent = ores[o].sibling = ores[o].child
++					= NULL;
++				++o;
++				break;
++		}
++		//printk(KERN_DEBUG
++		//       "Checkpoint Platform Device Setup Complete\n");
++	}
++
++	if (IS_ERR(pdevout = platform_device_register_simple(DRVNAME "-out", 0,
++							     ores,
++							     devcount->out))) {
++		printk(KERN_ERR
++		       "Error allocating platform device: " DRVNAME "-out\n");
++		rc = -ENOMEM;
++	} else if (IS_ERR(pdevin
++			  = platform_device_register_simple(DRVNAME "-in", 0,
++							    ires,
++							    devcount->in))) {
++		printk(KERN_ERR
++		       "Error allocating platform device: " DRVNAME "-in\n");
++		rc = -ENOMEM;
++	} else {
++		//printk(KERN_DEBUG "platform devices registered: " DRVNAME
++		//       "-{in,out}\n");
++	}
++
++	return(rc);
++}
++
++
++static int __init w83627dhg_gpio_init(void)
++{
++	int rc = -ENOSYS;
++	unsigned char pn = 0;
++	struct devcount devcount = { .in = 0, .out = 0 };
++	dev_t dev_id;
++
++	/* mask out ports 1 and 7, which do not exist. */
++	portmask &= 0x7E;
++
++	/* Sanity checks */
++	if (0 == portmask) {
++		printk(KERN_ERR "W83627DHG GPIO: "
++		       "error loading module: no gpio ports enabled -- aborting!\n");
++		return(-EINVAL);
++	}
++
++	/* Detect the w83627dhg chip and get the control index
++	 * register address.
++	 */
++	printk(KERN_DEBUG "Detecting WINBOND W83627DHG chip...\n");
++	/* entering configuration mode in find function */
++	rc = w83627dhg_find(&cir_addr);
++	if (rc) {
++		return(rc);
++	}
++
++	/* Enable GPIO */
++	for (pn = 7;  pn-- > 2;) {
++		if (portmask & (0x1 << (pn - 1))) {
++			w83627dhg_select_ldn_gpio(pn);
++			w83627dhg_enable_gpio(pn, 1);
++			setup_gpio(pn, 0);
++		}
++	}
++
++	/* request I/O memory regions depending on the ports enabled */
++	if (portmask & 0x3D) {
++		if (0 == gpio_base) {
++			/* Autodetect the GPIO base address */
++			gpio_base = w83627dhg_gpiobase();
++		}
++
++		if (gpio_base && gpio_base < 0xFFFF) {
++			if (0 == request_region(gpio_base, W83627DHG_GPIO_SIZE,
++						DRVNAME)) {
++				printk(KERN_ERR DRVNAME
++				       ": can't allocate I/O for GPIO\n");
++				rc = -ENODEV;
++			} else {
++				gpio_mapped = 1;
++				//setup_gpio();
++			}
++		}
++	}
++
++	/* Get the first minor device number, try port numbers 2 to 6
++	 * Beware: pn is the port index here! I.e. port number minus one.
++	 */
++	pn = 1;
++	while (pn < 6 && 0 == (portmask & (1 << pn))) {
++		++pn;
++	}
++
++	//printk(KERN_DEBUG "Checkpoint First Configured Port: %u\n", pn + 1);
++
++	/* Allocate character devices */
++	/* calculate consecutive device numbers range */
++	firstminor = pn * 8;
++	w83627dhg_devmap(pn, &devcount);
++	while (++pn < 6) {
++		/* add 8 lines per port if port is selected in portmask */
++		if (portmask & (1 << pn)) {
++			w83627dhg_devmap(pn, &devcount);
++		}
++	}
++	numdevs = devcount.in + devcount.out;
++
++	//printk(KERN_DEBUG
++	//       "Checkpoint Devices Mapped: %u in, %u out, %u total\n",
++	//       devcount.in, devcount.out, numdevs);
++
++	if (rc == 0) {
++		if (major) {
++			dev_id = MKDEV(major, firstminor);
++			rc = register_chrdev_region(dev_id, numdevs, DRVNAME);
++		} else {
++			rc = alloc_chrdev_region(&dev_id, firstminor,
++						 numdevs, DRVNAME);
++			major = MAJOR(dev_id);
++		}
++	}
++
++	//printk(KERN_DEBUG "Checkpoint Character Device Regions Registered\n");
++
++	/* Register platform device */
++	if (rc || (rc = w83627dhg_setup_platform_devs(&devcount))) {
++		/* Error -- cleanup */
++		printk(KERN_ERR
++		       "Error setting up WINBOND W83627DHG platform devices\n");
++
++		if (gpio_mapped) {
++			release_region(gpio_base, W83627DHG_GPIO_SIZE);
++		}
++		if (!IS_ERR(pdevin)) {
++			platform_device_put(pdevin);
++			platform_device_del(pdevin);
++		}
++		if (!IS_ERR(pdevout)) {
++			platform_device_put(pdevout);
++			platform_device_del(pdevout);
++		}
++
++		if (rc != -ENODEV) {
++			rc = -1;
++		}
++	} else {
++		printk(KERN_DEBUG
++		       DRVNAME ": base=0x%X portmask=0x%X major=%d\n",
++		       gpio_base, portmask, major);
++
++		cdev_init(&w83627dhg_gpio_cdev, &w83627dhg_gpio_fops);
++		cdev_add(&w83627dhg_gpio_cdev, dev_id, numdevs);
++	}
++	w83627dhg_exitConfig(cir_addr);
++	return(rc);
++}
++
++
++static void __exit w83627dhg_gpio_cleanup(void)
++{
++	dev_t dev_id = MKDEV(major, firstminor);
++
++	cdev_del(&w83627dhg_gpio_cdev);
++	unregister_chrdev_region(dev_id, numdevs);
++	if (gpio_mapped) {
++		release_region(gpio_base, W83627DHG_GPIO_SIZE);
++	}
++	platform_device_unregister(pdevin);
++	platform_device_unregister(pdevout);
++}
++
++
++module_init(w83627dhg_gpio_init);
++module_exit(w83627dhg_gpio_cleanup);
++
++EXPORT_SYMBOL(w83627dhg_gpio_get);
++EXPORT_SYMBOL(w83627dhg_gpio_set);
++/*
++ * Local Variables:
++ * mode: c
++ * c-basic-offset: 8
++ * tab-width: 8
++ * End:
++ */

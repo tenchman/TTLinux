@@ -1,0 +1,18 @@
+config CONFIG_SAMBA
+  bool "SAMBA - a suite of SMB and CIFS client/server programs for UNIX"
+  default n
+  help
+
+    http://www.samba.org
+
+config CONFIG_SAMBA_LDAP
+  bool "use LDAP"
+  depends on CONFIG_SAMBA
+  select CONFIG_OPENLDAP
+  default n
+
+config CONFIG_SAMBA_CUPS
+  bool "Cups printing support"
+  depends on CONFIG_SAMBA
+  select CONFIG_CUPS
+  default n

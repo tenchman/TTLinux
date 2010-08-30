@@ -1,0 +1,7 @@
+# vim:set syntax=kconfig:
+config CONFIG_MINIT
+  bool "minit - a small yet feature-complete init"
+  default n
+  help
+    http://www.fefe.de/minit/
+

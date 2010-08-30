@@ -1,0 +1,19 @@
+--- dietlibc-0.31/include/sys/inotify.h.struct_inotify_event	2008-04-15 15:47:34.000000000 +0200
++++ dietlibc-0.31/include/sys/inotify.h	2008-04-15 15:45:48.000000000 +0200
+@@ -4,11 +4,11 @@
+ #include <sys/cdefs.h>
+ 
+ struct inotify_event {
+-	__s32		wd;		/* watch descriptor */
+-	__u32		mask;		/* watch mask */
+-	__u32		cookie;		/* cookie to synchronize two events */
+-	__u32		len;		/* length (including nulls) of name */
+-	char		name[0];	/* stub for possible name */
++	int  		wd;		/* watch descriptor */
++	uint32_t	mask;		/* watch mask */
++	uint32_t	cookie;		/* cookie to synchronize two events */
++	uint32_t	len;		/* length (including nulls) of name */
++	char		name[];		/* stub for possible name */
+ };
+ 
+ /* the following are legal, implemented events that user-space can watch for */

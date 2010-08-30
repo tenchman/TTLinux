@@ -1,0 +1,23 @@
+--- sysvinit-2.78/src/halt.c.halt	Wed Apr 19 15:48:23 2000
++++ sysvinit-2.78/src/halt.c	Wed Apr 19 15:55:03 2000
+@@ -218,8 +218,19 @@
+ 		 *	See if we are in runlevel 0 or 6.
+ 		 */
+ 		c = get_runlevel();
+-		if (c != '0' && c != '6')
++		if (c != '0' && c != '6') {
++			char *file;
++
++			if (do_poweroff) {
++				file = strdup("/poweroff");
++			} else {
++				file = strdup("/halt");
++			}
++			close(open(file, O_CREAT|O_RDWR, 0644));
++			free(file);
++				
+ 			do_shutdown(do_reboot ? "-r" : "-h", tm);
++		}
+ 	}
+ 
+ 	/*
