@@ -24,7 +24,7 @@ FILES	= /
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare: cvstrac.mk
-	perl -pi -e "s/sqlite3StrNICmp/strncasecmp/g" $(PACKAGE)/*.c
-	perl -pi -e "s/sqlite3StrICmp/strcasecmp/g" $(PACKAGE)/*.c
-	cp cvstrac.mk $(PACKAGE)/Makefile
+	sed -i -e "s/sqlite3StrNICmp/strncasecmp/g" $(PKGBUILDDIR)/*.c
+	sed -i -e "s/sqlite3StrICmp/strcasecmp/g" $(PKGBUILDDIR)/*.c
+	cp cvstrac.mk $(PKGBUILDDIR)/Makefile
 	touch $(STAMP)-myprepare

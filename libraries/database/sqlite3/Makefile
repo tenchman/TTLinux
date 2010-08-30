@@ -27,5 +27,5 @@ $(STAMP)-myprepare: $(STAMP)-prepare
 	  -e "s,/usr/include,$(PREFIX)/include,g" \
 	  -e "s,/usr/lib,$(PREFIX)/lib-$(ARCH),g" \
 	  -e "s,\(^LTLINK.*\),\1 -all-static," \
-		$(PACKAGE)/Makefile
+		$(PKGBUILDDIR)/Makefile
 	touch $(STAMP)-myprepare
