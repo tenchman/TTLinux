@@ -1,0 +1,32 @@
+--- rrdtool-1.4.3/src/rrd_graph.c.round	2010-03-22 17:05:55.000000000 +0100
++++ rrdtool-1.4.3/src/rrd_graph.c	2010-09-13 23:13:48.000000000 +0200
+@@ -4876,6 +4876,11 @@ int vdef_parse(
+ }
+ 
+ 
++static int my_round(double x)
++{
++          return (int) ((x) >= 0 ? (x) + 0.5 : (x) - 0.5);
++} 
++
+ int vdef_calc(
+     image_desc_t *im,
+     int gdi)
+@@ -4906,7 +4911,7 @@ int vdef_calc(
+             array[step] = data[step * src->ds_cnt];
+         }
+         qsort(array, step, sizeof(double), vdef_percent_compar);
+-        field = round((dst->vf.param * (double)(steps - 1)) / 100.0);
++        field = my_round((dst->vf.param * (double)(steps - 1)) / 100.0);
+         dst->vf.val = array[field];
+         dst->vf.when = 0;   /* no time component */
+         free(array);
+@@ -4939,7 +4944,7 @@ int vdef_calc(
+             }
+         }
+         qsort(array, nancount, sizeof(double), vdef_percent_compar);
+-        field = round( dst->vf.param * (double)(nancount - 1) / 100.0);
++        field = my_round( dst->vf.param * (double)(nancount - 1) / 100.0);
+         dst->vf.val = array[field];
+         dst->vf.when = 0;   /* no time component */
+         free(array);

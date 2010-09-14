@@ -1,0 +1,114 @@
+--- rrdtool-1.4.3/configure.ac.noxml	2010-03-22 18:02:55.000000000 +0100
++++ rrdtool-1.4.3/configure.ac	2010-09-07 21:44:23.000000000 +0200
+@@ -529,7 +529,7 @@ EX_CHECK_ALL(cairo,      cairo_pdf_surfa
+ EX_CHECK_ALL(cairo,      cairo_ps_surface_create,       cairo-ps.h,             cairo-ps,    1.4.6,  http://cairographics.org/releases/, "")
+ EX_CHECK_ALL(glib-2.0,   glib_check_version,            glib.h,                 glib-2.0,    2.12.12, ftp://ftp.gtk.org/pub/glib/2.12/, "")
+ EX_CHECK_ALL(pango-1.0,  pango_cairo_context_set_font_options,  pango/pango.h,  pangocairo,  1.17,    http://ftp.gnome.org/pub/GNOME/sources/pango/1.17, "")
+-EX_CHECK_ALL(xml2,       xmlParseFile,                  libxml/parser.h,        libxml-2.0,        2.6.31,  http://xmlsoft.org/downloads.html, /usr/include/libxml2)
++dnl EX_CHECK_ALL(xml2,       xmlParseFile,                  libxml/parser.h,        libxml-2.0,        2.6.31,  http://xmlsoft.org/downloads.html, /usr/include/libxml2)
+ 
+ if test "$EX_CHECK_ALL_ERR" = "YES"; then
+   AC_MSG_ERROR([Please fix the library issues listed above and try again.])
+--- rrdtool-1.4.3/src/rrd_dump.c.noxml	2010-03-22 17:05:55.000000000 +0100
++++ rrdtool-1.4.3/src/rrd_dump.c	2010-09-07 21:44:23.000000000 +0200
+@@ -47,6 +47,8 @@
+ 
+ #include <locale.h>
+ 
++#ifndef RRD_TOOL_NOXML
++
+ #if !(defined(NETWARE) || defined(WIN32))
+ extern char *tzname[2];
+ #endif
+@@ -587,3 +589,4 @@ int rrd_dump(
+ 
+     return rc;
+ }
++#endif
+--- rrdtool-1.4.3/src/rrd_tool.c.noxml	2010-03-22 17:05:55.000000000 +0100
++++ rrdtool-1.4.3/src/rrd_tool.c	2010-09-08 21:14:53.000000000 +0200
+@@ -69,17 +69,25 @@ void PrintUsage(
+            "\t\t[DS:ds-name:DST:dst arguments]\n"
+            "\t\t[RRA:CF:cf arguments]\n");
+ 
++#ifdef RRD_TOOL_NOXML
++    const char *help_dump = "XML support not compiled in\n";
++#else
+     const char *help_dump =
+         N_("* dump - dump an RRD to XML\n\n"
+            "\trrdtool dump filename.rrd >filename.xml\n");
++#endif
+ 
+     const char *help_info =
+         N_("* info - returns the configuration and status of the RRD\n\n"
+            "\trrdtool info filename.rrd\n");
+ 
++#ifdef RRD_TOOL_NOXML
++    const char *help_restore = "XML support not compiled in\n";
++#else
+     const char *help_restore =
+         N_("* restore - restore an RRD file from its XML form\n\n"
+            "\trrdtool restore [--range-check|-r] [--force-overwrite|-f] filename.xml filename.rrd\n");
++#endif
+ 
+     const char *help_last =
+         N_("* last - show last update time for RRD\n\n"
+@@ -201,6 +209,9 @@ void PrintUsage(
+         N_
+         (" * resize - alter the length of one of the RRAs in an RRD\n\n"
+          "\trrdtool resize filename rranum GROW|SHRINK rows\n");
++#ifdef RRD_TOOL_NOXML
++    const char *help_xport = "XML support not compiled in\n";
++#else
+     const char *help_xport =
+         N_("* xport - generate XML dump from one or several RRD\n\n"
+            "\trrdtool xport [-s|--start seconds] [-e|--end seconds]\n"
+@@ -208,6 +219,7 @@ void PrintUsage(
+            "\t\t[--enumds]\n" "\t\t[DEF:vname=rrd:ds-name:CF]\n"
+            "\t\t[CDEF:vname=rpn-expression]\n"
+            "\t\t[XPORT:vname:legend]\n");
++#endif
+     const char *help_quit =
+         N_(" * quit - closing a session in remote mode\n\n"
+            "\trrdtool quit\n");
+@@ -637,7 +649,11 @@ int HandleInputLine(
+     if (strcmp("create", argv[1]) == 0)
+         rrd_create(argc - 1, &argv[1]);
+     else if (strcmp("dump", argv[1]) == 0)
++#ifdef RRD_TOOL_NOXML
++	printf("dump support not compiled in...\n");
++#else
+         rrd_dump(argc - 1, &argv[1]);
++#endif
+     else if (strcmp("info", argv[1]) == 0 || strcmp("updatev", argv[1]) == 0) {
+         rrd_info_t *data;
+ 
+@@ -658,7 +674,11 @@ int HandleInputLine(
+                "  Copyright by Tobi Oetiker, 1997-2008 (%f)\n",
+                rrd_version());
+     else if (strcmp("restore", argv[1]) == 0)
++#ifdef RRD_TOOL_NOXML
++	printf("restore support not compiled in...\n");
++#else
+         rrd_restore(argc - 1, &argv[1]);
++#endif
+     else if (strcmp("resize", argv[1]) == 0)
+         rrd_resize(argc - 1, &argv[1]);
+     else if (strcmp("last", argv[1]) == 0)
+--- rrdtool-1.4.3/src/rrd_restore.c.noxml	2010-03-22 17:05:55.000000000 +0100
++++ rrdtool-1.4.3/src/rrd_restore.c	2010-09-07 21:44:23.000000000 +0200
+@@ -12,6 +12,8 @@
+ #include "rrd_tool.h"
+ #include "rrd_rpncalc.h"
+ 
++#ifndef RRD_TOOL_NOXML
++
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -1269,3 +1271,5 @@ int rrd_restore(
+ }                       /* int rrd_restore */
+ 
+ /* vim: set sw=2 sts=2 ts=8 et fdm=marker : */
++
++#endif

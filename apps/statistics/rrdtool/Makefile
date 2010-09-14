@@ -5,18 +5,20 @@ include $(TOPDIR)/$(ARCH).config
 
 NAME	    = rrdtool
 FORMAT	    = tar.gz
-VERSION	    = 1.2.30
+VERSION	    = 1.4.3
 CC         += -D_BSD_SOURCE
 PREFIX      = /opt/diet
 STRIPPIT    = yes
-PATCHES     = rrdtool-link.patch
-PATCHES    += rrdtool-silent_rules.patch
+PATCHES     = rrdtool-noxml.patch
+PATCHES    += rrdtool-round.patch
 DO_AUTOCONF = $(STAMP)-autoconf
 DO_PREPARE  = $(STAMP)-prepare
 FILES	    = /
-CPPFLAGS   += -I/opt/diet/include/libart-2.0
+CPPFLAGS   += -DRRD_TOOL_NOXML
+#LDFLAGS    += -lm
 ARGS        = --disable-perl --disable-python --disable-tcl --disable-ruby --enable-silent-rules
 ARGS       += --quiet $(HOSTARGS)
+MAKEARGS   += V=1
 ifneq ($(ARCH),i386)
   ARGS     += rd_cv_ieee_works=yes
 endif
