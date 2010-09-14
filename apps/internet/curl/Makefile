@@ -3,19 +3,19 @@
 include $(TOPDIR)/.config
 
 NAME	     = curl
-VERSION	     = 7.10.3
+VERSION	     = 7.21.1
 FORMAT	     = tar.bz2
-PATCHES	     = curl-7.10.3-autoconf-crap.patch
-PATCHES	    += curl-7.10.3-inet_ntoa_r.patch
-PATCHES	    += curl-7.10.3-ssl.patch
+# PATCHES	     = curl-7.10.3-autoconf-crap.patch
+# PATCHES	    += curl-7.10.3-inet_ntoa_r.patch
+# PATCHES	    += curl-7.10.3-ssl.patch
 # PATCHES	    += curl-7.10.3-nohelp.patch
-CPPFLAGS     = -DWITHOUT_HELP
+DO_AUTOCONF  = $(STAMP)-autoconf
 DO_PREPARE   = $(STAMP)-prepare
 STRIPPIT     = yes
 ARGS	     = --disable-ftp --disable-gopher --disable-shared
 ARGS	    += --disable-dict --disable-telnet --disable-debug
-ARGS	    += --disable-file --without-zlib
-PREFIX	     = /usr
+ARGS	    += --disable-file --without-zlib --bindir=/usr/bin --sbindir=/usr/sbin
+ARGS        += --without-libssh2 --without-librtmp --without-libidn --without-krb4
 
 ifneq ($(CONFIG_FEATURE_IPV6),y)
 ARGS        += --disable-ipv6
@@ -53,6 +53,6 @@ endif
 
 INSTALLARGS  = install-strip
 
-FILES	     = ./usr/bin/curl
+FILES	     = /usr/bin/curl /opt/diet/include /opt/diet/lib-$(ARCH)
 
 include $(TOPDIR)/rules.mk
