@@ -1,0 +1,25 @@
+--- fontconfig-2.8.0/configure.in.freetype	2009-11-19 00:49:23.000000000 +0100
++++ fontconfig-2.8.0/configure.in	2010-09-03 21:37:27.081535470 +0200
+@@ -218,8 +218,11 @@ else
+ 	ft_config="$freetype_config"
+ fi
+ 
+-FREETYPE_CFLAGS="`$ft_config --cflags`"
+-FREETYPE_LIBS="`$ft_config --libs`"
++PKG_PROG_PKG_CONFIG
++
++PKG_CHECK_MODULES([FREETYPE],[freetype2])
++AC_SUBST(FREETYPE_CFLAGS)
++AC_SUBST(FREETYPE_LIBS)
+ 
+ AC_SUBST(FREETYPE_LIBS)
+ AC_SUBST(FREETYPE_CFLAGS)
+@@ -356,8 +359,6 @@ fi
+ 
+ AC_ARG_ENABLE(libxml2,         [  --enable-libxml2              Use libxml2 instead of Expat])
+ 
+-PKG_PROG_PKG_CONFIG
+-
+ if test "$enable_libxml2" = "yes" -o "$expat" = "no"; then
+     PKG_CHECK_MODULES([LIBXML2], [libxml-2.0 >= 2.6])
+     AC_DEFINE_UNQUOTED(ENABLE_LIBXML2,1,[Use libxml2 instead of Expat])

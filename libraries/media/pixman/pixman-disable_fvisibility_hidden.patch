@@ -1,0 +1,102 @@
+--- pixman-0.18.4/configure.ac.no-visibility	2010-09-08 21:04:16.000000000 +0200
++++ pixman-0.18.4/configure.ac	2010-09-08 21:04:36.000000000 +0200
+@@ -138,39 +138,6 @@ if test "x$PERL" = xno; then
+ fi
+ AC_SUBST(PERL)
+ 
+-dnl =========================================================================
+-dnl -fvisibility stuff
+-
+-have_gcc4=no
+-AC_MSG_CHECKING(for -fvisibility)
+-AC_COMPILE_IFELSE([
+-#if defined(__GNUC__) && (__GNUC__ >= 4)
+-#else
+-error Need GCC 4.0 for visibility
+-#endif
+-int main () { return 0; } 
+-], have_gcc4=yes)
+-
+-if test "x$have_gcc4" = "xyes"; then
+-   CFLAGS="$CFLAGS -fvisibility=hidden"
+-fi
+-AC_MSG_RESULT($have_gcc4)
+-
+-have_sunstudio8=no
+-AC_MSG_CHECKING([for -xldscope (Sun compilers)])
+-AC_COMPILE_IFELSE([
+-#if defined(__SUNPRO_C) && (__SUNPRO_C >= 0x550)
+-#else
+-error Need Sun Studio 8 for visibility
+-#endif
+-int main () { return 0; } 
+-], have_sunstudio8=yes)
+-
+-if test "x$have_sunstudio8" = "xyes"; then
+-   CFLAGS="$CFLAGS -xldscope=hidden"
+-fi
+-AC_MSG_RESULT($have_sunstudio8)
+-
+ dnl ===========================================================================
+ dnl Check for MMX
+ 
+--- pixman-0.18.4/configure.no-visibility	2010-08-16 12:35:04.000000000 +0200
++++ pixman-0.18.4/configure	2010-09-08 21:03:56.000000000 +0200
+@@ -11158,57 +11158,6 @@ if test "x$PERL" = xno; then
+     as_fn_error "Perl is required to build pixman." "$LINENO" 5
+ fi
+ 
+-
+-
+-have_gcc4=no
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for -fvisibility" >&5
+-$as_echo_n "checking for -fvisibility... " >&6; }
+-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+-/* end confdefs.h.  */
+-
+-#if defined(__GNUC__) && (__GNUC__ >= 4)
+-#else
+-error Need GCC 4.0 for visibility
+-#endif
+-int main () { return 0; }
+-
+-_ACEOF
+-if ac_fn_c_try_compile "$LINENO"; then :
+-  have_gcc4=yes
+-fi
+-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+-
+-if test "x$have_gcc4" = "xyes"; then
+-   CFLAGS="$CFLAGS -fvisibility=hidden"
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $have_gcc4" >&5
+-$as_echo "$have_gcc4" >&6; }
+-
+-have_sunstudio8=no
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for -xldscope (Sun compilers)" >&5
+-$as_echo_n "checking for -xldscope (Sun compilers)... " >&6; }
+-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+-/* end confdefs.h.  */
+-
+-#if defined(__SUNPRO_C) && (__SUNPRO_C >= 0x550)
+-#else
+-error Need Sun Studio 8 for visibility
+-#endif
+-int main () { return 0; }
+-
+-_ACEOF
+-if ac_fn_c_try_compile "$LINENO"; then :
+-  have_sunstudio8=yes
+-fi
+-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+-
+-if test "x$have_sunstudio8" = "xyes"; then
+-   CFLAGS="$CFLAGS -xldscope=hidden"
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $have_sunstudio8" >&5
+-$as_echo "$have_sunstudio8" >&6; }
+-
+-
+ if test "x$MMX_CFLAGS" = "x" ; then
+    if test "x$SUNCC" = "xyes"; then
+       # Sun Studio doesn't have an -xarch=mmx flag, so we have to use sse
