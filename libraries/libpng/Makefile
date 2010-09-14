@@ -2,7 +2,7 @@
 
 include $(TOPDIR)/.config
 
-VERSION	    = 1.2.25
+VERSION	    = 1.2.44
 NAME	    = libpng
 FORMAT	    = tar.bz2
 ifeq ($(CONFIG_PNG_SMALL),y)
