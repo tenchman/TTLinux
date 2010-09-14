@@ -1,7 +1,11 @@
---- dietlibc-0.31/include/sys/inotify.h.struct_inotify_event	2008-04-15 15:47:34.000000000 +0200
-+++ dietlibc-0.31/include/sys/inotify.h	2008-04-15 15:45:48.000000000 +0200
-@@ -4,11 +4,11 @@
- #include <sys/cdefs.h>
+--- dietlibc-0.30/include/sys/inotify.h.struct_inotify_event	2010-09-07 00:00:48.000000000 +0200
++++ dietlibc-0.30/include/sys/inotify.h	2010-09-07 21:08:56.000000000 +0200
+@@ -1,14 +1,14 @@
+ #ifndef _SYS_INOTIFY_H
+ #define _SYS_INOTIFY_H
+ 
+-#include <sys/cdefs.h>
++#include <stdint.h>
  
  struct inotify_event {
 -	__s32		wd;		/* watch descriptor */
