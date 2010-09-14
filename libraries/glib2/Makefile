@@ -4,7 +4,7 @@ include $(TOPDIR)/.config
 include $(TOPDIR)/$(ARCH).config
 
 NAME	    = glib
-VERSION	    = 2.14.6
+VERSION	    = 2.24.2
 FORMAT	    = tar.bz2
 PATCHES     = glib-diet.patch
 DO_PREPARE  = $(STAMP)-prepare
