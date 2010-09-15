@@ -113,6 +113,11 @@ SUBDIRS-$(CONFIG_LIBSPF2)       += libraries/libspf2
 SUBDIRS-$(CONFIG_LIBSRS2)       += libraries/libsrs2
 SUBDIRS-$(CONFIG_DBUS)          += libraries/dbus
 
+SUBDIRS-$(CONFIG_FONTCONFIG)    += libraries/media/fontconfig
+SUBDIRS-$(CONFIG_PIXMAN)        += libraries/media/pixman
+SUBDIRS-$(CONFIG_CAIRO)         += libraries/media/cairo
+SUBDIRS-$(CONFIG_PANGO)         += libraries/media/pango
+
 SUBDIRS-$(CONFIG_OPENPAM)	+= libraries/openpam
 SUBDIRS-$(CONFIG_OPENLDAP)	+= libraries/openldap
 
@@ -195,6 +200,14 @@ SUBDIRS-$(CONFIG_CONNTRACKD)        += apps/firewall/conntrackd
 SUBDIRS-$(CONFIG_CONNTRACKTOOLS)    += apps/firewall/conntrack-tools
 
 # =========================================================================
+# APPS -> STATISTICS
+# =========================================================================
+SUBDIRS-$(CONFIG_RRDTOOL)           += apps/statistics/rrdtool
+SUBDIRS-$(CONFIG_LM_SENSORS)        += apps/statistics/lm_sensors
+SUBDIRS-$(CONFIG_HDDTEMP)           += apps/statistics/hddtemp
+SUBDIRS-$(CONFIG_COLLECTD)          += apps/statistics/collectd
+
+# =========================================================================
 # APPS -> INTERNET
 # =========================================================================
 SUBDIRS-$(CONFIG_CURL)              += apps/internet/curl
@@ -266,10 +279,6 @@ SUBDIRS-$(CONFIG_NETCAT)            += apps/net-analyzer/netcat
 SUBDIRS-$(CONFIG_TCPDUMP)           += apps/net-analyzer/tcpdump
 SUBDIRS-$(CONFIG_YWS)               += apps/net-analyzer/yws
 
-SUBDIRS-$(CONFIG_RRDTOOL)           += apps/statistics/rrdtool
-SUBDIRS-$(CONFIG_LM_SENSORS)        += apps/statistics/lm_sensors
-SUBDIRS-$(CONFIG_HDDTEMP)           += apps/statistics/hddtemp
-SUBDIRS-$(CONFIG_COLLECTD)          += apps/statistics/collectd
 # =========================================================================
 # APPS -> DEVELOPMENT
 # =========================================================================
