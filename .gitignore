@@ -4,3 +4,4 @@ dist/*
 .svn
 *~
 .stamp-*
+.config
