@@ -212,7 +212,7 @@ $(STAMP)-gplusplus-prepare: $(STAMP)-gcc-prepare $(STAMP)-dietlibc-install
 		$(TARGETARGS) ../configure \
 			--target=$(TARGET) --prefix=$(TOOLSDIR) \
 			--disable-cpp --disable-shared --disable-multilib \
-			--disable-libssp --disable-libmudflap \
+			--disable-libssp --disable-libmudflap --disable-tls \
 			--disable-__cxa_atexit --disable-checking --enable-sjlj-exceptions \
 			--enable-nls=no $(USE_WCHAR) --enable-clocale=no \
 			--with-headers=$(TOOLSDIR)/include --enable-languages="c,c++"; \
