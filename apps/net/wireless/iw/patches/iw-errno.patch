@@ -1,0 +1,11 @@
+--- iw-0.9.20/genl.c.errno	2010-09-15 21:22:52.000000000 +0200
++++ iw-0.9.20/genl.c	2010-09-15 21:23:05.000000000 +0200
+@@ -2,7 +2,7 @@
+  * This ought to be provided by libnl
+  */
+ 
+-#include <asm/errno.h>
++#include <errno.h>
+ #include <netlink/genl/genl.h>
+ #include <netlink/genl/family.h>
+ #include <netlink/genl/ctrl.h>  
