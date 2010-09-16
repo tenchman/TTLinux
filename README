@@ -11,3 +11,8 @@ Why?
 ----
 
 Well, can't remember. I was young....
+
+How?
+----
+
+Just 'ln -sf ${ARCH}.config .config' and hit 'make'. Happy frustation!
