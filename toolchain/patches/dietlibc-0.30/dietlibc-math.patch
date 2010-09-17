@@ -1,6 +1,6 @@
---- dietlibc-0.30/lib/__finite.c.math	2008-03-18 23:34:49.000000000 +0100
-+++ dietlibc-0.30/lib/__finite.c	2008-03-18 23:36:48.000000000 +0100
-@@ -1,7 +1,18 @@
+--- dietlibc-0.30/lib/__finite.c.math	2003-03-24 03:04:46.000000000 +0100
++++ dietlibc-0.30/lib/__finite.c	2010-09-17 22:10:40.000000000 +0200
+@@ -1,7 +1,22 @@
  #include <math.h>
 +#include <inttypes.h>
  
@@ -8,6 +8,10 @@
    return isinf(d)==0 && isnan(d)==0;
  }
  
++int finitel(long double d) {
++  return finite((double) d);
++}
++
 +int finitef(float f) {
 +  union {
 +    float value;
@@ -20,8 +24,8 @@
  int __finite(double d) __attribute__((alias("finite")));
 +int __finitef(float d) __attribute__((alias("finitef")));
 --- dietlibc-0.30/include/math.h.math	2004-08-04 00:28:46.000000000 +0200
-+++ dietlibc-0.30/include/math.h	2008-03-18 23:39:21.000000000 +0100
-@@ -72,14 +72,12 @@
++++ dietlibc-0.30/include/math.h	2010-09-17 22:13:14.000000000 +0200
+@@ -72,14 +72,12 @@ double atan2(double x, double y) __THROW
  
  double copysign(double value, double sign) __attribute__((__const__));
  
@@ -42,11 +46,18 @@
  
  #ifdef _GNU_SOURCE
  void sincos(double x, double* sinx, double* cosx);
-@@ -89,6 +87,7 @@
+@@ -89,6 +87,14 @@ double ipow (double mant, int expo);
  int isnan(double d) __attribute__((__const__));
  int isinf(double d) __attribute__((__const__));
  int finite(double d) __attribute__((__const__));
 +int finitef(float d) __attribute__((__const__));
++int finitel(long double d) __attribute__((__const__));
++ 
++#define isfinite(x)		      \
++     (sizeof (x) == sizeof (float)    \
++      ? __finitef (x)		      \
++      : sizeof (x) == sizeof (double) \
++      ? __finite (x) : __finitel (x))
  
  double j0(double x);
  double j1(double x);
