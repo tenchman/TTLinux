@@ -20,7 +20,11 @@ INSTALLARGS += DATAPATH=$(PREFIX)/share NODOCS=1 install
 
 FILES        = $(PREFIX)/include/*.h $(PREFIX)/lib-$(ARCH)/lib*
 
-export INSTALL_GROUP = root
+USER         = $(shell id -u)
+GROUP        = $(shell id -g)
+
+export INSTALL_GROUP = $(GROUP)
+export INSTALL_USER = $(USER)
 
 include $(TOPDIR)/rules.mk
 
