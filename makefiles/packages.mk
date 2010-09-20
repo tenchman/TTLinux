@@ -265,7 +265,6 @@ SUBDIRS-$(CONFIG_SAMBA)             += apps/net/samba
 SUBDIRS-$(CONFIG_NET_SNMP)          += apps/net/net-snmp
 SUBDIRS-$(CONFIG_WAKELAN)           += apps/net/wakelan
 SUBDIRS-$(CONFIG_DROPBEAR)          += apps/net/dropbear
-SUBDIRS-$(CONFIG_TINYAD)	    += apps/net/tinyad
 SUBDIRS-$(CONFIG_HOSTAPD)           += apps/net/wireless/hostapd
 SUBDIRS-$(CONFIG_WPA_SUPPLICANT)    += apps/net/wireless/wpa_supplicant
 SUBDIRS-$(CONFIG_IW)                += apps/net/wireless/iw
