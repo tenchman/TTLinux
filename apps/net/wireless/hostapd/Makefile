@@ -5,7 +5,7 @@ include $(TOPDIR)/$(ARCH).config
 
 NAME	    = hostapd
 FORMAT	    = tar.gz
-VERSION	    = 0.7.2
+VERSION	    = 0.7.3
 PATCHES     = hostapd-0.7.2-diet.patch
 PATCHES    += hostapd-0.7.2-make.patch
 PATCHES    += hostapd-0.7.2-ap_isolate.patch
@@ -15,7 +15,7 @@ ifeq ($(CONFIG_HOSTAPD_STATIC),y)
 LDFLAGS    += -static
 CC          = $(COMPILER)
 endif
-LDFLAGS    += -lcompat
+LDFLAGS    += -Wl,--gc-sections -lcompat
 CFLAGS     += -D_BSD_SOURCE -D_GNU_SOURCE -fno-builtin
 PREFIX      = /usr
 STRIPPIT    = yes
