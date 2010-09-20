@@ -113,6 +113,7 @@ SUBDIRS-$(CONFIG_LIBSPF2)       += libraries/libspf2
 SUBDIRS-$(CONFIG_LIBSRS2)       += libraries/libsrs2
 SUBDIRS-$(CONFIG_DBUS)          += libraries/dbus
 
+SUBDIRS-$(CONFIG_FREETYPE)      += libraries/freetype
 SUBDIRS-$(CONFIG_FONTCONFIG)    += libraries/media/fontconfig
 SUBDIRS-$(CONFIG_PIXMAN)        += libraries/media/pixman
 SUBDIRS-$(CONFIG_CAIRO)         += libraries/media/cairo
@@ -128,7 +129,6 @@ SUBDIRS-$(CONFIG_LIBNFNETLINK_LOG) 	  += libraries/netfilter/libnetfilter_log
 SUBDIRS-$(CONFIG_LIBNL) 	  	  += libraries/libnl
 
 SUBDIRS-$(CONFIG_LIBRSYNC)	+= libraries/librsync
-SUBDIRS-$(CONFIG_FREETYPE)      += libraries/freetype
 SUBDIRS-$(CONFIG_LIBART_LGPL)   += libraries/libart_lgpl
 SUBDIRS-$(CONFIG_LIBDAEMON)     += libraries/libdaemon
 
@@ -267,6 +267,7 @@ SUBDIRS-$(CONFIG_WAKELAN)           += apps/net/wakelan
 SUBDIRS-$(CONFIG_DROPBEAR)          += apps/net/dropbear
 SUBDIRS-$(CONFIG_TINYAD)	    += apps/net/tinyad
 SUBDIRS-$(CONFIG_HOSTAPD)           += apps/net/wireless/hostapd
+SUBDIRS-$(CONFIG_WPA_SUPPLICANT)    += apps/net/wireless/wpa_supplicant
 SUBDIRS-$(CONFIG_IW)                += apps/net/wireless/iw
 SUBDIRS-$(CONFIG_RFKILL)            += apps/net/wireless/rfkill
 
