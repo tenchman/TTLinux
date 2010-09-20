@@ -31,8 +31,10 @@ extern "C" {
 #define __LINUX_COMPILER_H
 #define __user
 
-typedef unsigned int __u32;
+#ifndef _ASM_TYPES_H
+typedef uint32_t __u32;
 typedef __u32 __le32;
+#endif
 
 #include <linux/capability.h>
 
