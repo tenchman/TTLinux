@@ -308,7 +308,7 @@
 @@ -0,0 +1,49 @@
 +#ifndef _NS_H_
 +#define	_NS_H_
-+
++#ifndef NS_PUT16
 +#ifndef u_char
 +#define u_char unsigned char
 +#endif
@@ -353,7 +353,7 @@
 +#define	GETSHORT  NS_GET16
 +#define	PUTLONG   NS_PUT32
 +#define	GETLONG   NS_GET32
-+
++#endif
 +#endif
 --- dnsmasq-2.45/src/dnsmasq.c.diet	2008-07-20 20:26:07.000000000 +0200
 +++ dnsmasq-2.45/src/dnsmasq.c	2008-07-24 14:41:03.000000000 +0200
