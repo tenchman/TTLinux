@@ -1,0 +1,40 @@
+diff -up wpa_supplicant-0.7.3/wpa_supplicant/Makefile.make wpa_supplicant-0.7.3/wpa_supplicant/Makefile
+--- wpa_supplicant-0.7.3/wpa_supplicant/Makefile.make	2010-09-10 11:54:04.788652746 +0200
++++ wpa_supplicant-0.7.3/wpa_supplicant/Makefile	2010-09-10 11:57:44.870777954 +0200
+@@ -1271,28 +1271,28 @@ wpa_priv: $(BCHECK) $(OBJS_priv)
+ 	$(LDO) $(LDFLAGS) -o wpa_priv $(OBJS_priv) $(LIBS)
+ 
+ wpa_supplicant: .config $(BCHECK) $(OBJS) $(EXTRA_progs)
+-	$(LDO) $(LDFLAGS) -o wpa_supplicant $(OBJS) $(LIBS) $(EXTRALIBS)
++	$(LDO) -o wpa_supplicant $(OBJS) $(LIBS) $(EXTRALIBS) $(LDFLAGS)
+ 
+ eapol_test: .config $(OBJS_t)
+-	$(LDO) $(LDFLAGS) -o eapol_test $(OBJS_t) $(LIBS)
++	$(LDO) -o eapol_test $(OBJS_t) $(LIBS) $(LDFLAGS)
+ 
+ preauth_test: .config $(OBJS_t2) 
+-	$(LDO) $(LDFLAGS) -o preauth_test $(OBJS_t2) $(LIBS)
++	$(LDO) -o preauth_test $(OBJS_t2) $(LIBS) $(LDFLAGS)
+ 
+ wpa_passphrase: $(OBJS_p)
+-	$(LDO) $(LDFLAGS) -o wpa_passphrase $(OBJS_p) $(LIBS_p)
++	$(LDO) -o wpa_passphrase $(OBJS_p) $(LIBS_p) $(LDFLAGS)
+ 
+ wpa_cli: $(OBJS_c)
+-	$(LDO) $(LDFLAGS) -o wpa_cli $(OBJS_c) $(LIBS_c)
++	$(LDO) -o wpa_cli $(OBJS_c) $(LIBS_c) $(LDFLAGS)
+ 
+ link_test: $(OBJS) $(OBJS_h) tests/link_test.o
+-	$(LDO) $(LDFLAGS) -o link_test $(OBJS) $(OBJS_h) tests/link_test.o $(LIBS)
++	$(LDO) -o link_test $(OBJS) $(OBJS_h) tests/link_test.o $(LIBS) $(LDFLAGS)
+ 
+ test_wpa: $(OBJS_wpa) $(OBJS_h)
+-	$(LDO) $(LDFLAGS) -o test_wpa $(OBJS_wpa) $(LIBS)
++	$(LDO) -o test_wpa $(OBJS_wpa) $(LIBS) $(LDFLAGS)
+ 
+ win_if_list: win_if_list.c
+-	$(LDO) $(LDFLAGS) -o $@ win_if_list.c $(CFLAGS) $(LIBS_w)
++	$(LDO) -o $@ win_if_list.c $(CFLAGS) $(LIBS_w) $(LDFLAGS)
+ 
+ eap_psk.so: ../src/eap_peer/eap_psk.c ../src/eap_common/eap_psk_common.c
+ 	$(CC) $(LDFLAGS) -o $@ $(CFLAGS) -shared -rdynamic -fPIC $^ \

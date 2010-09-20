@@ -1,0 +1,31 @@
+diff -up hostapd-0.7.2/hostapd/Makefile.make hostapd-0.7.2/hostapd/Makefile
+--- hostapd-0.7.2/hostapd/Makefile.make	2010-04-18 18:15:07.000000000 +0200
++++ hostapd-0.7.2/hostapd/Makefile	2010-08-11 14:25:49.328022680 +0200
+@@ -728,8 +728,16 @@ verify_config:
+ 		exit 1; \
+ 	fi
+ 
+-install: all
+-	for i in $(ALL); do cp -f $$i /usr/local/bin/$$i; done
++install:
++	@mkdir -p $(DESTDIR)/usr/sbin
++	@mkdir -p $(DESTDIR)/usr/share/man1
++	@mkdir -p $(DESTDIR)/usr/share/man8
++	@mkdir -p $(DESTDIR)/usr/share/doc/hostapd-0.7.2
++	@cp hostapd.conf wired.conf hostapd.accept hostapd.deny README README-WPS $(DESTDIR)/usr/share/doc/hostapd-0.7.2
++	@cp hostapd.eap_user hostapd.radius_clients hostapd.sim_db hostapd.vlan hostapd.wpa_psk $(DESTDIR)/usr/share/doc/hostapd-0.7.2
++	@cp hostapd hostapd_cli $(DESTDIR)/usr/sbin
++	@cp hostapd_cli.1 $(DESTDIR)/usr/share/man1
++	@cp hostapd.8 $(DESTDIR)/usr/share/man8
+ 
+ ../src/drivers/build.hostapd:
+ 	@if [ -f ../src/drivers/build.wpa_supplicant ]; then \
+@@ -748,7 +756,7 @@ OBJS_c += ../src/utils/trace.o
+ OBJS_c += ../src/utils/wpa_debug.o
+ endif
+ hostapd_cli: $(OBJS_c)
+-	$(CC) $(LDFLAGS) -o hostapd_cli $(OBJS_c) $(LIBS_c)
++	$(CC) -o hostapd_cli $(OBJS_c) $(LIBS_c) $(LDFLAGS)
+ 
+ NOBJS = nt_password_hash.o ../src/crypto/ms_funcs.o $(SHA1OBJS) ../src/crypto/md5.o
+ ifdef NEED_RC4
