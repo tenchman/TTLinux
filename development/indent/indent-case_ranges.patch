@@ -1,0 +1,60 @@
+diff -up indent-2.2.9/src/lexi.c.case_ranges indent-2.2.9/src/lexi.c
+--- indent-2.2.9/src/lexi.c.case_ranges	2002-08-04 19:08:41.000000000 +0200
++++ indent-2.2.9/src/lexi.c	2010-09-20 11:53:58.116556119 +0200
+@@ -907,29 +907,40 @@ codes_ty lexi (void)
+             break;
+ 
+         case '.':
+-            if (parser_state_tos->in_decl && 
+-                (buf_ptr[0] == '.') && 
++            if ((buf_ptr[0] == '.') && 
+                 (buf_ptr[1] == '.'))
+             {
+-                /* check for '...' in a declaration */
++                /* We have a '...'. This is supposed to mean something */
+                 if ((buf_ptr += 2) >= buf_end)
+                 {
+                     fill_buffer ();
+                 }
+-                
+-                unary_delim = true;
+-                code = decl;
+-                token_end = buf_ptr;
+-                break;
+-            }
+-            unary_delim = false;
+-            code = struct_delim;
++           
++		if (parser_state_tos->in_decl) 
++		{
++		    /* this is '...' in a declaration */
++		    unary_delim = true;
++		    code = decl;
++		    token_end = buf_ptr;
++		} else {
++		    /* this is '...' somewhere else */
++		    /* for example: case 1 ... 9: */
++		    unary_delim = true;
++		    code = binary_op;
++		    token_end = buf_ptr;
++		}
++	    } else {
++
++		unary_delim = false;
++		code = struct_delim;
++
+             
+-            if (*buf_ptr == '*')	/* object .* pointer-to-member */
+-            {
+-                ++buf_ptr;
+-                token_end = buf_ptr;
+-            }
++		if (*buf_ptr == '*')	/* object .* pointer-to-member */
++		{
++		    ++buf_ptr;
++		    token_end = buf_ptr;
++		}
++	    }
+             break;
+ 
+         case '-':

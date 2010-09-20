@@ -1,0 +1,20 @@
+diff -up indent-2.2.9/src/output.c.fix indent-2.2.9/src/output.c
+--- indent-2.2.9/src/output.c.fix	2010-09-15 08:53:33.483662386 +0200
++++ indent-2.2.9/src/output.c	2010-09-15 08:56:20.306662151 +0200
+@@ -12,6 +12,7 @@
+  */
+ 
+ #include <stdio.h>
++#include <stdlib.h>	  /* exit() */
+ #include <sys/types.h>
+ #include <utime.h>
+ #include <sys/stat.h>
+@@ -23,7 +24,7 @@
+ 
+ RCSTAG_CC ("$Id: output.c,v 1.5 2002/12/12 17:36:49 david Exp $");
+ 
+-static FILE            * output       = NULL;
++FILE            * output       = NULL;
+ static BOOLEAN           inhibited    = 0;
+ static buf_break_st_ty * buf_break_list = NULL;
+ 
