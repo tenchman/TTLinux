@@ -4,7 +4,7 @@ include $(TOPDIR)/.config
 include $(TOPDIR)/$(ARCH).config
 
 NAME	    = lm_sensors
-VERSION	    = 3.1.1
+VERSION	    = 3.1.2
 FORMAT	    = tar.bz2
 PATCHES     = lm_sensors-dirent.patch
 DO_PREPARE  = 
