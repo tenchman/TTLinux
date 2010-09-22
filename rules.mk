@@ -1,6 +1,5 @@
 # $Id: rules.mk,v 1.26 2003/10/06 11:00:43 gernot Exp $
 
-BUILDDIR     = /var/tmp/ttl-ng
 DISTFILES    = $(TOPDIR)/distfiles
 
 ifeq ($(TOOLCHAINBIN),)

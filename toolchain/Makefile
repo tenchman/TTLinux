@@ -12,7 +12,6 @@ GCC        = gcc-$(GCCVER)
 DIETLIBC   = dietlibc-$(DIETLIBCVER)
 DIETHEADER = dietlibc-headers-$(DIETLIBCVER)
 FDLIBM     = fdlibm-$(FDLIBMVER)
-BUILDDIR   = $(TOPDIR)/toolchain/build
 PATCHDIR   = $(TOPDIR)/toolchain/patches
 DISTFILES  = $(TOPDIR)/distfiles
 TMPDIR     = $(TOPDIR)/tmp

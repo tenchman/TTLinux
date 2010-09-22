@@ -9,6 +9,7 @@ include .config
 # we need TTL_KERNELARCH from $(ARCH).config
 include $(ARCH).config
 
+BUILDDIR  = /var/tmp/TTLinux
 TOPDIR	  = $(shell if [ "$$PWD" != "" ]; then echo $$PWD; else pwd; fi)
 BZIP2CMD  = $(shell PATH=/bin:/usr/bin:/sbin:/usr/sbin && which pbzip2)
 ifeq ($(BZIP2CMD),)
@@ -34,7 +35,7 @@ TTL_KERNELINC  = -I$(TTL_KERNELSRC)/include -I$(TTL_KERNELSRC)/arch/$(TTL_KERNEL
 KERNELFLAGS    = -nostdinc -isystem $(PREFIX)/include -D_GNU_SOURCE -D__GLIBC__=2 -D__KERNEL_STRICT_NAMES
 
 unexport LD_LIBRARY_PATH TMPDIR MANPATH
-export TOPDIR LANG KERNELINC ARCH VENDOR PLATFORM HOSTVER HOSTCC PREFIX
+export TOPDIR LANG KERNELINC ARCH VENDOR PLATFORM HOSTVER HOSTCC PREFIX BUILDDIR
 export KERNELFLAGS KERNELDIR TTL_KERNELINC TTL_KERNELVER TTL_KERNELSRC BZIP2CMD
 
 include makefiles/packages.mk
@@ -48,7 +49,8 @@ all: check $(LIBPRETENDROOT)
 	perl -pi -e "s/lib-[^\"]+/lib-$(ARCH)/g" /opt/diet/bin/libtool
 	perl -pi -e "s,^sys_lib_search_path_spec.*,sys_lib_search_path_spec=\"/opt/diet/$(HOSTVER)/lib /opt/diet/lib-$(ARCH)/gcc/$(HOSTVER)/$(GCCVER) /opt/diet/lib-$(ARCH)\",g" /opt/diet/bin/libtool
 	perl -pi -e "s,^sys_lib_dlsearch_path_spec.*,sys_lib_dlsearch_path_spec=\"/opt/diet/lib-$(ARCH) /opt/diet/lib-$(ARCH)/gcc/$(HOSTVER)/$(GCCVER)\",g" /opt/diet/bin/libtool
-	@mkdir -p dist/opt/diet 
+	@mkdir -p dist/opt/diet
+	@mkdir -p packages
 	@for dir in $(SUBDIRS-y); do \
 		  echo -ne "\033]0; == Working on: $$dir == \007"; \
 		  echo "  ==> $$dir"; \
