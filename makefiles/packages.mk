@@ -173,6 +173,8 @@ SUBDIRS-$(CONFIG_IPUTILS)     += base/iputils
 SUBDIRS-$(CONFIG_USBUTILS)    += apps/system/usbutils
 SUBDIRS-$(CONFIG_TRACEROUTE)  += apps/net/traceroute
 SUBDIRS-$(CONFIG_IFPLUGD)     += apps/net/ifplugd
+SUBDIRS-$(CONFIG_UCARPCTL)    += apps/net/ucarpctl
+SUBDIRS-$(CONFIG_UCARP)       += apps/net/ucarp
 
 SUBDIRS-$(CONFIG_AESCRYPT)       += apps/crypto/aescrypt
 SUBDIRS-$(CONFIG_AESCRYPT2)      += apps/crypto/aescrypt2
