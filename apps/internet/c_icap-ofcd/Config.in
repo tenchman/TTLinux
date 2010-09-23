@@ -1,8 +1,0 @@
-# vim:set syntax=kconfig:
-config CONFIG_C_ICAP_OFCD
-  bool "C-icap-ofcd - OFCD (Orange Filter Caching Daemon) plugin for c-icap"
-  depends CONFIG_C_ICAP
-  default n
-  help
-
-    https://svn.telco-tech.de/projects/c-icap-plugins

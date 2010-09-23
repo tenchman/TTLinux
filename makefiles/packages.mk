@@ -173,6 +173,8 @@ SUBDIRS-$(CONFIG_IPUTILS)     += base/iputils
 SUBDIRS-$(CONFIG_USBUTILS)    += apps/system/usbutils
 SUBDIRS-$(CONFIG_TRACEROUTE)  += apps/net/traceroute
 SUBDIRS-$(CONFIG_IFPLUGD)     += apps/net/ifplugd
+SUBDIRS-$(CONFIG_UCARPCTL)    += apps/net/ucarpctl
+SUBDIRS-$(CONFIG_UCARP)       += apps/net/ucarp
 
 SUBDIRS-$(CONFIG_AESCRYPT)       += apps/crypto/aescrypt
 SUBDIRS-$(CONFIG_AESCRYPT2)      += apps/crypto/aescrypt2
@@ -216,8 +218,6 @@ SUBDIRS-$(CONFIG_SQUID)             += apps/internet/squid
 SUBDIRS-$(CONFIG_SQUID3)            += apps/internet/squid30
 SUBDIRS-$(CONFIG_SQUID3)            += apps/internet/squid32
 SUBDIRS-$(CONFIG_C_ICAP)            += apps/internet/c_icap
-SUBDIRS-$(CONFIG_C_ICAP_OFCD)       += apps/internet/c_icap-ofcd
-SUBDIRS-$(CONFIG_C_ICAP_CONTENTFILTER) += apps/internet/c_icap-contentfilter
 SUBDIRS-$(CONFIG_TINYPROXY)         += apps/internet/tinyproxy
 SUBDIRS-$(CONFIG_TINYPROXY_EX)      += apps/internet/tinyproxy-ex
 SUBDIRS-$(CONFIG_FTPPROXY)          += apps/internet/ftpproxy
@@ -232,8 +232,6 @@ SUBDIRS-$(CONFIG_FNORD)             += apps/internet/fnord
 SUBDIRS-$(CONFIG_NGINX)             += apps/internet/nginx
 SUBDIRS-$(CONFIG_OPENNTPD)          += apps/internet/openntpd
 SUBDIRS-$(CONFIG_IPSVD)             += apps/internet/ipsvd
-SUBDIRS-$(CONFIG_OFCD)	            += apps/internet/ofcd
-SUBDIRS-$(CONFIG_ARCHITEUTHIS)	    += apps/internet/architeuthis
 
 SUBDIRS-$(CONFIG_CACERTIFICATES)    += apps/internet/ca-certificates
 
