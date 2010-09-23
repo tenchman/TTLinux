@@ -57,6 +57,7 @@ DIETLIBCPATCHES    += dietlibc-missing_time_conversion_macros.patch
 DIETLIBCPATCHES	   += dietlibc-netdb.patch
 # don't include sys/stat.h in unistd.h and stdio.h
 DIETLIBCPATCHES	   += dietlibc-sys_stat.patch
+DIETLIBCPATCHES    += dietlibc-unistd_bits_confname.patch
 DIETLIBCPATCHES    += dietlibc-timed.patch
 
 DIETLIBCPATCHES    += dietlibc-ldconf.patch
