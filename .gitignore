@@ -1,4 +1,4 @@
-distfiles/*
+distfiles
 packages/*
 dist/*
 .svn
