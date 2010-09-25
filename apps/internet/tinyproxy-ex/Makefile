@@ -54,7 +54,7 @@ else
 ARGS       += --disable-transparent-proxy
 endif
 
-ARGS += --enable-ftp --enable-proctitle --quiet
+ARGS += --enable-proctitle --quiet
 ARGS += ac_cv_func_regexec=yes tinyproxy_cv_regex_broken=no
 
 ifeq ($(CONFIG_TINYPROXY_STATIC),y)
@@ -68,6 +68,6 @@ FILES	    = .$(PREFIX)/sbin/tinyproxy ./etc/tinyproxy-ex .$(PREFIX)/share/*
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare:
-	cd $(PACKAGE) && sh bootstrap.sh || :
+	cd $(PKGBUILDDIR) && sh bootstrap.sh || :
 	touch $@
 
