@@ -9,7 +9,7 @@ VERSION	    = 0.8.49
 PATCHES     = nginx-crypt_h.patch
 PREFIX      = /usr
 STRIPPIT    = yes
-CFLAGS     += -D_GNU_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE -Wno-deprecated-declarations
+CFLAGS     += -D_GNU_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE $(CPPFLAGS)
 I18N        = yes
 
 ARGS        = --without-http_rewrite_module --conf-path=/etc/nginx/nginx.conf 
@@ -17,6 +17,7 @@ ARGS       += --with-ld-opt="-lcompat" --pid-path=/var/run/nginx.pid --prefix=$(
 ARGS       += --error-log-path=/var/log/nginx/error.log --http-log-path=/var/log/nginx/access.log
 
 DO_PREPARE  = $(STAMP)-myprepare
+
 FILES	    = /etc/nginx/ /usr/sbin
 
 include $(TOPDIR)/rules.mk
