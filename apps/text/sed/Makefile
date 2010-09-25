@@ -26,7 +26,7 @@ FILES	= /
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare: $(STAMP)-prepare
-	perl -pi -e "s,^#define HAVE_MBRTOWC 1,/* #undef HAVE_MBRTOWC */," $(PACKAGE)/config.h
-	perl -pi -e "s,^#define HAVE_WCRTOMB 1,/* #undef HAVE_WCRTOMB */," $(PACKAGE)/config.h
-	perl -pi -e "s,^#define HAVE_ICONV 1,/* #undef HAVE_ICONV */," $(PACKAGE)/config.h
+	sed -i -e "s,^#define HAVE_MBRTOWC 1,/* #undef HAVE_MBRTOWC */," $(PACKAGE)/config.h
+	sed -i -e "s,^#define HAVE_WCRTOMB 1,/* #undef HAVE_WCRTOMB */," $(PACKAGE)/config.h
+	sed -i -e "s,^#define HAVE_ICONV 1,/* #undef HAVE_ICONV */," $(PACKAGE)/config.h
 	touch $(STAMP)-myprepare

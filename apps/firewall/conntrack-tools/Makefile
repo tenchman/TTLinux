@@ -20,6 +20,6 @@ FILES       = /sbin/* $(PREFIX)/share/man/man8/conntrack.8.*
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare: $(STAMP)-prepare
-	perl -pi -e "s:sys/fcntl.h:fcntl.h:" $(PACKAGE)/src/netlink.c
-	perl -pi -e "s:#include \"fds.h\":#include <sys/select.h>\n#include \"fds.h\":" $(PACKAGE)/src/fds.c
+	sed -i -e "s:sys/fcntl.h:fcntl.h:" $(PACKAGE)/src/netlink.c
+	sed -i -e "s:#include \"fds.h\":#include <sys/select.h>\n#include \"fds.h\":" $(PACKAGE)/src/fds.c
 	touch $(STAMP)-myprepare

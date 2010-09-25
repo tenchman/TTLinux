@@ -28,7 +28,7 @@ include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare: $(STAMP)-prepare $(PATCHES)
 	# dietlibc's getaddrinfo seems to be broken
-	perl -pi -e "s,.*BROKEN_GETADDRINFO.*,#define BROKEN_GETADDRINFO 1," $(PACKAGE)/config.h
+	sed -i -e "s,.*BROKEN_GETADDRINFO.*,#define BROKEN_GETADDRINFO 1," $(PACKAGE)/config.h
 	touch $(STAMP)-myprepare
 
 $(STAMP)-myinstall: $(STAMP)-install

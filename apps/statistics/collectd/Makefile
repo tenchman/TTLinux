@@ -31,8 +31,7 @@ ARGS       += --without-libnetlink --with-libgcrypt --without-libcurl
 # enable ARGS
 ARGS       += --enable-myplugin --enable-tail --enable-cpu
 # disable ARGS
-ARGS       += --disable-hddtemp --disable-nginx
-ARGS       += --disable-perl --disable-apache 
+ARGS       += --disable-hddtemp --disable-nginx --disable-apache 
 ARGS       += --disable-apcups --disable-battery --disable-cpufreq --disable-csv
 ARGS       += --disable-email --disable-exec --disable-irq --disable-mbmon
 ARGS       += --disable-mysql --disable-nfs --disable-nut --disable-ntpd
@@ -74,6 +73,6 @@ endif
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare:
-	perl -pi -e "s:^BUILD_WITH_LIBRRD_LDFLAGS.*:BUILD_WITH_LIBRRD_LDFLAGS=/opt/diet/lib-$(ARCH)/librrd_th.a -lm:g" $(PKGBUILDDIR)/Makefile $(PKGBUILDDIR)/src/Makefile
-	perl -pi -e "s:-Werror::g" $(PKGBUILDDIR)/Makefile $(PKGBUILDDIR)/src/Makefile
+	sed -i -e "s:^BUILD_WITH_LIBRRD_LDFLAGS.*:BUILD_WITH_LIBRRD_LDFLAGS=/opt/diet/lib-$(ARCH)/librrd_th.a -lm:g" $(PKGBUILDDIR)/Makefile $(PKGBUILDDIR)/src/Makefile
+	sed -i -e "s:-Werror::g" $(PKGBUILDDIR)/Makefile $(PKGBUILDDIR)/src/Makefile
 	touch $@

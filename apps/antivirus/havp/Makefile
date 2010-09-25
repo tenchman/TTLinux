@@ -16,5 +16,5 @@ PREFIX        = /usr
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare: $(STAMP)-prepare
-	find $(PACKAGE) -type f -exec perl -pi -e "s,/usr/local/etc,/etc,g" {} \;
+	find $(PACKAGE) -type f -exec sed -i -e "s,/usr/local/etc,/etc,g" {} \;
 	touch $(STAMP)-myprepare

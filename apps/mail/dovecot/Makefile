@@ -23,5 +23,5 @@ FILES  += $(PREFIX)/sbin/dovecot* /etc
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare: $(STAMP)-prepare
-	perl -pi -e "s/caddr_t/char */g" $(PACKAGE)/src/plugins/quota/quota-fs.c
+	sed -i -e "s/caddr_t/char */g" $(PACKAGE)/src/plugins/quota/quota-fs.c
 	touch $(STAMP)-myprepare

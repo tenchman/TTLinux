@@ -20,6 +20,6 @@ FILES = /usr/bin /usr/sbin /bin /sbin
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare: $(STAMP)-prepare
-	perl -pi -e "s/#define HAVE_WIDECHAR 1/#undef HAVE_WIDECHAR/g" $(PACKAGE)/config.h
+	sed -i -e "s/#define HAVE_WIDECHAR 1/#undef HAVE_WIDECHAR/g" $(PACKAGE)/config.h
 	touch $@
 

@@ -23,8 +23,8 @@ include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare: $(STAMP)-patch
 	(cd $(PKGBUILDDIR); \
-		perl -pi -e "s/-lreadline/-ledit/g" configure; \
-		perl -pi -e "s/tunefs.ocfs2//"  Makefile; \
-		perl -pi -e "s/debugfs.ocfs2//" Makefile; \
+		sed -i -e "s/-lreadline/-ledit/g" configure; \
+		sed -i -e "s/tunefs.ocfs2//"  Makefile; \
+		sed -i -e "s/debugfs.ocfs2//" Makefile; \
 	);
 	touch $(STAMP)-myprepare

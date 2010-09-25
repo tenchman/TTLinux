@@ -18,5 +18,5 @@ FILES	      = /opt/diet/bin/indent
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare:
-	perl -pi -e "s:extern FILE \*output;::" $(PACKAGE)/src/indent.h
+	sed -i -e "s:extern FILE \*output;::" $(PACKAGE)/src/indent.h
 	touch $@

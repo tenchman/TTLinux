@@ -19,5 +19,5 @@ FILES	= /opt/diet/include/* /opt/diet/lib-$(ARCH)/*.a
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare: $(STAMP)-prepare
-	perl -pi -e "s/stpcpy/_stpcpy/g" $(PACKAGE)/*.[hc]
+	sed -i -e "s/stpcpy/_stpcpy/g" $(PACKAGE)/*.[hc]
 	touch $@

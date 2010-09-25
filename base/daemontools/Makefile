@@ -22,8 +22,8 @@ $(STAMP)-myprepare:
 	(cd $(PKGBUILDDIR); \
 		echo $(CC) >src/conf-cc; \
 		echo $(CC) >src/conf-ld; \
-		perl -pi -e "s:\./chkshsgr.*::" src/Makefile; \
-		perl -pi -e "s:env.*rts\.tests.*::" src/Makefile; \
+		sed -i -e "s:\./chkshsgr.*::" src/Makefile; \
+		sed -i -e "s:env.*rts\.tests.*::" src/Makefile; \
 	);
 	touch $(STAMP)-myprepare
 

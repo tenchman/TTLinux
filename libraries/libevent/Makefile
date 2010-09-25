@@ -20,6 +20,6 @@ FILES	   += ./opt/diet/include
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare: $(STAMP)-prepare
-	find $(PKGBUILDDIR) -name "*.[ch]" -exec perl -pi \
+	find $(PKGBUILDDIR) -name "*.[ch]" -exec sed -i \
 	  	-e "s/u_(char|short|int)/unsigned $$1/g" {} \;
 	touch $(STAMP)-myprepare

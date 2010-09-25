@@ -101,7 +101,7 @@ $(STAMP)-dietlibc-prepare: $(DISTFILES)/$(DIETLIBC).tar.bz2
 	    rm -rf armeb; \
 	    ln -sf arm armeb; \
 	    if [ $(TTL_KERNELARCH) = "x86" -a $(ARCH) != "i386" ]; then ln -sf i386 $(ARCH); fi; \
-	    perl -pi -e "s/-Os/$(CFLAGS)/g" arm/Makefile.add; \
+	    sed -i -e "s/-Os/$(CFLAGS)/g" arm/Makefile.add; \
 	    rm -f arm/str*.*; \
 	)
 	touch $@

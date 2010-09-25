@@ -43,7 +43,7 @@ include $(TOPDIR)/rules.mk
 $(STAMP)-mybuild:
 	PATH=$(TARGETROOT)/bin:$$PATH \
 	$(MAKE) -C $(PKGBUILDDIR)/src CC='$(CC)' DFLAGS='$(DFLAGS)' $(TARGETS); \
-	touch $(STAMP)-mybuild
+	touch $@
 
 $(STAMP)-myinstall:
 	install -d $(TMPDIR)$(TARGETLIBDIR); \
@@ -52,11 +52,11 @@ $(STAMP)-myinstall:
 	(cd $(PKGBUILDDIR)/src; \
 	  for i in `find . -name '*.h' -print`; do install $$i $(INCDIR); done; \
 	  install $(TARGETS) $(TMPDIR)$(TARGETLIBDIR); \
-	  perl -pi -e 's,\.\./,,g' $(INCDIR)/*.h; \
-	  perl -pi -e 's,pki/,,' $(INCDIR)/*.h; \
-	  perl -pi -e 's,src/,,' $(INCDIR)/*.h; \
-	  perl -pi -e 's,os/,,' $(INCDIR)/*.h; \
-	  perl -pi -e 's,peersec/,,' $(INCDIR)/*.h; \
-	  perl -pi -e 's,crypto/,,' $(INCDIR)/*.h; \
+	  sed -i -e 's,\.\./,,g' $(INCDIR)/*.h; \
+	  sed -i -e 's,pki/,,' $(INCDIR)/*.h; \
+	  sed -i -e 's,src/,,' $(INCDIR)/*.h; \
+	  sed -i -e 's,os/,,' $(INCDIR)/*.h; \
+	  sed -i -e 's,peersec/,,' $(INCDIR)/*.h; \
+	  sed -i -e 's,crypto/,,' $(INCDIR)/*.h; \
 	);
-	touch $(STAMP)-myinstall
+	touch $@

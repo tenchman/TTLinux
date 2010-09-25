@@ -76,12 +76,12 @@ $(STAMP)-bootstrap:
 	touch $(STAMP)-bootstrap
 
 $(STAMP)-myprepare: $(STAMP)-prepare
-	perl -pi -e "s,#define HAVE_RANDOM 1,/* #define HAVE_RANDOM 1 */," $(PACKAGE)/autoconf/include
-	perl -pi -e "s,-Werror,," $(PACKAGE)/configure*
-	perl -pi -e "s,^CXXLD.*,CXXLD=\$(CXX) -all-static," $(PACKAGE)/src/Makefile*
-	perl -pi -e "s,^CCLD.*,CCLD=\$(COMPILER) -all-static," $(PACKAGE)/src/Makefile*
+	sed -i -e "s,#define HAVE_RANDOM 1,/* #define HAVE_RANDOM 1 */," $(PACKAGE)/autoconf/include
+	sed -i -e "s,-Werror,," $(PACKAGE)/configure*
+	sed -i -e "s,^CXXLD.*,CXXLD=\$(CXX) -all-static," $(PACKAGE)/src/Makefile*
+	sed -i -e "s,^CCLD.*,CCLD=\$(COMPILER) -all-static," $(PACKAGE)/src/Makefile*
 ifneq ($(TTL_KERNELARCH), x86)
-	perl -pi -e "s,\./cf_gen.*,true," $(PACKAGE)/src/Makefile*
+	sed -i -e "s,\./cf_gen.*,true," $(PACKAGE)/src/Makefile*
 	# use pre-generated header because ./cf_gen will not work with
 	# cross compiling
 	cp cf_parser.h $(PACKAGE)/src

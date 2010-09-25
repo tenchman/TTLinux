@@ -9,6 +9,7 @@ FORMAT	    = tar.bz2
 PATCHES     = glib-diet.patch
 DO_PREPARE  = $(STAMP)-prepare
 PREFIX	    = /opt/diet
+CFLAGS     += -D_REENTRANT -D_BSD_SOURCE
 ARGS        = --with-libiconv=no --enable-static
 
 ifneq ($(TTL_KERNELARCH), x86)

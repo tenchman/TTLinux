@@ -96,9 +96,10 @@ FILES	   += .$(PREFIX)/include/openssl/*
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare:
-	perl -pi -e "s/^DIRS.*/DIRS=$(DIRS)/" $(PKGBUILDDIR)/Makefile.*
-	perl -pi -e "s/all install_docs/all/" $(PKGBUILDDIR)/Makefile.*
-	perl -pi -e "s,xxARCHCCxx,$(COMPILER)," $(PKGBUILDDIR)/util/domd $(PKGBUILDDIR)/Configure;
+	sed -i -e "s/^DIRS.*/DIRS=$(DIRS)/" $(PKGBUILDDIR)/Makefile.* \
+	       -e "s/all install_docs/all/" $(PKGBUILDDIR)/Makefile.* \
+	       -e "s,xxARCHCCxx,$(COMPILER)," $(PKGBUILDDIR)/util/domd \
+	       -e "s,xxARCHCCxx,$(COMPILER)," $(PKGBUILDDIR)/Configure
 	
 	pushd $(PKGBUILDDIR); \
 		perl util/perlpath.pl /usr/bin/perl; \

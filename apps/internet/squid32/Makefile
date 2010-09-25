@@ -100,18 +100,18 @@ FILES       += /usr/lib/squid
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-fixinc:
-	perl -pi -e "s,/usr/include,/opt/diet/include," $(PACKAGE)/configure
-	perl -pi -e "s,/usr/include,/opt/diet/include," $(PACKAGE)/lib/libLtdl/configure
-	perl -pi -e "s,/usr/include,/opt/diet/include," $(PACKAGE)/lib/libTrie/configure
+	sed -i -e "s,/usr/include,/opt/diet/include," $(PACKAGE)/configure
+	sed -i -e "s,/usr/include,/opt/diet/include," $(PACKAGE)/lib/libLtdl/configure
+	sed -i -e "s,/usr/include,/opt/diet/include," $(PACKAGE)/lib/libTrie/configure
 	touch $@
 
 $(STAMP)-myprepare: $(STAMP)-fixinc $(STAMP)-prepare
-	perl -pi -e "s,#define HAVE_RANDOM 1,/* #define HAVE_RANDOM 1 */," $(PACKAGE)/autoconf/include
-	perl -pi -e "s,-Werror,," $(PACKAGE)/configure*
-	perl -pi -e "s,^CXXLD.*,CXXLD=\$(CXX) -all-static," $(PACKAGE)/src/Makefile*
-	perl -pi -e "s,^CCLD.*,CCLD=\$(COMPILER) -all-static," $(PACKAGE)/src/Makefile*
+	sed -i -e "s,#define HAVE_RANDOM 1,/* #define HAVE_RANDOM 1 */," $(PACKAGE)/autoconf/include
+	sed -i -e "s,-Werror,," $(PACKAGE)/configure*
+	sed -i -e "s,^CXXLD.*,CXXLD=\$(CXX) -all-static," $(PACKAGE)/src/Makefile*
+	sed -i -e "s,^CCLD.*,CCLD=\$(COMPILER) -all-static," $(PACKAGE)/src/Makefile*
 ifneq ($(TTL_KERNELARCH), x86)
-	perl -pi -e "s,\./cf_gen.*,true," $(PACKAGE)/src/Makefile*
+	sed -i -e "s,\./cf_gen.*,true," $(PACKAGE)/src/Makefile*
 	# use pre-generated header because ./cf_gen will not work with
 	# cross compiling
 	cp cf_parser.h $(PACKAGE)/src

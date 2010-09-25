@@ -43,7 +43,7 @@ $(STAMP)-mybuild:
 	(cd $(PACKAGE); PATH=/usr/bin:/bin; make install && mv install install.old)
 	rm -f $(PACKAGE)/has*.h $(PACKAGE)/*.[ao]
 	# rebuild linked against dietlibc
-	perl -pi -e "s:.*\./chkspawn::" $(PACKAGE)/Makefile
+	sed -i -e "s:.*\./chkspawn::" $(PACKAGE)/Makefile
 	echo "$(COMPILER) -I$(TARGETINCDIR) $(CFLAGS)" >$(PACKAGE)/conf-cc
 	echo "$(COMPILER) -L$(TARGETLIBDIR) -static" >$(PACKAGE)/conf-ld
 	(cd $(PACKAGE); \

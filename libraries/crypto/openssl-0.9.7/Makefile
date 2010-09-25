@@ -68,12 +68,12 @@ include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare:
 	pushd $(PACKAGE); \
-	perl -pi -e "s/apps test tools//" Makefile.ssl; \
-	perl -pi -e "s/all install_docs/all/" Makefile.ssl; \
-	perl -pi -e "s/apps test tools//" Makefile.org; \
-	perl -pi -e "s/all install_docs/all/" Makefile.org; \
-	perl -pi -e "s,xxARCHCCxx,$(COMPILER)," util/domd; \
-	perl -pi -e "s,xxARCHCCxx,$(COMPILER)," Configure; \
+	sed -i -e "s/apps test tools//" Makefile.ssl; \
+	sed -i -e "s/all install_docs/all/" Makefile.ssl; \
+	sed -i -e "s/apps test tools//" Makefile.org; \
+	sed -i -e "s/all install_docs/all/" Makefile.org; \
+	sed -i -e "s,xxARCHCCxx,$(COMPILER)," util/domd; \
+	sed -i -e "s,xxARCHCCxx,$(COMPILER)," Configure; \
 	perl util/perlpath.pl /usr/bin/perl; \
 	./Configure $(ARGS); \
 	make depend; \

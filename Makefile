@@ -45,10 +45,10 @@ BUILDHTML = build.html
 
 # @export LD_PRELOAD=$(LD_PRELOAD) PRETENDROOTDIR=$(PRETENDROOTDIR);
 all: check $(LIBPRETENDROOT)
-	perl -pi -e "s/\".*-linux-dietlibc/\"$(HOSTVER)/g" /opt/diet/bin/libtool
-	perl -pi -e "s/lib-[^\"]+/lib-$(ARCH)/g" /opt/diet/bin/libtool
-	perl -pi -e "s,^sys_lib_search_path_spec.*,sys_lib_search_path_spec=\"/opt/diet/$(HOSTVER)/lib /opt/diet/lib-$(ARCH)/gcc/$(HOSTVER)/$(GCCVER) /opt/diet/lib-$(ARCH)\",g" /opt/diet/bin/libtool
-	perl -pi -e "s,^sys_lib_dlsearch_path_spec.*,sys_lib_dlsearch_path_spec=\"/opt/diet/lib-$(ARCH) /opt/diet/lib-$(ARCH)/gcc/$(HOSTVER)/$(GCCVER)\",g" /opt/diet/bin/libtool
+	sed -i -e "s/\".*-linux-dietlibc/\"$(HOSTVER)/g" /opt/diet/bin/libtool
+	sed -i -e "s/lib-[^\"]+/lib-$(ARCH)/g" /opt/diet/bin/libtool
+	sed -i -e "s,^sys_lib_search_path_spec.*,sys_lib_search_path_spec=\"/opt/diet/$(HOSTVER)/lib /opt/diet/lib-$(ARCH)/gcc/$(HOSTVER)/$(GCCVER) /opt/diet/lib-$(ARCH)\",g" /opt/diet/bin/libtool
+	sed -i -e "s,^sys_lib_dlsearch_path_spec.*,sys_lib_dlsearch_path_spec=\"/opt/diet/lib-$(ARCH) /opt/diet/lib-$(ARCH)/gcc/$(HOSTVER)/$(GCCVER)\",g" /opt/diet/bin/libtool
 	@mkdir -p dist/opt/diet
 	@mkdir -p packages
 	@for dir in $(SUBDIRS-y); do \
@@ -109,7 +109,7 @@ version:
 	@for dir in $(SUBDIRS-y) $(SUBDIRS-n); do \
 	  	$(MAKE) -C $$dir version; \
 	done
-	# perl -pi -e "s/-.*[^=]/_/g" $(TOPDIR)/versions
+	# sed -i -e "s/-.*[^=]/_/g" $(TOPDIR)/versions
 
 html:
 	rm -f pkg.tmp

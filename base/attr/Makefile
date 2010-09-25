@@ -21,7 +21,7 @@ FILES	= /opt/diet/{lib-$(ARCH)/*.{a,so*},include/*} /usr/bin/*
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare: $(STAMP)-prepare
-	perl -pi -e "s,/usr/bin/libtool,/opt/diet/bin/libtool," $(PACKAGE)/include/builddefs
+	sed -i -e "s,/usr/bin/libtool,/opt/diet/bin/libtool," $(PACKAGE)/include/builddefs
 	touch $(STAMP)-myprepare
 
 $(STAMP)-myinstall: $(STAMP)-install

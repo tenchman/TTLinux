@@ -38,6 +38,6 @@ unexport CPPFLAGS
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare:
-	 perl -pi -e "s:^CFLAGS.*:CFLAGS   = \\\$$(INCLUDES) \@CFLAGS\@ \@CPPFLAGS\@ \\\:" \
+	 sed -i -e "s:^CFLAGS.*:CFLAGS   = \\\$$(INCLUDES) \@CFLAGS\@ \@CPPFLAGS\@ \\\:" \
 	   $(PACKAGE)/keepalived/*/Makefile.in $(PACKAGE)/genhash/Makefile.in
 	 touch $@

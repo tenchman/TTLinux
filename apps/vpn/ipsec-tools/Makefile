@@ -18,5 +18,5 @@ ARGS       += --enable-natt --enable-dpd --enable-frag --enable-stats --enable-f
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare:
-	perl -pi -e "s/-Werror//g" $(PACKAGE)/configure*
+	sed -i -e "s/-Werror//g" $(PACKAGE)/configure*
 	touch $@

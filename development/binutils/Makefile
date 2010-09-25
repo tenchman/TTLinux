@@ -30,9 +30,9 @@ FILES	= .$(PREFIX)/*
 
 $(STAMP)-myprepare: Makefile
 	(cd $(PACKAGE); \
-		perl -i -p -e "s,#.*define.*ELF_DYNAMIC_INTERPRETER.*\".*\",\
+		sed -i -e "s,#.*define.*ELF_DYNAMIC_INTERPRETER.*\".*\",\
 		#define ELF_DYNAMIC_INTERPRETER \"$(LOADER)\",;" \
 		`grep -lr ELF_DYNAMIC_INTERPRETER *`; \
-		[ "$(VERBOSE)" != "y" ] && perl -i -p -e "s,-Wtraditional,," libiberty/configure; \
+		[ "$(VERBOSE)" != "y" ] && sed -i -e "s,-Wtraditional,," libiberty/configure; \
 		CC='$(CC)' ./configure $(ARGS) );
 	touch $(STAMP)-myprepare
