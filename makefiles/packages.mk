@@ -341,8 +341,6 @@ SUBDIRS-$(CONFIG_UCSPI_TCP)   += base/ucspi-tcp
 ifeq ($(TTL_KERNELARCH), x86)
 SUBDIRS-$(CONFIG_LILO)	      += base/lilo
 endif
-SUBDIRS-$(CONFIG_MBSYSLOG)    += base/mbsyslog
-
 
 SUBDIRS-$(CONFIG_MINIGUI)   += gui/libminigui gui/minigui-res gui/mde
 SUBDIRS-$(CONFIG_XYNTH)     += gui/xynth
