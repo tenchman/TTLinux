@@ -15,6 +15,7 @@ ARGS	    += --disable-big-core --with-terminfo-dirs=/usr/share/terminfo
 ARGS	    += --with-default-terminfo-dir=/usr/share/terminfo --with-ospeed='unsigned int'
 ARGS        += --disable-widec HOSTCC='gcc' HOSTCPPFLAGS='' CFLAGS=''
 DO_PREPARE   = $(STAMP)-prepare
+DO_INSTALL   = $(STAMP)-install $(STAMP)-postinstall
 PREFIX	     = /opt/diet
 INSTALLARGS  = install.libs
 STRIPPIT     = yes
@@ -29,10 +30,14 @@ endif
 FILES	    = $(PREFIX)/lib-$(ARCH)
 FILES	   += $(PREFIX)/include
 
-unexport LDFLAGS LD LINKER CPPFLAGS
-LINKER=
-LD=
-LDFLAGS=
-CPPFLAGS=
+#unexport LDFLAGS LD LINKER CPPFLAGS
+#LINKER=
+#LD=
+#LDFLAGS=
+#CPPFLAGS=
 
 include $(TOPDIR)/rules.mk
+
+$(STAMP)-postinstall:
+	cd $(TMPDIR)/$(PREFIX)/include && mv ncurses/curses.h . && ln -sf curses.h ncurses.h || :
+	touch $@
