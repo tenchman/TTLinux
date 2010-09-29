@@ -5,14 +5,9 @@ include $(TOPDIR)/.config
 NAME	     = curl
 VERSION	     = 7.21.1
 FORMAT	     = tar.bz2
-# PATCHES	     = curl-7.10.3-autoconf-crap.patch
-# PATCHES	    += curl-7.10.3-inet_ntoa_r.patch
-# PATCHES	    += curl-7.10.3-ssl.patch
-# PATCHES	    += curl-7.10.3-nohelp.patch
-DO_AUTOCONF  = $(STAMP)-autoconf
-DO_PREPARE   = $(STAMP)-prepare
+DO_PREPARE   = $(STAMP)-prepare $(STAMP)-postprepare
 STRIPPIT     = yes
-ARGS	     = --disable-ftp --disable-gopher --disable-shared
+ARGS	     = --disable-gopher --disable-shared
 ARGS	    += --disable-dict --disable-telnet --disable-debug
 ARGS	    += --disable-file --without-zlib --bindir=/usr/bin --sbindir=/usr/sbin
 ARGS        += --without-libssh2 --without-librtmp --without-libidn --without-krb4
@@ -36,15 +31,9 @@ ARGS        += --enable-ldap
 endif
 
 ifneq ($(CONFIG_CURL_SSL),y)
-ARGS        += --without-ssl
+ ARGS        += --without-ssl
 else
- ifneq ($(CONFIG_OPENSSL_SSLV2),y)
- CPPFLAGS    += -DWITHOUT_SSLv2
- endif
- ifneq ($(CONFIG_OPENSSL_ENGINE),y)
- CPPFLAGS    += -DWITHOUT_ENGINE
- endif
- ARGS        += --with-ssl
+ ARGS        += --with-polarssl
 endif
 
 ifneq ($(CONFIG_CURL_KERBEROS),y)
@@ -56,3 +45,8 @@ INSTALLARGS  = install-strip
 FILES	     = /usr/bin/curl /opt/diet/include /opt/diet/lib-$(ARCH)
 
 include $(TOPDIR)/rules.mk
+
+$(STAMP)-postprepare:
+	# HACK alert!
+	find $(PKGBUILDDIR) -name Makefile|xargs sed -i -e "s:-Lno::"
+	touch $@
