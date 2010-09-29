@@ -23,13 +23,13 @@ FILES	= $(PREFIX)/bin
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-myprepare:
-	echo $(PREFIX) > $(PACKAGE)/conf-home
-	echo "$(COMPILER) $(DFLAGS)" > $(PACKAGE)/conf-cc
-	echo $(COMPILER) -static > $(PACKAGE)/conf-ld
-	touch $(STAMP)-myprepare
+	echo $(PREFIX) > $(PKGBUILDDIR)/conf-home
+	echo "$(COMPILER) $(DFLAGS)" > $(PKGBUILDDIR)/conf-cc
+	echo $(COMPILER) -static > $(PKGBUILDDIR)/conf-ld
+	touch $@
 
 $(STAMP)-myinstall:
-	echo $(TMPDIR)$(PREFIX) > $(PACKAGE)/conf-home
+	echo $(TMPDIR)$(PREFIX) > $(PKGBUILDDIR)/conf-home
 	install -d $(TMPDIR)$(PREFIX)/bin
-	( cd $(PACKAGE); install -m 755 $(PROGS) $(TMPDIR)$(PREFIX)/bin )
-	touch $(STAMP)-myinstall
+	( cd $(PKGBUILDDIR); install -m 755 $(PROGS) $(TMPDIR)$(PREFIX)/bin )
+	touch $@
