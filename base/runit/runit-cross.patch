@@ -1,6 +1,6 @@
-diff -up admin/runit-1.7.2/src/Makefile.cross admin/runit-1.7.2/src/Makefile
---- admin/runit-1.7.2/src/Makefile.cross	2008-03-18 14:55:23.000000000 +0100
-+++ admin/runit-1.7.2/src/Makefile	2008-03-18 14:55:51.000000000 +0100
+diff -up runit-1.7.2/src/Makefile.cross runit-1.7.2/src/Makefile
+--- runit-1.7.2/src/Makefile.cross	2008-03-18 14:55:23.000000000 +0100
++++ runit-1.7.2/src/Makefile	2008-03-18 14:55:51.000000000 +0100
 @@ -170,12 +170,6 @@ byte_diff.o: byte.h byte_diff.c compile
  byte_rchr.o: byte.h byte_rchr.c compile
  	./compile byte_rchr.c

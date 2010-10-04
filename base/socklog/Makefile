@@ -6,6 +6,8 @@ include $(TOPDIR)/$(ARCH).config
 NAME	    = socklog
 VERSION	    = 2.0.3
 FORMAT	    = tar.gz
+PKGBUILDDIR = $(BUILDDIR)/admin/$(PACKAGE)
+PATCHES     = socklog-cross.patch
 PREFIX	    = /usr
 DO_PREPARE  = $(STAMP)-myprepare
 DO_INSTALL  = $(STAMP)-myinstall
@@ -15,27 +17,22 @@ FILES	    = /bin/*
 
 include $(TOPDIR)/rules.mk
 
-PKG=admin/$(PACKAGE)
-
 $(STAMP)-myprepare:
-	patch -p0 < socklog-cross.patch
-	(cd $(PKG); \
-		echo "$(CC)" > src/conf-cc; \
-		echo "$(CC) -static" > src/conf-ld \
-	);
-	touch $(STAMP)-myprepare
+	echo "$(CC)" >         $(PKGBUILDDIR)/src/conf-cc
+	echo "$(CC) -static" > $(PKGBUILDDIR)/src/conf-ld
+	touch $@
 
 $(STAMP)-mybuild: $(DO_PREPARE)
-	( unset LD_LIBRARY_PATH && cd $(PKG) && package/compile )
-	touch $(STAMP)-mybuild
+	( unset LD_LIBRARY_PATH && cd $(PKGBUILDDIR) && package/compile )
+	touch $@
 
 $(STAMP)-myinstall: $(DO_PREPARE) $(DO_BUILD)
 	install -d $(TMPDIR)/bin
-	install -m 755 $(PKG)/command/socklog $(TMPDIR)/bin
-	install -m 755 $(PKG)/command/socklog-check $(TMPDIR)/bin
-	install -m 755 $(PKG)/command/socklog-conf $(TMPDIR)/bin
-	install -m 755 $(PKG)/command/tryto $(TMPDIR)/bin
-	install -m 755 $(PKG)/command/uncat $(TMPDIR)/bin
+	install -m 755 $(PKGBUILDDIR)/command/socklog $(TMPDIR)/bin
+	install -m 755 $(PKGBUILDDIR)/command/socklog-check $(TMPDIR)/bin
+	install -m 755 $(PKGBUILDDIR)/command/socklog-conf $(TMPDIR)/bin
+	install -m 755 $(PKGBUILDDIR)/command/tryto $(TMPDIR)/bin
+	install -m 755 $(PKGBUILDDIR)/command/uncat $(TMPDIR)/bin
 	touch $(STAMP)-myinstall
 
 clean:

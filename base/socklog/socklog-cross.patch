@@ -1,6 +1,6 @@
-diff -up admin/socklog-2.0.3/src/Makefile.cross admin/socklog-2.0.3/src/Makefile
---- admin/socklog-2.0.3/src/Makefile.cross	2008-03-18 14:52:02.000000000 +0100
-+++ admin/socklog-2.0.3/src/Makefile	2008-03-18 14:52:41.000000000 +0100
+diff -up socklog-2.0.3/src/Makefile.cross socklog-2.0.3/src/Makefile
+--- socklog-2.0.3/src/Makefile.cross	2008-03-18 14:52:02.000000000 +0100
++++ socklog-2.0.3/src/Makefile	2008-03-18 14:52:41.000000000 +0100
 @@ -117,12 +117,6 @@ byte_rchr.o: byte.h byte_rchr.c compile
  byte_zero.o: byte.h byte_zero.c compile
  	./compile byte_zero.c

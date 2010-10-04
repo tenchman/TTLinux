@@ -6,7 +6,8 @@ include $(TOPDIR)/$(ARCH).config
 NAME	    = runit
 VERSION	    = 1.7.2
 FORMAT	    = tar.gz
-# CFLAGS	    = -I$(DIETINC) -I$(KERNELINC)
+PKGBUILDDIR = $(BUILDDIR)/admin/$(PACKAGE)
+PATCHES     = runit-cross.patch
 PREFIX	    = /usr
 DO_PREPARE  = $(STAMP)-myprepare
 DO_INSTALL  = $(STAMP)-myinstall
@@ -16,25 +17,21 @@ FILES	    = /bin/* /usr/bin/*
 
 include $(TOPDIR)/rules.mk
 
-PKG=admin/$(PACKAGE)
 
 $(STAMP)-myprepare:
-	patch -p0 < runit-cross.patch
-	(cd $(PKG); \
-		echo "$(CC)" > src/conf-cc; \
-		echo "$(CC) -static" > src/conf-ld \
-	);
-	touch $(STAMP)-myprepare
+	echo "$(CC)" > $(PKGBUILDDIR)/src/conf-cc
+	echo "$(CC) -static" > $(PKGBUILDDIR)/src/conf-ld
+	touch $@
 
 $(STAMP)-mybuild: $(DO_PREPARE)
-	(cd $(PKG); \
+	(cd $(PKGBUILDDIR); \
 		package/compile \
 	);
 	touch $(STAMP)-mybuild
 
 $(STAMP)-myinstall: $(DO_PREPARE) $(DO_BUILD)
 	install -d $(TMPDIR)/{bin,usr/bin}
-	install -m 755 $(PKG)/command/* $(TMPDIR)/bin
+	install -m 755 $(PKGBUILDDIR)/command/* $(TMPDIR)/bin
 	(cd $(TMPDIR)/usr/bin; \
 	  ln -sf /bin/chpst envdir; \
 	  ln -sf /bin/chpst envuidgid; \
@@ -46,5 +43,5 @@ $(STAMP)-myinstall: $(DO_PREPARE) $(DO_BUILD)
 	touch $(STAMP)-myinstall
 
 clean:
-	@rm -rf $(PKG)
+	@rm -rf $(PKGBUILDDIR)
 	@rm -f $(STAGES)
