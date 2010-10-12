@@ -3,7 +3,7 @@
 include $(TOPDIR)/.config
 include $(TOPDIR)/$(ARCH).config
 
-VERSION	      = 1.11
+VERSION	      = 1.11.1
 NAME	      = automake
 FORMAT	      = tar.bz2
 DO_PREPARE    = $(STAMP)-prepare
