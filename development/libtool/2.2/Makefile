@@ -3,7 +3,7 @@
 include $(TOPDIR)/.config
 include $(TOPDIR)/$(ARCH).config
 
-VERSION	      = 2.2.4
+VERSION	      = 2.2.10
 NAME	      = libtool
 FORMAT	      = tar.bz2
 DO_PREPARE    = $(STAMP)-prepare
