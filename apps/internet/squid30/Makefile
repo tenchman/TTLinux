@@ -72,19 +72,18 @@ FILES       += /usr/lib/squid
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-bootstrap:
-	cd $(PACKAGE) && sh bootstrap.sh
+	cd $(PKGBUILDDIR) && sh bootstrap.sh
 	touch $(STAMP)-bootstrap
 
 $(STAMP)-myprepare: $(STAMP)-prepare
-	sed -i -e "s,#define HAVE_RANDOM 1,/* #define HAVE_RANDOM 1 */," $(PACKAGE)/autoconf/include
-	sed -i -e "s,-Werror,," $(PACKAGE)/configure*
-	sed -i -e "s,^CXXLD.*,CXXLD=\$(CXX) -all-static," $(PACKAGE)/src/Makefile*
-	sed -i -e "s,^CCLD.*,CCLD=\$(COMPILER) -all-static," $(PACKAGE)/src/Makefile*
+	sed -i -e "s,-Werror,," $(PKGBUILDDIR)/configure*
+	sed -i -e "s,^CXXLD.*,CXXLD=\$(CXX) -all-static," $(PKGBUILDDIR)/src/Makefile*
+	sed -i -e "s,^CCLD.*,CCLD=\$(COMPILER) -all-static," $(PKGBUILDDIR)/src/Makefile*
 ifneq ($(TTL_KERNELARCH), x86)
-	sed -i -e "s,\./cf_gen.*,true," $(PACKAGE)/src/Makefile*
+	sed -i -e "s,\./cf_gen.*,true," $(PKGBUILDDIR)/src/Makefile*
 	# use pre-generated header because ./cf_gen will not work with
 	# cross compiling
-	cp cf_parser.h $(PACKAGE)/src
-	cp squid.conf.default $(PACKAGE)/src
+	cp cf_parser.h $(PKGBUILDDIR)/src
+	cp squid.conf.default $(PKGBUILDDIR)/src
 endif
 	touch $(STAMP)-myprepare

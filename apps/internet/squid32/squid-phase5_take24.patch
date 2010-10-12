@@ -1,0 +1,3211 @@
+diff -up squid-3.1.8/configure.in.phase5_take23 squid-3.1.8/configure.in
+--- squid-3.1.8/configure.in.phase5_take23	2010-09-04 05:26:52.000000000 +0200
++++ squid-3.1.8/configure.in	2010-10-12 12:54:37.098024725 +0200
+@@ -1130,6 +1130,7 @@ AM_CONDITIONAL(ENABLE_HTCP, [test x$USE_
+ 
+ dnl SSL is not enabled by default.
+ AM_CONDITIONAL(ENABLE_SSL, false)
++use_ssl=no
+ 
+ dnl Default is to use OpenSSL when available
+ AC_ARG_ENABLE(ssl,
+@@ -1138,6 +1139,7 @@ AC_ARG_ENABLE(ssl,
+     AC_MSG_NOTICE([SSL gatewaying using OpenSSL enabled])
+     AC_DEFINE(USE_SSL,1,[Define this to include code for SSL encryption.])
+     AM_CONDITIONAL(ENABLE_SSL, true)
++    use_ssl=yes
+     case "$host_os" in
+     mingw|mingw32)
+         dnl Native Windows port of OpenSSL needs -lgdi32
+@@ -1594,6 +1596,17 @@ if test "$use_dnsserver" = "yes"; then
+     AM_CONDITIONAL(USE_DNSSERVER, true)
+ fi
+ 
++AM_CONDITIONAL(USE_SSL_CRTD, false)
++AC_ARG_ENABLE(ssl-crtd,
++  AC_HELP_STRING([--enable-ssl-crtd],
++                 [Prevent Squid from directly generation of SSL private key and 
++                  certificate request and instead enables the ssl_crtd processes.]),
++[ if test $use_ssl = yes ; then
++    AC_DEFINE(USE_SSL_CRTD,1,[Use sslserver processes instead of the internal generation ssl certificates])
++    AM_CONDITIONAL(USE_SSL_CRTD, true)
++  fi
++])
++
+ dnl Select Default hosts file location
+ AC_ARG_ENABLE(default-hostsfile,
+   AS_HELP_STRING([--enable-default-hostsfile=path],[Select default location for hosts file.
+diff -up squid-3.1.8/src/base/auto_ptr.h.phase5_take23 squid-3.1.8/src/base/auto_ptr.h
+--- squid-3.1.8/src/base/auto_ptr.h.phase5_take23	2010-10-12 12:54:37.082149944 +0200
++++ squid-3.1.8/src/base/auto_ptr.h	2010-10-12 12:54:37.082149944 +0200
+@@ -0,0 +1,87 @@
++/*
++ * 2009/01/17
++ */
++
++#ifndef SQUID_AUTO_PTR_H
++#define SQUID_AUTO_PTR_H
++
++#include "config.h"
++
++/// Base class for automatic delete different pointers after using.
++template <typename T> class BaseAutoPtr
++{
++public:
++    /// Delete callback.
++    typedef void DCB (T * t);
++protected:
++    BaseAutoPtr(T * t, DCB * aDeallocator)
++    :   pointer(t), deallocator(aDeallocator)
++    {}
++public:
++    bool operator !()
++    {
++        return !pointer;
++    }
++    T * get()
++    {
++        return pointer;
++    }
++    /// Address of pointer getter.
++    T ** addr()
++    {
++        return &pointer;
++    }
++    /// Reset pointer - delete last one and save new one.
++    void reset(T * t, DCB * aDeallocator)
++    {
++        deletePointer();
++        pointer = t;
++        deallocator = aDeallocator;
++    }
++
++    /// Release pointer. After that T pointer will be equal 0.
++    T * release()
++    {
++        T * ret = pointer;
++        pointer = NULL;
++        deallocator = NULL;
++        return ret;
++    }
++    /// Deallocate T pointer using special function or "free()" function.
++    ~BaseAutoPtr()
++    {
++        deletePointer();
++    }
++private:
++    /// Forbidden copy constructor.
++    BaseAutoPtr(BaseAutoPtr<T> const &);
++    /// Forbidden assigment operator.
++    BaseAutoPtr <T> & operator = (BaseAutoPtr<T> const &);
++    /// Free pointer.
++    void deletePointer()
++    {
++        if (deallocator && pointer) {
++            deallocator(pointer);
++        } else if (!deallocator && pointer) {
++            free(pointer);
++        }
++        pointer = NULL;
++        deallocator = NULL;
++    }
++    /// Storing pointer.
++    T * pointer;
++    /// Function for deallocate T pointer from memory. It may be equal NULL.
++    DCB * deallocator;
++};
++
++/// Common auto pointer.
++template <typename T> class AutoPtr : public BaseAutoPtr<T>
++{
++public:
++    typedef void DCB (T * t);
++    AutoPtr(T * t, DCB * aDeallocator)
++    :   BaseAutoPtr<T>(t, aDeallocator)
++    {}
++};
++
++#endif // SQUID_AUTO_PTR_H
+diff -up squid-3.1.8/src/base/Makefile.am.phase5_take23 squid-3.1.8/src/base/Makefile.am
+--- squid-3.1.8/src/base/Makefile.am.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/base/Makefile.am	2010-10-12 12:54:37.082149944 +0200
+@@ -12,4 +12,5 @@ libbase_la_SOURCES = \
+ 	AsyncJobCalls.h \
+ 	AsyncCallQueue.cc \
+ 	AsyncCallQueue.h \
+-	CbcPointer.h
++	CbcPointer.h \
++	auto_ptr.h
+diff -up squid-3.1.8/src/cache_cf.cc.phase5_take23 squid-3.1.8/src/cache_cf.cc
+--- squid-3.1.8/src/cache_cf.cc.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/cache_cf.cc	2010-10-12 12:54:37.087025440 +0200
+@@ -52,6 +52,11 @@
+ #include "wordlist.h"
+ #include "ident/Config.h"
+ #include "ip/IpIntercept.h"
++#include <limits>
++
++#if USE_SSL
++#include "ssl_gadgets.h"
++#endif
+ 
+ #if HAVE_GLOB_H
+ #include <glob.h>
+@@ -130,6 +135,10 @@ static void default_all(void);
+ static void defaults_if_none(void);
+ static int parse_line(char *);
+ static void parseBytesLine(size_t * bptr, const char *units);
++#if USE_SSL
++/// Parse bytes from value. Value looks like "4MB".
++static void parseBytesOptionValue(size_t * bptr, const char *units, char const * value);
++#endif
+ static size_t parseBytesUnits(const char *unit);
+ static void free_all(void);
+ void requirePathnameExists(const char *name, const char *path);
+@@ -720,7 +729,12 @@ configDoConfigure(void)
+ 
+             debugs(3, 1, "Initializing http_port " << s->http.s << " SSL context");
+ 
+-            s->sslContext = sslCreateServerContext(s->cert, s->key, s->version, s->cipher, s->options, s->sslflags, s->clientca, s->cafile, s->capath, s->crlfile, s->dhfile, s->sslcontext);
++            s->staticSslContext = sslCreateServerContext(s->cert, s->key,
++                s->version, s->cipher, s->options, s->sslflags, s->clientca,
++                s->cafile, s->capath, s->crlfile, s->dhfile,
++                s->sslContextSessionId);
++
++            readCertAndPrivateKeyFromFiles(s->signCert, s->signPkey, s->cert, s->key);
+         }
+     }
+ 
+@@ -731,7 +745,10 @@ configDoConfigure(void)
+         for (s = Config.Sockaddr.https; s != NULL; s = (https_port_list *) s->http.next) {
+             debugs(3, 1, "Initializing https_port " << s->http.s << " SSL context");
+ 
+-            s->sslContext = sslCreateServerContext(s->cert, s->key, s->version, s->cipher, s->options, s->sslflags, s->clientca, s->cafile, s->capath, s->crlfile, s->dhfile, s->sslcontext);
++            s->staticSslContext = sslCreateServerContext(s->cert, s->key,
++                s->version, s->cipher, s->options, s->sslflags, s->clientca,
++                s->cafile, s->capath, s->crlfile, s->dhfile,
++                s->sslContextSessionId);
+         }
+     }
+ 
+@@ -894,6 +911,39 @@ parseBytesLine(size_t * bptr, const char
+         self_destruct();
+ }
+ 
++#if USE_SSL
++static void parseBytesOptionValue(size_t * bptr, const char *units, char const * value)
++{
++    int u;
++    if ((u = parseBytesUnits(units)) == 0) {
++        self_destruct();
++        return;
++    }
++
++    // Find number from string beginning.
++    char const * number_begin = value;
++    char const * number_end = value;
++
++    while ((*number_end >= '0' && *number_end <= '9')) {
++        number_end++;
++    }
++
++    String number;
++    number.limitInit(number_begin, number_end - number_begin);
++
++    int d = xatoi(number.termedBuf());
++    int m;
++    if ((m = parseBytesUnits(number_end)) == 0) {
++        self_destruct();
++        return;
++    }
++
++    *bptr = static_cast<size_t>(m * d / u);
++    if (static_cast<double>(*bptr) * 2 != m * d / u * 2)
++         self_destruct();
++}
++#endif
++
+ static size_t
+ parseBytesUnits(const char *unit)
+ {
+@@ -3154,14 +3204,22 @@ parse_http_port_option(http_port_list * 
+         safe_free(s->sslflags);
+         s->sslflags = xstrdup(token + 9);
+     } else if (strncmp(token, "sslcontext=", 11) == 0) {
+-        safe_free(s->sslcontext);
+-        s->sslcontext = xstrdup(token + 11);
++        safe_free(s->sslContextSessionId);
++        s->sslContextSessionId = xstrdup(token + 11);
+     } else if (strcasecmp(token, "sslBump") == 0) {
+         debugs(3, DBG_CRITICAL, "WARNING: '" << token << "' is deprecated " <<
+                "in http_port. Use 'ssl-bump' instead.");
+         s->sslBump = 1; // accelerated when bumped, otherwise not
+     } else if (strcmp(token, "ssl-bump") == 0) {
+         s->sslBump = 1; // accelerated when bumped, otherwise not
++    } else if (strcmp(token, "generate-host-certificates") == 0) {
++        s->generateHostCertificates = true;
++    } else if (strcmp(token, "generate-host-certificates=on") == 0) {
++        s->generateHostCertificates = true;
++    } else if (strcmp(token, "generate-host-certificates=off") == 0) {
++        s->generateHostCertificates = false;
++    } else if (strncmp(token, "dynamic_cert_mem_cache_size=", 28) == 0) {
++        parseBytesOptionValue(&s->dynamicCertMemCacheSize, B_BYTES_STR, xstrdup(token + 28));
+ #endif
+     } else {
+         self_destruct();
+@@ -3347,11 +3405,17 @@ dump_generic_http_port(StoreEntry * e, c
+     if (s->sslflags)
+         storeAppendPrintf(e, " sslflags=%s", s->sslflags);
+ 
+-    if (s->sslcontext)
+-        storeAppendPrintf(e, " sslcontext=%s", s->sslcontext);
++    if (s->sslContextSessionId)
++        storeAppendPrintf(e, " sslcontext=%s", s->sslContextSessionId);
+ 
+     if (s->sslBump)
+         storeAppendPrintf(e, " sslBump");
++
++    if (s->generateHostCertificates)
++        storeAppendPrintf(e, " generate-host-certificates");
++
++    if (s->dynamicCertMemCacheSize != std::numeric_limits<size_t>::max())
++        storeAppendPrintf(e, "dynamic_cert_mem_cache_size=%lu%s\n", (unsigned long)s->dynamicCertMemCacheSize, B_BYTES_STR);
+ #endif
+ }
+ 
+diff -up squid-3.1.8/src/cf.data.pre.phase5_take23 squid-3.1.8/src/cf.data.pre
+--- squid-3.1.8/src/cf.data.pre.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/cf.data.pre	2010-10-12 12:54:37.090025486 +0200
+@@ -1163,6 +1163,11 @@ DOC_START
+ 			Squid, and treat them as unencrypted HTTP messages,
+ 			becoming the man-in-the-middle.
+ 
++			This option enables the following certificate
++			generation parameters documented below:
++			generate-host-certificates and 
++			dynamic_cert_mem_cache_size.
++
+ 			When this option is enabled, additional options become
+ 			available to specify SSL-related properties of the
+ 			client-side connection: cert, key, version, cipher,
+@@ -1173,6 +1178,25 @@ DOC_START
+ 			The ssl_bump option is required to fully enable
+ 			the SslBump feature.
+ 
++	   generate-host-certificates[=<on|off>]
++			Dynamically create SSL server certificates for the
++			destination hosts of bumped CONNECT requests. If this 
++			option is enable, cert and key options use to sign 
++			generated certificate. Otherwise generated certificate
++			will be selfsigned. 
++			If there is CA certificate life time of generated 
++			certificate equals lifetime of CA certificate. If
++			generated certificate is selfsigned lifetime is three 
++			years.
++			This option is enabled by default. See the sslBump option
++			above for more information.
++			
++	   dynamic_cert_mem_cache_size=
++			Approximate total RAM size spent on cached generated
++			certificates. If set to zero, caching is disabled. The
++			default value is 4MB. An average XXX-bit certificate
++			consumes about XXX bytes of RAM.
++
+ 	   name=	Specifies a internal name for the port. Defaults to
+ 			the port specification (port or addr:port)
+ 
+@@ -1657,6 +1681,35 @@ DOC_START
+ DOC_END
+ 
+ COMMENT_START
++ OPTIONS RELATING TO EXTERNAL SSL_CRTD 
++ -----------------------------------------------------------------------------
++COMMENT_END
++
++NAME: sslcrtd_program
++TYPE: eol 
++IFDEF: USE_SSL_CRTD
++DEFAULT: @DEFAULT_SSL_CRTD@ -s @DEFAULT_SSL_DB_DIR@ -M 4MB
++LOC: Config.Program.ssl_crtd
++DOC_START
++        Specify the location and options of the executable for ssl_crtd process.
++	@DEFAULT_SSL_CRTD@ program SHOULD receive -s and -m options to correct
++	run. For more information use:
++		@DEFAULT_SSL_CRTD@ -h
++DOC_END
++
++NAME: sslcrtd_children
++TYPE: int
++IFDEF: USE_SSL_CRTD
++DEFAULT: 5
++LOC: Config.ssl_crtdChildren
++DOC_START
++        The number of processes spawn to service ssl server.
++        The maximum is 32.  The default is 5.
++
++        You must have at least one ssl_crtd process.
++DOC_END
++
++COMMENT_START
+  OPTIONS WHICH AFFECT THE NEIGHBOR SELECTION ALGORITHM
+  -----------------------------------------------------------------------------
+ COMMENT_END
+diff -up squid-3.1.8/src/client_side.cc.phase5_take23 squid-3.1.8/src/client_side.cc
+--- squid-3.1.8/src/client_side.cc.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/client_side.cc	2010-10-12 12:54:37.094024749 +0200
+@@ -106,6 +106,18 @@
+ #include "ChunkedCodingParser.h"
+ #include "rfc1738.h"
+ 
++#include <limits>
++
++#if USE_SSL
++#include "ssl_context_storage.h"
++#include "ssl_helper.h"
++#include "ssl_gadgets.h"
++#endif
++#if USE_SSL_CRTD
++#include "ssl_crtd_message.h"
++#include "ssl_certificate_db.h"
++#endif
++
+ #if LINGERING_CLOSE
+ #define comm_close comm_lingering_close
+ #endif
+@@ -3243,7 +3255,7 @@ httpsAccept(int sock, int newfd, Connect
+             comm_err_t flag, int xerrno, void *data)
+ {
+     https_port_list *s = (https_port_list *)data;
+-    SSL_CTX *sslContext = s->sslContext;
++    SSL_CTX *sslContext = s->staticSslContext;
+ 
+     if (flag == COMM_ERR_CLOSING) {
+         return;
+@@ -3304,24 +3316,110 @@ httpsAccept(int sock, int newfd, Connect
+     incoming_sockets_accepted++;
+ }
+ 
++void
++ConnStateData::sslCrtdHandleReplyWrapper(void *data, char *reply)
++{
++    ConnStateData * state_data = (ConnStateData *)(data);
++    state_data->sslCrtdHandleReply(reply);
++}
++
++void
++ConnStateData::sslCrtdHandleReply(const char * reply)
++{
++    if (!reply) {
++        debugs(1, 1, HERE << "\"ssl_crtd\" helper return <NULL> reply");
++    } else {
++        SslCrtdMessage reply_message;
++        if (reply_message.parse(reply, strlen(reply)) != SslCrtdMessage::OK) {
++            debugs(33, 5, HERE << "Reply from ssl_crtd for " << sslHostName << " is incorrect");
++        } else {
++            if (reply_message.getCode() != "ok") {
++                debugs(33, 5, HERE << "Certificate for " << sslHostName << " cannot be generated. ssl_crtd response: " << reply_message.getBody());
++            } else {
++                debugs(33, 5, HERE << "Certificate for " << sslHostName << " was successfully recieved from ssl_crtd");
++                getSslContextDone(generateSslContextUsingPkeyAndCertFromMemory(reply_message.getBody().c_str()), true);
++                return;
++            }
++        }
++    }
++    getSslContextDone(NULL);
++}
++
+ bool
+-ConnStateData::switchToHttps()
++ConnStateData::getSslContextStart()
+ {
+-    assert(!switchedToHttps_);
++    char const * host = sslHostName.termedBuf();
++    if (port->generateHostCertificates && host && strcmp(host, "") != 0) {
++        debugs(33, 5, HERE << "Finding SSL certificate for " << host << " in cache");
++        LocalSslContextStorage & ssl_ctx_cache(TheGlobalSslContextStorage.getLocalStorage(port->s));
++        SSL_CTX * dynCtx = ssl_ctx_cache.find(host);
++        if (dynCtx) {
++            debugs(33, 5, HERE << "SSL certificate for " << host << " have found in cache");
++            if (verifySslCertificateDate(dynCtx)) {
++                debugs(33, 5, HERE << "Cached SSL certificate for " << host << " is valid");
++                return getSslContextDone(dynCtx);
++            } else {
++                debugs(33, 5, HERE << "Cached SSL certificate for " << host << " is out of date. Delete this certificate from cache");
++                ssl_ctx_cache.remove(host);
++            }
++        } else {
++            debugs(33, 5, HERE << "SSL certificate for " << host << " haven't found in cache");
++        }
+ 
+-    //HTTPMSGLOCK(currentobject->http->request);
+-    assert(areAllContextsForThisConnection());
+-    freeAllContexts();
+-    //currentobject->connIsFinished();
++#ifdef USE_SSL_CRTD
++        debugs(33, 5, HERE << "Generating SSL certificate for " << host << " using ssl_crtd.");
++        SslCrtdMessage request_message;
++        request_message.setCode(SslCrtdMessage::code_new_certificate);
++        SslCrtdMessage::BodyParams map;
++        map.insert(std::make_pair(SslCrtdMessage::param_host, host));
++        std::string bufferToWrite;
++        writeCertAndPrivateKeyToMemory(port->signCert.get(), port->signPkey.get(), bufferToWrite);
++        request_message.composeBody(map, bufferToWrite);
++        SslHelper::GetInstance()->sslSubmit(request_message, sslCrtdHandleReplyWrapper, this);
++        return true;
++#else
++        debugs(33, 5, HERE << "Generating SSL certificate for " << host);
++        dynCtx = generateSslContext(host, port->signCert.get(), port->signPkey.get());
++        return getSslContextDone(dynCtx, true);
++#endif //USE_SSL_CRTD
++    }
++    return getSslContextDone(NULL);
++}
+ 
+-    debugs(33, 5, HERE << "converting FD " << fd << " to SSL");
++bool
++ConnStateData::getSslContextDone(SSL_CTX * sslContext, bool isNew)
++{
++    // Try to add generated ssl context to storage.
++    if (port->generateHostCertificates && isNew) {
++        LocalSslContextStorage & ssl_ctx_cache(TheGlobalSslContextStorage.getLocalStorage(port->s));
++        if (sslContext && sslHostName != "") {
++            if (!ssl_ctx_cache.add(sslHostName.termedBuf(), sslContext)) {
++                // If it is not in storage delete after using. Else storage deleted it.
++                fd_table[fd].dynamicSslContext = sslContext;
++            }
++        } else {
++            debugs(33, 2, HERE << "Failed to generate SSL cert for " << sslHostName);
++        }
++    }
++
++    // If generated ssl context = NULL, try to use static ssl context.
++    if (!sslContext) {
++        if (port->staticSslContext) {
++            debugs(33, 5, HERE << "Using static ssl context.");
++            sslContext = port->staticSslContext;
++        } else {
++            debugs(83, 1, "Closing SSL FD " << fd << " as lacking SSL context");
++            comm_close(fd);
++            return false;
++        }
++    }
+ 
+     // fake a ConnectionDetail object; XXX: make ConnState a ConnectionDetail?
+     ConnectionDetail detail;
+     detail.me = me;
+     detail.peer = peer;
+ 
+-    SSL_CTX *sslContext = port->sslContext;
++
+     SSL *ssl = NULL;
+     if (!(ssl = httpsCreate(fd, &detail, sslContext)))
+         return false;
+@@ -3334,9 +3432,27 @@ ConnStateData::switchToHttps()
+     commSetSelect(fd, COMM_SELECT_READ, clientNegotiateSSL, this, 0);
+ 
+     switchedToHttps_ = true;
++
+     return true;
+ }
+ 
++bool
++ConnStateData::switchToHttps(const char *host)
++{
++    assert(!switchedToHttps_);
++
++    sslHostName = host;
++
++    //HTTPMSGLOCK(currentobject->http->request);
++    assert(areAllContextsForThisConnection());
++    freeAllContexts();
++    //currentobject->connIsFinished();
++
++    debugs(33, 5, HERE << "converting FD " << fd << " to SSL");
++
++    return getSslContextStart();
++}
++
+ #endif /* USE_SSL */
+ 
+ 
+@@ -3357,14 +3473,21 @@ clientHttpConnectionsOpen(void)
+         }
+ 
+ #if USE_SSL
+-        if (s->sslBump && s->sslContext == NULL) {
++        if (s->sslBump &&
++            !s->staticSslContext && !s->generateHostCertificates) {
+             debugs(1, 1, "Will not bump SSL at http_port " <<
+                    s->http.s << " due to SSL initialization failure.");
+             s->sslBump = 0;
+         }
+-        if (s->sslBump)
++        if (s->sslBump) {
+             ++bumpCount;
++            // Create ssl_ctx cache for this port.
++            TheGlobalSslContextStorage.addLocalStorage(s->s, s->dynamicCertMemCacheSize == std::numeric_limits<size_t>::max() ? 4194304 : s->dynamicCertMemCacheSize);
++        }
+ #endif
++#if USE_SSL_CRTD
++        SslHelper::GetInstance();
++#endif //USE_SSL_CRTD
+ 
+         enter_suid();
+ 
+@@ -3416,7 +3539,7 @@ clientHttpsConnectionsOpen(void)
+             continue;
+         }
+ 
+-        if (s->sslContext == NULL) {
++        if (!s->staticSslContext) {
+             debugs(1, 1, "Ignoring https_port " << s->http.s <<
+                    " due to SSL initialization failure.");
+             continue;
+diff -up squid-3.1.8/src/client_side.h.phase5_take23 squid-3.1.8/src/client_side.h
+--- squid-3.1.8/src/client_side.h.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/client_side.h	2010-10-12 12:54:37.088024409 +0200
+@@ -259,8 +259,20 @@ public:
+     virtual void swanSong();
+ 
+ #if USE_SSL
+-    bool switchToHttps();
++    /// Start to create dynamic SSL_CTX for host or uses static port SSL context.
++    bool getSslContextStart();
++    /// Done create dynamic ssl certificate.
++    /// \param[in] isNew if generated certificate is new, so we need to add this certificate to storage.
++    bool getSslContextDone(SSL_CTX * sslContext, bool isNew = false);
++    /// Callback function. It is called when squid receive message from ssl_crtd.
++    static void sslCrtdHandleReplyWrapper(void *data, char *reply);
++    /// Proccess response from ssl_crtd.
++    void sslCrtdHandleReply(const char * reply);
++
++    bool switchToHttps(const char *host);
+     bool switchedToHttps() const { return switchedToHttps_; }
++    /// Host name for generation ssl certificate.
++    String sslHostName;
+ #else
+     bool switchedToHttps() const { return false; }
+ #endif
+diff -up squid-3.1.8/src/client_side_request.cc.phase5_take23 squid-3.1.8/src/client_side_request.cc
+--- squid-3.1.8/src/client_side_request.cc.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/client_side_request.cc	2010-10-12 12:54:37.097024814 +0200
+@@ -1174,7 +1174,8 @@ ClientHttpRequest::sslBumpEstablish(comm
+         return;
+     }
+ 
+-    getConn()->switchToHttps();
++    String host(request->GetHost());
++    getConn()->switchToHttps(host.termedBuf());
+ }
+ 
+ void
+diff -up squid-3.1.8/src/comm.cc.phase5_take23 squid-3.1.8/src/comm.cc
+--- squid-3.1.8/src/comm.cc.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/comm.cc	2010-10-12 12:54:37.093025176 +0200
+@@ -1550,6 +1550,10 @@ comm_close_complete(int fd, void *data)
+         F->ssl = NULL;
+     }
+ 
++    if (F->dynamicSslContext) {
++        SSL_CTX_free(F->dynamicSslContext);
++        F->dynamicSslContext = NULL;
++    }
+ #endif
+     fd_close(fd);		/* update fdstat */
+ 
+diff -up squid-3.1.8/src/defines.h.phase5_take23 squid-3.1.8/src/defines.h
+--- squid-3.1.8/src/defines.h.phase5_take23	2010-09-04 05:25:58.000000000 +0200
++++ squid-3.1.8/src/defines.h	2010-10-12 12:54:37.091025388 +0200
+@@ -69,9 +69,9 @@
+ #define COMM_DOBIND		0x10
+ 
+ #include "Debug.h"
+-#define do_debug(SECTION, LEVEL) ((Debug::level = (LEVEL)) > Debug::Levels[SECTION])
++#define do_debug(SECTION, LEVEL) ((Debug::level = (LEVEL)) <= Debug::Levels[SECTION])
+ #define debug(SECTION, LEVEL) \
+-        do_debug(SECTION, LEVEL) ? (void) 0 : _db_print
++        !do_debug(SECTION, LEVEL) ? (void) 0 : _db_print
+ 
+ #define safe_free(x)	if (x) { xxfree(x); x = NULL; }
+ 
+diff -up squid-3.1.8/src/fde.h.phase5_take23 squid-3.1.8/src/fde.h
+--- squid-3.1.8/src/fde.h.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/fde.h	2010-10-12 12:54:37.092024995 +0200
+@@ -102,6 +102,7 @@ public:
+     WRITE_HANDLER *write_method;
+ #if USE_SSL
+     SSL *ssl;
++    SSL_CTX *dynamicSslContext; ///< cached and then freed when fd is closed
+ #endif
+ #ifdef _SQUID_MSWIN_
+     struct {
+diff -up squid-3.1.8/src/helper.cc.phase5_take23 squid-3.1.8/src/helper.cc
+--- squid-3.1.8/src/helper.cc.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/helper.cc	2010-10-12 13:01:12.282025459 +0200
+@@ -839,6 +839,55 @@ helperStatefulServerFree(int fd, void *d
+     cbdataFree(srv);
+ }
+ 
++/// Return buffer using call of callback function.
++static void helperReturnBuffer(int request_number, helper_server * srv, helper * hlp, char * msg, char * msg_end)
++{
++    helper_request *r = srv->requests[request_number];
++    if (r) {
++        HLPCB *callback = r->callback;
++        void *cbdata;
++
++        srv->requests[request_number] = NULL;
++
++        r->callback = NULL;
++
++        if (cbdataReferenceValidDone(r->data, &cbdata))
++            callback(cbdata, msg);
++
++        srv->stats.pending--;
++
++        hlp->stats.replies++;
++
++        srv->answer_time = current_time;
++
++        srv->dispatch_time = r->dispatch_time;
++
++        hlp->stats.avg_svc_time =
++            Math::intAverage(hlp->stats.avg_svc_time,
++                       tvSubMsec(r->dispatch_time, current_time),
++                       hlp->stats.replies, REDIRECT_AV_FACTOR);
++
++        helperRequestFree(r);
++    } else {
++        debugs(84, 1, "helperHandleRead: unexpected reply on channel " <<
++               request_number << " from " << hlp->id_name << " #" << srv->index + 1 <<
++               " '" << srv->rbuf << "'");
++    }
++    srv->roffset -= (msg_end - srv->rbuf);
++    memmove(srv->rbuf, msg_end, srv->roffset + 1);
++
++    if (!srv->flags.shutdown) {
++        helperKickQueue(hlp);
++    } else if (!srv->flags.closing && !srv->stats.pending) {
++        int wfd = srv->wfd;
++        srv->wfd = -1;
++        if (srv->rfd == wfd)
++            srv->rfd = -1;
++        srv->flags.closing=1;
++        comm_close(wfd);
++        return;
++    }
++}
+ 
+ static void
+ helperHandleRead(int fd, char *buf, size_t len, comm_err_t flag, int xerrno, void *data)
+@@ -881,69 +930,29 @@ helperHandleRead(int fd, char *buf, size
+         srv->rbuf[0] = '\0';
+     }
+ 
+-    while ((t = strchr(srv->rbuf, '\n'))) {
+-        /* end of reply found */
+-        helper_request *r;
+-        char *msg = srv->rbuf;
+-        int i = 0;
+-        debugs(84, 3, "helperHandleRead: end of reply found");
+-
+-        if (t > srv->rbuf && t[-1] == '\r')
+-            t[-1] = '\0';
+-
+-        *t++ = '\0';
+-
+-        if (hlp->concurrency) {
+-            i = strtol(msg, &msg, 10);
+-
+-            while (*msg && xisspace(*msg))
+-                msg++;
+-        }
+-
+-        r = srv->requests[i];
+-
+-        if (r) {
+-            HLPCB *callback = r->callback;
+-            void *cbdata;
+-
+-            srv->requests[i] = NULL;
+-
+-            r->callback = NULL;
+-
+-            if (cbdataReferenceValidDone(r->data, &cbdata))
+-                callback(cbdata, msg);
+-
+-            srv->stats.pending--;
+-
+-            hlp->stats.replies++;
+-
+-            srv->answer_time = current_time;
+-
+-            srv->dispatch_time = r->dispatch_time;
+-
+-            hlp->stats.avg_svc_time = Math::intAverage(hlp->stats.avg_svc_time, tvSubMsec(r->dispatch_time, current_time), hlp->stats.replies, REDIRECT_AV_FACTOR);
+-
+-            helperRequestFree(r);
+-        } else {
+-            debugs(84, 1, "helperHandleRead: unexpected reply on channel " <<
+-                   i << " from " << hlp->id_name << " #" << srv->index + 1 <<
+-                   " '" << srv->rbuf << "'");
+-
+-        }
+-
+-        srv->roffset -= (t - srv->rbuf);
+-        memmove(srv->rbuf, t, srv->roffset + 1);
++    if (hlp->is_return_full_reply) {
++	debugs(84, 3, HERE << "Return all buffer");
++	helperReturnBuffer(0, srv, hlp, srv->rbuf, srv->rbuf + srv->roffset);
++    } else {
++	while ((t = strchr(srv->rbuf, '\n'))) {
++           /* end of reply found */
++            char *msg = srv->rbuf;
++            int i = 0;
++            debugs(84, 3, "helperHandleRead: end of reply found");
++
++            if (t > srv->rbuf && t[-1] == '\r')
++               t[-1] = '\0';
++
++            *t++ = '\0';
++
++            if (hlp->concurrency) {
++               i = strtol(msg, &msg, 10);
++
++               while (*msg && xisspace(*msg))
++               msg++;
++            }
+ 
+-        if (!srv->flags.shutdown) {
+-            helperKickQueue(hlp);
+-        } else if (!srv->flags.closing && !srv->stats.pending) {
+-            int wfd = srv->wfd;
+-            srv->wfd = -1;
+-            if (srv->rfd == wfd)
+-                srv->rfd = -1;
+-            srv->flags.closing=1;
+-            comm_close(wfd);
+-            return;
++	    helperReturnBuffer(i, srv, hlp, msg, t);
+         }
+     }
+ 
+diff -up squid-3.1.8/src/helper.h.phase5_take23 squid-3.1.8/src/helper.h
+--- squid-3.1.8/src/helper.h.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/helper.h	2010-10-12 12:54:37.096024630 +0200
+@@ -73,6 +73,9 @@ struct _helper {
+         int queue_size;
+         int avg_svc_time;
+     } stats;
++    /// If need to return all reply. Reply buffer from external program must 
++    /// not contain '\0' simbols. '\0' symbol is end of buffer.
++    bool is_return_full_reply;
+ };
+ 
+ struct _helper_stateful {
+diff -up squid-3.1.8/src/main.cc.phase5_take23 squid-3.1.8/src/main.cc
+--- squid-3.1.8/src/main.cc.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/main.cc	2010-10-12 12:54:37.091025388 +0200
+@@ -80,6 +80,15 @@
+ #include "LoadableModules.h"
+ #endif
+ 
++#if USE_SSL_CRTD
++#include "ssl_helper.h"
++#include "ssl_certificate_db.h"
++#endif
++
++#if USE_SSL
++#include "ssl_context_storage.h"
++#endif
++
+ #if ICAP_CLIENT
+ #include "adaptation/icap/Config.h"
+ #endif
+@@ -692,7 +701,12 @@ mainReconfigureStart(void)
+ 
+     idnsShutdown();
+ #endif
+-
++#if USE_SSL_CRTD
++    SslHelper::GetInstance()->Shutdown();
++#endif
++#if USE_SSL
++    TheGlobalSslContextStorage.reconfigureStart();
++#endif
+     redirectShutdown();
+     authenticateShutdown();
+     externalAclShutdown();
+@@ -768,6 +782,9 @@ mainReconfigureFinish(void *)
+ 
+     idnsInit();
+ #endif
++#if USE_SSL_CRTD
++    SslHelper::GetInstance()->Init();
++#endif
+ 
+     redirectInit();
+     authenticateInit(&Config.authConfiguration);
+@@ -1702,7 +1719,9 @@ SquidShutdown()
+ 
+     idnsShutdown();
+ #endif
+-
++#if USE_SSL_CRTD
++    SslHelper::GetInstance()->Shutdown();
++#endif
+     redirectShutdown();
+     externalAclShutdown();
+     icpConnectionClose();
+diff -up squid-3.1.8/src/Makefile.am.phase5_take23 squid-3.1.8/src/Makefile.am
+--- squid-3.1.8/src/Makefile.am.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/Makefile.am	2010-10-12 12:54:37.085025390 +0200
+@@ -19,6 +19,18 @@ DNSSOURCE += \
+ 	DnsLookupDetails.h \
+ 	DnsLookupDetails.cc
+ 
++if USE_SSL_CRTD
++SSL_CRTD = ssl_crtd
++SSL_CRTD_SOURCE = \
++    ssl_helper.cc \
++    ssl_helper.h \
++    ssl_certificate_db.cc \
++    ssl_certificate_db.h 
++else
++SSL_CRTD =
++SSL_CRTD_SOURCE =
++endif
++
+ SNMP_ALL_SOURCE = \
+ 	snmp_core.cc \
+ 	snmp_agent.cc
+@@ -108,7 +120,14 @@ endif
+ 
+ SSL_ALL_SOURCE = \
+ 	ssl_support.cc \
+-	ssl_support.h
++	ssl_support.h \
++	ssl_gadgets.cc \
++	ssl_gadgets.h \
++	ssl_context_storage.cc \
++	ssl_context_storage.h \
++	ssl_crtd_message.cc \
++	ssl_crtd_message.h \
++	$(SSL_CRTD_SOURCE)
+ 
+ if ENABLE_SSL
+ SSL_SOURCE = $(SSL_ALL_SOURCE)
+@@ -169,6 +188,7 @@ EXTRA_PROGRAMS = \
+ 	DiskIO/DiskDaemon/diskd \
+ 	unlinkd \
+ 	dnsserver \
++	ssl_crtd \
+ 	recv-announce \
+ 	tests/testUfs \
+ 	tests/testCoss \
+@@ -189,6 +209,7 @@ bin_PROGRAMS = 
+ 
+ libexec_PROGRAMS = \
+ 	$(DNSSERVER) \
++	$(SSL_CRTD) \
+ 	$(DISK_PROGRAMS) \
+ 	$(UNLINKD)
+ 
+@@ -234,6 +255,7 @@ EXTRA_squid_SOURCES = \
+ 	$(DELAY_POOL_ALL_SOURCE) \
+ 	dns.cc \
+ 	dnsserver.cc \
++	ssl_crtd.cc \
+ 	dns_internal.cc \
+ 	DnsLookupDetails.cc \
+ 	DnsLookupDetails.h \
+@@ -557,6 +579,14 @@ endif
+ 
+ 
+ unlinkd_SOURCES = unlinkd_daemon.cc SquidNew.cc
++ssl_crtd_SOURCES = ssl_crtd.cc \
++	ssl_crtd_message.cc \
++	ssl_crtd_message.h \
++	ssl_gadgets.cc \
++	ssl_gadgets.h \
++	ssl_certificate_db.cc \
++	ssl_certificate_db.h
++ssl_crtd_LDADD = @SSLLIB@
+ 
+ dnsserver_SOURCES = dnsserver.cc SquidNew.cc stub_debug.cc
+ recv_announce_SOURCES = recv-announce.cc SquidNew.cc
+@@ -714,6 +744,7 @@ DEFAULT_CONFIG_DIR	= $(sysconfdir)
+ DEFAULT_CONFIG_FILE     = $(DEFAULT_CONFIG_DIR)/squid.conf
+ DEFAULT_MIME_TABLE	= $(DEFAULT_CONFIG_DIR)/mime.conf
+ DEFAULT_DNSSERVER       = $(libexecdir)/`echo dnsserver | sed '$(transform);s/$$/$(EXEEXT)/'`
++DEFAULT_SSL_CRTD	= $(libexecdir)/`echo ssl_crtd  | sed '$(transform);s/$$/$(EXEEXT)/'`
+ DEFAULT_LOG_PREFIX	= $(DEFAULT_LOG_DIR)
+ DEFAULT_CACHE_LOG       = $(DEFAULT_LOG_PREFIX)/cache.log
+ DEFAULT_ACCESS_LOG      = $(DEFAULT_LOG_PREFIX)/access.log
+@@ -721,6 +752,7 @@ DEFAULT_STORE_LOG       = $(DEFAULT_LOG_
+ DEFAULT_PID_FILE        = $(DEFAULT_PIDFILE)
+ DEFAULT_NETDB_FILE      = $(DEFAULT_LOG_PREFIX)/netdb.state
+ DEFAULT_SWAP_DIR        = $(localstatedir)/cache
++DEFAULT_SSL_DB_DIR	= $(localstatedir)/ssl_db
+ DEFAULT_PINGER		= $(libexecdir)/`echo pinger | sed '$(transform);s/$$/$(EXEEXT)/'`
+ DEFAULT_UNLINKD		= $(libexecdir)/`echo unlinkd | sed '$(transform);s/$$/$(EXEEXT)/'`
+ DEFAULT_DISKD		= $(libexecdir)/`echo diskd | sed '$(transform);s/$$/$(EXEEXT)/'`
+@@ -768,6 +800,7 @@ cf.data: cf.data.pre Makefile
+ 	-e "s%[@]DEFAULT_CACHE_EFFECTIVE_USER[@]%${CACHE_EFFECTIVE_USER}%g" \
+ 	-e "s%[@]DEFAULT_MIME_TABLE[@]%$(DEFAULT_MIME_TABLE)%g" \
+ 	-e "s%[@]DEFAULT_DNSSERVER[@]%$(DEFAULT_DNSSERVER)%g" \
++	-e "s%[@]DEFAULT_SSL_CRTD[@]%$(DEFAULT_SSL_CRTD)%g" \
+ 	-e "s%[@]DEFAULT_UNLINKD[@]%$(DEFAULT_UNLINKD)%g" \
+ 	-e "s%[@]DEFAULT_PINGER[@]%$(DEFAULT_PINGER)%g" \
+ 	-e "s%[@]DEFAULT_DISKD[@]%$(DEFAULT_DISKD)%g" \
+@@ -777,6 +810,7 @@ cf.data: cf.data.pre Makefile
+ 	-e "s%[@]DEFAULT_PID_FILE[@]%$(DEFAULT_PID_FILE)%g" \
+ 	-e "s%[@]DEFAULT_NETDB_FILE[@]%$(DEFAULT_NETDB_FILE)%g" \
+ 	-e "s%[@]DEFAULT_SWAP_DIR[@]%$(DEFAULT_SWAP_DIR)%g" \
++	-e "s%[@]DEFAULT_SSL_DB_DIR[@]%$(DEFAULT_SSL_DB_DIR)%g" \
+ 	-e "s%[@]DEFAULT_ICON_DIR[@]%$(DEFAULT_ICON_DIR)%g" \
+ 	-e "s%[@]DEFAULT_CONFIG_DIR[@]%$(DEFAULT_CONFIG_DIR)%g" \
+ 	-e "s%[@]DEFAULT_PREFIX[@]%$(DEFAULT_PREFIX)%g" \
+diff -up squid-3.1.8/src/ProtoPort.cc.phase5_take23 squid-3.1.8/src/ProtoPort.cc
+--- squid-3.1.8/src/ProtoPort.cc.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/ProtoPort.cc	2010-10-12 12:54:37.087025440 +0200
+@@ -6,11 +6,12 @@
+ 
+ #include "squid.h"
+ #include "ProtoPort.h"
++#include <limits>
+ 
+ http_port_list::http_port_list(const char *aProtocol)
+ #if USE_SSL
+         :
+-        http(*this)
++        http(*this), dynamicCertMemCacheSize(std::numeric_limits<size_t>::max())
+ #endif
+ {
+     protocol = xstrdup(aProtocol);
+@@ -31,6 +32,8 @@ http_port_list::~http_port_list()
+     safe_free(capath);
+     safe_free(dhfile);
+     safe_free(sslflags);
++    safe_free(sslContextSessionId);
++    SSL_CTX_free(staticSslContext);
+ #endif
+ }
+ 
+diff -up squid-3.1.8/src/ProtoPort.h.phase5_take23 squid-3.1.8/src/ProtoPort.h
+--- squid-3.1.8/src/ProtoPort.h.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/ProtoPort.h	2010-10-12 12:54:37.083150162 +0200
+@@ -7,6 +7,10 @@
+ //#include "typedefs.h"
+ #include "cbdata.h"
+ 
++#if USE_SSL
++#include "ssl_gadgets.h"
++#endif
++
+ struct http_port_list {
+     http_port_list(const char *aProtocol);
+     ~http_port_list();
+@@ -52,8 +56,13 @@ struct http_port_list {
+     char *crlfile;
+     char *dhfile;
+     char *sslflags;
+-    char *sslcontext;
+-    SSL_CTX *sslContext;
++    char *sslContextSessionId; ///< "session id context" for staticSslContext
++    bool generateHostCertificates; ///< dynamically make host cert for sslBump
++    size_t dynamicCertMemCacheSize; /// < max size of generated certificates memory cache
++
++    SSL_CTX *staticSslContext; ///< for HTTPS accelerator or static sslBump
++    AutoPtr<X509> signCert; /// < x509 certificate for signing generated certificates
++    AutoPtr<EVP_PKEY> signPkey; /// < private key for sighing generated certificates
+ #endif
+ 
+     CBDATA_CLASS2(http_port_list);
+diff -up squid-3.1.8/src/ssl_certificate_db.cc.phase5_take23 squid-3.1.8/src/ssl_certificate_db.cc
+--- squid-3.1.8/src/ssl_certificate_db.cc.phase5_take23	2010-10-12 12:54:37.096024630 +0200
++++ squid-3.1.8/src/ssl_certificate_db.cc	2010-10-12 12:54:37.096024630 +0200
+@@ -0,0 +1,481 @@
++/*
++ * 2009/02/19
++ */
++
++#include "config.h"
++#include <fstream>
++#include <stdexcept>
++#include <openssl/crypto.h>
++#include <sys/stat.h>
++#include <sys/types.h>
++#include <sys/file.h>
++#include <fcntl.h>
++#include "ssl_certificate_db.h"
++
++FileLocker::FileLocker(std::string const & filename)
++:    fd(-1)
++{
++#ifdef _SQUID_MSWIN_
++    hFile = CreateFile(TEXT(filename.c_str()), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
++    if (hFile != INVALID_HANDLE_VALUE)
++        LockFile(hFile, 0, 0, 1, 0);
++#else
++    fd = open(filename.c_str(), 0);
++    if (fd != -1)
++        flock(fd, LOCK_EX);
++#endif
++}
++
++FileLocker::~FileLocker()
++{
++#ifdef _SQUID_MSWIN_
++    if (hFile != INVALID_HANDLE_VALUE) {
++        UnlockFile(hFile, 0, 0, 1, 0);
++        CloseHandle(hFile);
++    }
++#else
++    if (fd != -1) {
++        flock(fd, LOCK_UN);
++        close(fd);
++    }
++#endif
++}
++
++SslCertificateDb::DbRowWrapper::DbRowWrapper(size_t aNumber)
++:   number(aNumber)
++{
++    row = new char *[number + 1];
++    for(size_t i = 0; i < number + 1; i++)
++        row[i] = NULL;
++}
++
++SslCertificateDb::DbRowWrapper::~DbRowWrapper()
++{
++    if (row) {
++        for(size_t i = 0; i < number + 1; i++) {
++            if (row[i])
++                delete[](row[i]);
++        }
++        delete[](row);
++    }
++}
++
++void SslCertificateDb::DbRowWrapper::reset()
++{
++    row = NULL;
++}
++
++void SslCertificateDb::DbRowWrapper::setValue(size_t number, char const * value)
++{
++    if (row[number]) {
++        free(row);
++    }
++    if (value) {
++        row[number] = static_cast<char *>(malloc(sizeof(char) * (strlen(value) + 1)));
++        memcpy(row[number], value, sizeof(char) * (strlen(value) + 1));
++    }
++    else
++        row[number] = NULL;
++}
++
++char ** SslCertificateDb::DbRowWrapper::getRow()
++{
++    return row;
++}
++
++unsigned long SslCertificateDb::index_serial_hash(const char **a)
++{
++    const char *n;
++    n = a[SslCertificateDb::DbSerial];
++    while (*n == '0') n++;
++    return lh_strhash(n);
++}
++
++int SslCertificateDb::index_serial_cmp(const char **a, const char **b)
++{
++    const char *aa, *bb;
++    for (aa = a[SslCertificateDb::DbSerial]; *aa == '0'; aa++);
++    for (bb = b[SslCertificateDb::DbSerial]; *bb == '0'; bb++);
++    return strcmp(aa, bb);
++}
++
++unsigned long SslCertificateDb::index_name_hash(const char **a)
++{
++    return(lh_strhash(a[SslCertificateDb::DbName]));
++}
++
++int SslCertificateDb::index_name_cmp(const char **a, const char **b)
++{
++    return(strcmp(a[SslCertificateDb::DbName], b[SslCertificateDb::DbName]));
++}
++
++const std::string SslCertificateDb::serial_file("serial");
++const std::string SslCertificateDb::db_file("index.txt");
++const std::string SslCertificateDb::cert_dir("certs");
++const std::string SslCertificateDb::size_file("size");
++const size_t SslCertificateDb::min_db_size(4096);
++
++SslCertificateDb::SslCertificateDb(std::string const & db_path, size_t aMax_db_size, size_t aFs_block_size)
++:   serial_full(db_path + "/" + serial_file),
++    db_full(db_path + "/" + db_file),
++    cert_full(db_path + "/" + cert_dir),
++    size_full(db_path + "/" + size_file),
++    db(NULL, NULL),
++    max_db_size(aMax_db_size),
++    fs_block_size(aFs_block_size),
++    enabled_disk_store(true)
++{
++    if (db_path.empty() && !max_db_size)
++        enabled_disk_store = false;
++    else if ((db_path.empty() && max_db_size) || (!db_path.empty() && !max_db_size))
++        throw std::runtime_error("ssl_crtd is missing the required parameter. There should be -s and -M parameters together.");
++    else if (!db_path.empty() && max_db_size && !loadDb())
++        throw std::runtime_error("Uninitialized SSL certificate database directory: " + db_path + ". To initialize, run \"ssl_crtd -c -s " + db_path + "\".");
++}
++
++bool SslCertificateDb::find(std::string const & host_name, AutoPtr<X509> & cert, AutoPtr<EVP_PKEY> & pkey)
++{
++    FileLocker db_locker(db_full);
++    loadDb();
++    return pure_find(host_name, cert, pkey);
++}
++
++bool SslCertificateDb::addCertAndPrivateKey(AutoPtr<X509> & cert, AutoPtr<EVP_PKEY> & pkey)
++{
++    FileLocker db_locker(db_full);
++    loadDb();
++    if (!db || !cert || !pkey || min_db_size > max_db_size)
++        return false;
++    DbRowWrapper row(DbNumber);
++    ASN1_INTEGER * ai = X509_get_serialNumber(cert.get());
++    std::string serial_string;
++    AutoPtr<BIGNUM> serial(ASN1_INTEGER_to_BN(ai, NULL));
++    {
++        AutoPtr<char> hex_bn(BN_bn2hex(serial.get()), NULL);
++        serial_string = std::string(hex_bn.get());
++    }
++    row.setValue(DbSerial, serial_string.c_str());
++    char ** rrow = TXT_DB_get_by_index(db.get(), DbSerial, row.getRow());
++    if (rrow != NULL)
++        return false;
++
++    {
++        AutoPtr<char> subject(X509_NAME_oneline(X509_get_subject_name(cert.get()), NULL, 0), NULL);
++        if (pure_find(subject.get(), cert, pkey))
++            return true;
++    }
++    // check db size.
++    while (max_db_size < getDbSize()) {
++        if (!deleteInvalidCertificate())
++            break;
++    }
++
++    while (max_db_size < getDbSize()) {
++        deleteOldestCertificate();
++    }
++
++    row.setValue(DbType, "V");
++    ASN1_UTCTIME * tm = X509_get_notAfter(cert.get());
++    row.setValue(DbExp_date, std::string(reinterpret_cast<char *>(tm->data), tm->length).c_str());
++    row.setValue(DbFile, "unknown");
++    {
++        AutoPtr<char> subject(X509_NAME_oneline(X509_get_subject_name(cert.get()), NULL, 0), NULL);
++        row.setValue(DbName, subject.get());
++    }
++
++    if (!TXT_DB_insert(db.get(), row.getRow()))
++        return false;
++
++    row.reset();
++    std::string filename(cert_full + "/" + serial_string + ".pem");
++    FileLocker cert_locker(filename);
++    if (!writeCertAndPrivateKeyToFile(cert.get(), pkey.get(), filename.c_str()))
++        return false;
++    addDbSize(filename);
++
++    if (!saveDb()) 
++        return false;
++    return true;
++}
++
++BIGNUM * SslCertificateDb::getCurrentSerialNumber()
++{
++    FileLocker serial_locker(serial_full);
++    // load serial number from file.
++    AutoPtr<BIO> file(BIO_new(BIO_s_file()));
++    if (!file)
++        return NULL;
++
++    if (BIO_rw_filename(file.get(), const_cast<char *>(serial_full.c_str())) <= 0)
++        return NULL;
++
++    AutoPtr<ASN1_INTEGER> serial_ai(ASN1_INTEGER_new(), ASN1_INTEGER_free);
++    if (!serial_ai)
++        return NULL;
++
++    char buffer[1024];
++    if (!a2i_ASN1_INTEGER(file.get(), serial_ai.get(), buffer, sizeof(buffer)))
++        return NULL;
++
++    AutoPtr<BIGNUM> serial(ASN1_INTEGER_to_BN(serial_ai.get(), NULL));
++
++    if (!serial)
++        return NULL;
++
++    // increase serial number.
++    AutoPtr<BIGNUM> increased_serial(BN_dup(serial.get()));
++    if (!increased_serial)
++        return NULL;
++
++    BN_add_word(increased_serial.get(), 1);
++
++    // save increased serial number.
++    if (BIO_seek(file.get(), 0))
++    	return NULL;
++
++    AutoPtr<ASN1_INTEGER> increased_serial_ai(BN_to_ASN1_INTEGER(increased_serial.get(), NULL), ASN1_INTEGER_free);
++    if (!increased_serial_ai)
++        return NULL;
++
++    i2a_ASN1_INTEGER(file.get(), increased_serial_ai.get());
++    BIO_puts(file.get(),"\n");
++
++    return serial.release();
++}
++
++void SslCertificateDb::cleanDb(std::string const & db_path, int serial)
++{
++    if (db_path == "")
++        throw std::runtime_error("Path to db is empty");
++    std::string serial_full(db_path + "/" + serial_file);
++    std::string db_full(db_path + "/" + db_file);
++    std::string cert_full(db_path + "/" + cert_dir);
++    std::string size_full(db_path + "/" + size_file);
++
++#ifdef _SQUID_MSWIN_
++    if (mkdir(db_path.c_str()))
++#else
++    if (mkdir(db_path.c_str(), 0777))
++#endif
++        throw std::runtime_error("Cannot create " + db_path);
++
++#ifdef _SQUID_MSWIN_
++    if (mkdir(cert_full.c_str()))
++#else
++    if (mkdir(cert_full.c_str(), 0777))
++#endif
++        throw std::runtime_error("Cannot create " + cert_full);
++
++    AutoPtr<ASN1_INTEGER> i(ASN1_INTEGER_new(), ASN1_INTEGER_free);
++    ASN1_INTEGER_set(i.get(), serial);
++    
++    AutoPtr<BIO> file(BIO_new(BIO_s_file()));
++    if (!file)
++        throw std::runtime_error("SSL error");
++    
++    if (BIO_write_filename(file.get(), const_cast<char *>(serial_full.c_str())) <= 0)
++        throw std::runtime_error("Cannot open " + cert_full + " to open");
++    
++    i2a_ASN1_INTEGER(file.get(), i.get());
++
++    std::ofstream size(size_full.c_str());
++    if (size)
++        size << 0;
++    else
++        throw std::runtime_error("Cannot open " + size_full + " to open");
++    std::ofstream db(db_full.c_str());
++    if (!db)
++        throw std::runtime_error("Cannot open " + db_full + " to open");
++}
++
++void SslCertificateDb::checkDb(std::string const & db_path, size_t max_db_size)
++{
++    SslCertificateDb db(db_path, max_db_size, 0);
++}
++
++std::string SslCertificateDb::getSNString()
++{
++    FileLocker serial_locker(serial_full);
++    std::ifstream file(serial_full.c_str());
++    if (!file)
++        return "";
++    std::string serial;
++    file >> serial;
++    return serial;
++}
++
++bool SslCertificateDb::pure_find(std::string const & host_name, AutoPtr<X509> & cert, AutoPtr<EVP_PKEY> & pkey)
++{
++    if (!db)
++        return false;
++
++    DbRowWrapper row(DbNumber);
++    row.setValue(DbName, host_name.c_str());
++
++    char **rrow = TXT_DB_get_by_index(db.get(), DbName, row.getRow());
++    if (rrow == NULL)
++        return false;
++
++    if (!sslDateIsInTheFuture(rrow[DbExp_date])) {
++        deleteByHostname(rrow[DbName]);
++        return false;
++    }
++
++    // read cert and pkey from file.
++    std::string filename(cert_full + "/" + rrow[DbSerial] + ".pem");
++    FileLocker cert_locker(filename);
++    readCertAndPrivateKeyFromFiles(cert, pkey, filename.c_str(), NULL);
++    if (!cert || !pkey)
++        return false;
++    return true;
++}
++
++size_t SslCertificateDb::getDbSize()
++{
++    FileLocker size_locker(size_full);
++    return readSize();
++}
++
++void SslCertificateDb::addDbSize(std::string const & filename)
++{
++    FileLocker size_locker(size_full);
++    writeSize(readSize() + getFileSize(filename));
++}
++
++void SslCertificateDb::subDbSize(std::string const & filename)
++{
++    FileLocker size_locker(size_full);
++    writeSize(readSize() - getFileSize(filename));
++}
++
++size_t SslCertificateDb::readSize()
++{
++    size_t db_size;
++    std::ifstream size_file(size_full.c_str());
++    if (!size_file && enabled_disk_store)
++        throw std::runtime_error("cannot read \"" + size_full + "\" file");
++    size_file >> db_size;
++    return db_size;
++}
++
++void SslCertificateDb::writeSize(size_t db_size)
++{
++    std::ofstream size_file(size_full.c_str());
++    if (!size_file && enabled_disk_store)
++        throw std::runtime_error("cannot write \"" + size_full + "\" file");
++    size_file << db_size;
++}
++
++size_t SslCertificateDb::getFileSize(std::string const & filename)
++{
++    std::ifstream file(filename.c_str(), std::ios::binary);
++    file.seekg(0, std::ios_base::end);
++    size_t file_size = file.tellg();
++    return ((file_size + fs_block_size - 1) / fs_block_size) * fs_block_size;
++}
++
++bool SslCertificateDb::loadDb()
++{
++    // Load db from file.
++    AutoPtr<BIO> in(BIO_new(BIO_s_file()));
++    if (!in)
++        return false;
++    if (BIO_read_filename(in.get(), db_full.c_str()) <= 0)
++        return false;
++    AutoPtr<TXT_DB> temp_db(TXT_DB_read(in.get(), DbNumber), TXT_DB_free);
++
++    if (!temp_db)
++        return false;
++
++    // Create indexes in db.
++    if (!TXT_DB_create_index(temp_db.get(), DbSerial, NULL, LHASH_HASH_FN(index_serial_hash), LHASH_COMP_FN(index_serial_cmp)))
++        return false;
++
++    if (!TXT_DB_create_index(temp_db.get(), DbName, NULL, LHASH_HASH_FN(index_name_hash), LHASH_COMP_FN(index_name_cmp))) {
++        return false;
++    }
++ 
++    db.reset(temp_db.release(), TXT_DB_free);
++    return true;
++}
++
++bool SslCertificateDb::saveDb()
++{
++    if (!db)
++        return false;
++    // save db to file.
++    AutoPtr<BIO> out(BIO_new(BIO_s_file()));
++    if (!out)
++        return false;
++    if (!BIO_write_filename(out.get(), const_cast<char *>(db_full.c_str())))
++        return false;
++
++    TXT_DB_write(out.get(), db.get());
++    return true;
++}
++
++bool SslCertificateDb::deleteInvalidCertificate()
++{
++    if (!db)
++        return false;
++
++    bool removed_one = false;
++    for (int i = 0; i < sk_num(db.get()->data); i++) {
++        const char ** current_row = ((const char **)sk_value(db.get()->data, i));
++
++        if (!sslDateIsInTheFuture(current_row[DbExp_date])) {
++            std::string filename(cert_full + "/" + current_row[DbSerial] + ".pem");
++            FileLocker cert_locker(filename);
++            sk_delete(db.get()->data, i);
++            subDbSize(filename);
++            remove(filename.c_str());
++            removed_one = true;
++            break;
++        }
++    }
++
++    if (!removed_one)
++        return false;
++    return true;
++}
++
++bool SslCertificateDb::deleteOldestCertificate()
++{
++    if (!db)
++        return false;
++
++    if (sk_num(db.get()->data) == 0)
++        return false;
++
++    std::string filename(cert_full + "/" + ((const char **)sk_value(db.get()->data, 0))[DbSerial] + ".pem");
++    FileLocker cert_locker(filename);
++    sk_delete(db.get()->data, 0);
++    subDbSize(filename);
++    remove(filename.c_str());
++
++    return true;
++}
++
++bool SslCertificateDb::deleteByHostname(std::string const & host)
++{
++    if (!db)
++        return false;
++
++    for (int i = 0; i < sk_num(db.get()->data); i++) {
++        const char ** current_row = ((const char **)sk_value(db.get()->data, i));
++        if (host == current_row[DbName]) {
++            std::string filename(cert_full + "/" + current_row[DbSerial] + ".pem");
++            FileLocker cert_locker(filename);
++            sk_delete(db.get()->data, i);
++            subDbSize(filename);
++            remove(filename.c_str());
++            return true;
++        }
++    }
++    return false;
++}
++
++bool SslCertificateDb::IsEnabledDiskStore() const
++{
++    return enabled_disk_store;
++}
+diff -up squid-3.1.8/src/ssl_certificate_db.h.phase5_take23 squid-3.1.8/src/ssl_certificate_db.h
+--- squid-3.1.8/src/ssl_certificate_db.h.phase5_take23	2010-10-12 12:54:37.083150162 +0200
++++ squid-3.1.8/src/ssl_certificate_db.h	2010-10-12 12:54:37.083150162 +0200
+@@ -0,0 +1,162 @@
++/*
++ * 2009/02/18
++ */
++
++#ifndef SQUID_SSL_CERTIFICATE_DB_H
++#define SQUID_SSL_CERTIFICATE_DB_H
++
++#include <string>
++#include <openssl/txt_db.h>
++#include "ssl_gadgets.h"
++#include "ssl_support.h"
++
++/// Cross platform file locker.
++class FileLocker
++{
++public:
++    /// Lock file
++    FileLocker(std::string const & aFilename);
++    /// Unlock file
++    ~FileLocker();
++private:
++#ifdef _SQUID_MSWIN_
++    /// Windows file handle.
++    HANDLE hFile;
++#else
++    /// Linux file descriptor.
++    int fd;
++#endif
++};
++
++/// Data base for storing ssl certificates and their private keys.
++class SslCertificateDb
++{
++public:
++    /// Names of db columns.
++    enum DBColumns
++    {
++        DbType = 0,
++        DbExp_date,
++        DbRev_date,
++        DbSerial,
++        DbFile,
++        DbName,
++        DbNumber,
++    };
++
++    /// Row abstraction for openssl row.
++    class DbRowWrapper
++    {
++    public:
++        /// Create row wrapper with cells.
++        DbRowWrapper(size_t aNumber = DbNumber);
++        /// Delete all row.
++        ~DbRowWrapper();
++        /// Set cell's value in row.
++        void setValue(size_t number, char const * value);
++        /// Row getter.
++        char ** getRow();
++        /// Reset row and don't free memory.
++        void reset();
++    private:
++        /// Row.
++        char **row;
++        /// Cell number into row.
++        size_t number;
++    };
++
++    SslCertificateDb(std::string const & db_path, size_t aMax_db_size, size_t aFs_block_size);
++    /// Find needed certificate into db.
++    bool find(std::string const & host_name, AutoPtr<X509> & cert, AutoPtr<EVP_PKEY> & pkey);
++    /// Save certificate to disk.
++    bool addCertAndPrivateKey(AutoPtr<X509> & cert, AutoPtr<EVP_PKEY> & pkey);
++    /// Get serial number for next certificate.
++    BIGNUM * getCurrentSerialNumber();
++    /// Clean database.
++    static void cleanDb(std::string const & db_path, int serial);
++    /// Check that database was created.
++    static void checkDb(std::string const & db_path, size_t max_db_size);
++    /// Get serial number as string.
++    std::string getSNString();
++    /// Check enabled of dist store.
++    bool IsEnabledDiskStore() const;
++private:
++    /// Load db from file.
++    bool loadDb();
++    /// Save db to file.
++    bool saveDb();
++
++    /// Get db size.
++    size_t getDbSize();
++    /// Increase db size on size of file.
++    void addDbSize(std::string const & filename);
++    /// Decrease db size on size of file.
++    void subDbSize(std::string const & filename);
++    /// Read size from file.
++    size_t readSize();
++    /// Write size to file.
++    void writeSize(size_t db_size);
++    /// get file size on disk.
++    size_t getFileSize(std::string const & filename);
++    /// Only find certificate in current db and return it.
++    bool pure_find(std::string const & host_name, AutoPtr<X509> & cert, AutoPtr<EVP_PKEY> & pkey);
++
++    /// Delete invalid certificate.
++    bool deleteInvalidCertificate();
++    /// Delete oldest certificate.
++    bool deleteOldestCertificate();
++    /// Delete using host name.
++    bool deleteByHostname(std::string const & host);
++
++    /// Hash function for serial number.
++    /// It needs to create serial index in db.
++    static unsigned long index_serial_hash(const char **a);
++    /// Compare function for serial number.
++    /// It needs to create serial index in db.
++    static int index_serial_cmp(const char **a, const char **b);
++    /// Hash function for name.
++    /// It needs to create name index in db.
++    static unsigned long index_name_hash(const char **a);
++    /// Compare function for name.
++    /// It needs to create name index in db.
++    static int index_name_cmp(const char **a, const char **b);
++
++    /// Functions that neeed openssl for creating
++    /// Copy from openssl utilits code.
++    static IMPLEMENT_LHASH_HASH_FN(index_serial_hash,const char **)
++    static IMPLEMENT_LHASH_COMP_FN(index_serial_cmp,const char **)
++    static IMPLEMENT_LHASH_HASH_FN(index_name_hash,const char **)
++    static IMPLEMENT_LHASH_COMP_FN(index_name_cmp,const char **)
++
++    /// Filename with serial number.
++    static const std::string serial_file;
++    /// Database filename.
++    static const std::string db_file;
++    /// Directory name for new certs.
++    static const std::string cert_dir;
++    /// Filename with db size.
++    static const std::string size_file;
++    /// Min size of disk db. If real size < min size of db will be disabled.
++    static const size_t min_db_size;
++
++    /// Full path to file with serial number.
++    const std::string serial_full;
++    /// Full path to database file.
++    const std::string db_full;
++    /// Full path to directory for new certs.
++    const std::string cert_full;
++    /// Full path to file with db size.
++    const std::string size_full;
++
++    /// Database with certificates info.
++    AutoPtr<TXT_DB> db;
++    /// Max size of db.
++    const size_t max_db_size;
++    /// File system block size.
++    const size_t fs_block_size;
++    
++    /// The storage on the disk is enabled.
++    bool enabled_disk_store;
++};
++
++#endif // SQUID_SSL_CERTIFICATE_DB_H
+diff -up squid-3.1.8/src/ssl_context_storage.cc.phase5_take23 squid-3.1.8/src/ssl_context_storage.cc
+--- squid-3.1.8/src/ssl_context_storage.cc.phase5_take23	2010-10-12 12:54:37.089024702 +0200
++++ squid-3.1.8/src/ssl_context_storage.cc	2010-10-12 12:54:37.089024702 +0200
+@@ -0,0 +1,166 @@
++/*
++ * 2008/11/14
++ */
++
++#include <limits>
++#include "Store.h"
++#include "StoreEntryStream.h"
++#include "ssl_context_storage.h"
++
++SslCertificateStorageAction::SslCertificateStorageAction()
++:   CacheManagerAction("cached_ssl_cert", "Statistic of cached generated ssl certificates", 0, 1)
++{}
++
++void SslCertificateStorageAction::run (StoreEntry *sentry)
++{
++    StoreEntryStream stream(sentry);
++    char delimiter = '\t';
++    char endString = '\n';
++    // Page title.
++    stream << "Cached ssl certificates statistic.\n";
++    // Title of statistic table.
++    stream << "Port" << delimiter << "Max mem(KB)" << delimiter << "Cert number" << delimiter << "KB/cert" << delimiter << "Mem used(KB)" << delimiter << "Mem free(KB)" << endString;
++
++    // Add info for each port.
++    for (std::map<IpAddress, LocalSslContextStorage *>::iterator i = TheGlobalSslContextStorage.storage.begin(); i != TheGlobalSslContextStorage.storage.end(); i++)
++    {
++        stream << i->first << delimiter;
++        LocalSslContextStorage & ssl_store_policy(*(i->second));
++        stream << ssl_store_policy.max_memory / 1024 << delimiter;
++        stream << ssl_store_policy.memory_used / SSL_CTX_SIZE << delimiter;
++        stream << SSL_CTX_SIZE / 1024 << delimiter;
++        stream << ssl_store_policy.memory_used / 1024 << delimiter;
++        stream << (ssl_store_policy.max_memory - ssl_store_policy.memory_used) / 1024 << endString;
++    }
++    stream << endString;
++    stream.flush();
++}
++
++LocalSslContextStorage::LocalSslContextStorage(size_t aMax_memory)
++:   max_memory(aMax_memory), memory_used(0)
++{}
++
++LocalSslContextStorage::~LocalSslContextStorage()
++{
++    for (QueueIterator i = lru_queue.begin(); i != lru_queue.end(); i++) {
++        delete *i;
++    }
++}
++
++SSL_CTX * LocalSslContextStorage::add(const char * host_name, SSL_CTX * ssl_ctx)
++{
++    if (max_memory < SSL_CTX_SIZE) {
++        return NULL;
++    }
++    remove(host_name);
++    while (SSL_CTX_SIZE + memory_used > max_memory) {
++        purgeOne();
++    }
++    lru_queue.push_front(new Item(ssl_ctx, host_name));
++    storage.insert(MapPair(host_name, lru_queue.begin()));
++    memory_used += SSL_CTX_SIZE;
++    return ssl_ctx;
++}
++
++SSL_CTX * LocalSslContextStorage::find(char const * host_name)
++{
++    MapIterator i = storage.find(host_name);
++    if (i == storage.end()) {
++        return NULL;
++    }
++    lru_queue.push_front(*(i->second));
++    lru_queue.erase(i->second);
++    i->second = lru_queue.begin();
++    return (*lru_queue.begin())->ssl_ctx;
++}
++
++void LocalSslContextStorage::remove(char const * host_name)
++{
++    deleteAt(storage.find(host_name));
++}
++
++void LocalSslContextStorage::purgeOne()
++{
++    QueueIterator i = lru_queue.end();
++    i--;
++    if (i != lru_queue.end()) {
++        remove((*i)->host_name.c_str());
++    }
++}
++
++void LocalSslContextStorage::deleteAt(LocalSslContextStorage::MapIterator i)
++{
++    if (i != storage.end()) {
++
++        delete *(i->second);
++        lru_queue.erase(i->second);
++        storage.erase(i);
++        memory_used -= SSL_CTX_SIZE;
++    }
++}
++
++void LocalSslContextStorage::SetSize(size_t aMax_memory)
++{
++    max_memory = aMax_memory;
++}
++
++///////////////////////////////////////////////////////
++
++GlobalSslContextStorage::GlobalSslContextStorage()
++:   reconfiguring(true)
++{
++    CacheManager *manager = CacheManager::GetInstance();
++    manager->registerAction(new SslCertificateStorageAction());
++}
++
++GlobalSslContextStorage::~GlobalSslContextStorage()
++{
++    for (std::map<IpAddress, LocalSslContextStorage *>::iterator i = storage.begin(); i != storage.end(); i++) {
++        delete i->second;
++    }
++}
++
++void GlobalSslContextStorage::addLocalStorage(IpAddress const & address, size_t size_of_store)
++{
++    assert(reconfiguring);
++    configureStorage.insert(std::pair<IpAddress, size_t>(address, size_of_store));
++}
++
++LocalSslContextStorage & GlobalSslContextStorage::getLocalStorage(IpAddress const & address)
++{
++    reconfigureFinish();
++    std::map<IpAddress, LocalSslContextStorage *>::iterator i = storage.find(address);
++    assert (i != storage.end());
++    return *(i->second);
++}
++
++void GlobalSslContextStorage::reconfigureStart()
++{
++    reconfiguring = true;
++}
++
++void GlobalSslContextStorage::reconfigureFinish()
++{
++    if (reconfiguring){
++        reconfiguring = false;
++
++        // remove or change old local storages.
++        for (std::map<IpAddress, LocalSslContextStorage *>::iterator i = storage.begin(); i != storage.end(); i++) {
++            std::map<IpAddress, size_t>::iterator conf_i = configureStorage.find(i->first);
++            if (conf_i == configureStorage.end()) {
++                storage.erase(i);
++            } else {
++                i->second->SetSize(conf_i->second);
++            }
++        }
++
++        // add new local storages.
++        for (std::map<IpAddress, size_t>::iterator conf_i = configureStorage.begin(); conf_i != configureStorage.end(); conf_i++ ) {
++            if (storage.find(conf_i->first) == storage.end()) {
++                storage.insert(std::pair<IpAddress, LocalSslContextStorage *>(conf_i->first, new LocalSslContextStorage(conf_i->second)));
++            }
++        }
++    }
++}
++
++GlobalSslContextStorage TheGlobalSslContextStorage;
+diff -up squid-3.1.8/src/ssl_context_storage.h.phase5_take23 squid-3.1.8/src/ssl_context_storage.h
+--- squid-3.1.8/src/ssl_context_storage.h.phase5_take23	2010-10-12 12:54:37.095024693 +0200
++++ squid-3.1.8/src/ssl_context_storage.h	2010-10-12 12:54:37.095024693 +0200
+@@ -0,0 +1,121 @@
++/*
++ * 2008/11/14
++ */
++
++#ifndef SQUID_SSL_CONTEXT_STORAGE_H
++#define SQUID_SSL_CONTEXT_STORAGE_H
++
++#if USE_SSL
++
++#include <map>
++#include <list>
++#include <memory>
++#include "SquidTime.h"
++#include "CacheManager.h"
++
++/// TODO: Replace on real size.
++#define SSL_CTX_SIZE 1024
++
++/// Class for representation statictic of cached ssl certificates on new page in Cache Manager.
++/// TODO: Use "Report" functions instead friend class.
++class SslCertificateStorageAction : public CacheManagerAction
++{
++public:
++    SslCertificateStorageAction();
++    virtual void run (StoreEntry *sentry);
++};
++
++/// Memory cache for store generated Ssl context. Cache has limited size. If need to add new
++/// element and size of cache is maximum one Ssl context will be deleted from cache. It select
++/// by using LRU algorithm.
++class LocalSslContextStorage
++{
++friend class SslCertificateStorageAction;
++public:
++    /// Paker for store SSL_CTX * and host name together.
++    class Item
++    {
++    public:
++        Item(SSL_CTX * aSsl_ctx, std::string const & aName)
++        :   ssl_ctx(aSsl_ctx), host_name(aName)
++        {}
++        /// Delete SSL_CTX * in here.
++        ~Item() {
++            SSL_CTX_free(ssl_ctx);
++        }
++    public:
++        /// Ssl certificate.
++        SSL_CTX * ssl_ctx;
++        /// Last using time.
++        std::string host_name;
++    };
++
++    /// Queue type. It store items in order of using.
++    typedef std::list<Item *> Queue;
++    typedef Queue::iterator QueueIterator;
++
++    /// Hash map type. It is used for fast find Queue element by host.
++    typedef std::map<std::string, QueueIterator> Map;
++    typedef Map::iterator MapIterator;
++    typedef std::pair<std::string, QueueIterator> MapPair;
++
++    LocalSslContextStorage(size_t aMax_memory);
++    ~LocalSslContextStorage();
++    /// Set maximum memory for this storage size.
++    void SetSize(size_t aMax_memory);
++    /// Return NULL if it is impossible to add SSL_CTX to starage (if max cache size equal 0).
++    SSL_CTX * add(char const * host_name, SSL_CTX * ssl_ctx);
++    /// Find SSL_CTX in storage by host name. Return null if there is no this certificate in storage.
++    /// Lru queue will be updated.
++    SSL_CTX * find(char const * host_name);
++    /// Delete not valid ssl context.
++    void remove(char const * host_name);
++
++private:
++    /// Delete oldest object.
++    void purgeOne();
++    /// Delete object per iterator. It is used in deletePurge() and remove(...) methods.
++    void deleteAt(MapIterator i);
++
++    /// Max cache size.
++    size_t max_memory;
++    /// Using cache size.
++    size_t memory_used;
++    /// SSL_CTX * with its host storage.
++    Map storage;
++    /// Lru queue. When ne element add to queue it push to front of queue. When element use (in find method)
++    /// it remove to front of queue too.
++    Queue lru_queue;
++};
++
++
++/// Class for storage ports and LocalSslContextStorage associating with port.
++class GlobalSslContextStorage
++{
++friend class SslCertificateStorageAction;
++public:
++    GlobalSslContextStorage();
++    ~GlobalSslContextStorage();
++    /// Create new Ssl context storage per port.
++    void addLocalStorage(IpAddress const & address, size_t size_of_store);
++    /// Local storage per port getter.
++    LocalSslContextStorage & getLocalStorage(IpAddress const & address);
++    /// When reconfigring should be called this method.
++    void reconfigureStart();
++private:
++    /// When system call getLocalStorage method this method will be called too.
++    void reconfigureFinish();
++    /// True if system reconfiguring now.
++    bool reconfiguring;
++    /// Storage that using when there are configure or reconfigure.
++    std::map<IpAddress, size_t> configureStorage;
++    /// Map for store all local ip address and their local storages.
++    std::map<IpAddress, LocalSslContextStorage *> storage;
++};
++
++/// Global cache for store all ssl server certificates.
++extern GlobalSslContextStorage TheGlobalSslContextStorage;
++
++#endif // USE_SSL
++
++#endif // SQUID_SSL_CONTEXT_STORAGE_H
+diff -up squid-3.1.8/src/ssl_crtd.cc.phase5_take23 squid-3.1.8/src/ssl_crtd.cc
+--- squid-3.1.8/src/ssl_crtd.cc.phase5_take23	2010-10-12 12:54:37.088024409 +0200
++++ squid-3.1.8/src/ssl_crtd.cc	2010-10-12 12:54:37.088024409 +0200
+@@ -0,0 +1,323 @@
++/*
++ * 2009/01/17
++ */
++
++#include "config.h"
++#include <cstring>
++#include <sstream>
++#include <iostream>
++#include <stdexcept>
++#include <string>
++#if HAVE_GETOPT_H
++#include <getopt.h>
++#endif
++#include "ssl_gadgets.h"
++#include "ssl_crtd_message.h"
++#include "ssl_certificate_db.h"
++
++/**
++ \defgroup ssl_crtd ssl_crtd
++ \ingroup ExternalPrograms
++ \par
++    Because the standart generation of ssl certificate for 
++    sslBump feature, Squid must use external proccess to
++    actually make these calls. This process generate new ssl
++    certificates and worked with ssl certificates disk cache.
++    Typically there will be five ssl_crtd processes spawned 
++    from Squid. Communication occurs via TCP sockets bound 
++    to the loopback interface. The class in ssl_helper.h are
++    primally concerned with starting and stopping the ssl_crtd.
++    Reading and writing to and from the ssl_crtd occurs in the
++    \link IPCacheAPI IP\endlink and the dnsservers occurs in 
++    the \link IPCacheAPI IP\endlink and \link FQDNCacheAPI 
++    FQDN\endlink cache modules.
++
++ \section ssl_crtdInterface Command Line Interface
++ \verbatim
++usage: ssl_crtd -hv -s ssl_storage_path -M storage_max_size
++    -h                   Help
++    -v                   Version
++    -s ssl_storage_path  Path to specific disk storage of ssl server
++                         certificates.
++    -M storage_max_size  max size of ssl certificates storage.
++    -b fs_block_size     File system block size in bytes. Need for processing
++                         natural size of certificate on disk. Default value is
++                         2048 bytes."
++
++    After running write requests in the next format:
++    <request code><whitespace><body_len><whitespace><body>
++    There are two kind of request now:
++    new_certificate 14 host=host.dom
++        Create new private key and selfsigned certificate for "host.dom".
++
++    new_certificate xxx host=host.dom
++    -----BEGIN CERTIFICATE-----
++    ...
++    -----END CERTIFICATE-----
++    -----BEGIN RSA PRIVATE KEY-----
++    ...
++    -----END RSA PRIVATE KEY-----
++        Create new private key and certificate request for "host.dom".
++        Sign new request by received certificate and private key.
++
++usage: ssl_crtd -c -s ssl_store_path\n -n new_serial_number
++    -c                   Init ssl db directories and exit.
++    -n new_serial_number HEX serial number to use when initializing db.
++                         The default value of serial number is
++                         the number of seconds since Epoch minus 1200000000
++
++usage: ssl_crtd -g -s ssl_store_path
++    -g                   Show current serial number and exit.
++ \endverbatim
++ */
++
++static const char *const B_KBYTES_STR = "KB";
++static const char *const B_MBYTES_STR = "MB";
++static const char *const B_GBYTES_STR = "GB";
++static const char *const B_BYTES_STR = "B";
++
++/// Get current time.
++time_t getCurrentTime(void)
++{
++    struct timeval current_time;
++#if GETTIMEOFDAY_NO_TZP
++    gettimeofday(&current_time);
++#else
++    gettimeofday(&current_time, NULL);
++#endif
++    return current_time.tv_sec;
++}
++
++/// Parse bytes unit. It would be one of the next value: MB, GB, KB or B. 
++/// This function is caseinsensitive.
++static size_t parseBytesUnits(const char * unit)
++{
++    if (!strncasecmp(unit, B_BYTES_STR, strlen(B_BYTES_STR)) ||
++        !strncasecmp(unit, "", strlen(unit)))
++        return 1;
++
++    if (!strncasecmp(unit, B_KBYTES_STR, strlen(B_KBYTES_STR)))
++        return 1 << 10;
++
++    if (!strncasecmp(unit, B_MBYTES_STR, strlen(B_MBYTES_STR)))
++        return 1 << 20;
++
++    if (!strncasecmp(unit, B_GBYTES_STR, strlen(B_GBYTES_STR)))
++        return 1 << 30;
++
++    return 0;
++}
++
++/// Parse uninterrapted string of bytes value. It looks like "4MB".
++static bool parseBytesOptionValue(size_t * bptr, char const * value)
++{
++    // Find number from string beginning.
++    char const * number_begin = value;
++    char const * number_end = value;
++
++    while ((*number_end >= '0' && *number_end <= '9')) {
++        number_end++;
++    }
++
++    std::string number(number_begin, number_end - number_begin);
++    std::istringstream in(number);
++    int d = 0;
++    if (!(in >> d))
++        return false;
++    
++    int m;
++    if ((m = parseBytesUnits(number_end)) == 0) {
++        return false;
++    }
++
++    *bptr = static_cast<size_t>(m * d);
++    if (static_cast<long>(*bptr * 2) != m * d * 2)
++         return false;
++    
++    return true;
++}
++
++/// \ingroup ssl_crtd
++/// Print help using response code.
++static void usage()
++{
++    std::string example_host_name = "host.dom";
++    std::string request_string = SslCrtdMessage::param_host + "=" + example_host_name;
++    std::stringstream request_string_size_stream;
++    request_string_size_stream << request_string.length();
++    std::string help_string =
++        "usage: ssl_crtd -hv -s ssl_storage_path -M storage_max_size\n"
++        "\t-h                   Help\n"
++        "\t-v                   Version\n"
++        "\t-s ssl_storage_path  Path to specific disk storage of ssl server\n"
++        "\t                     certificates.\n"
++        "\t-M storage_max_size  max size of ssl certificates storage.\n"
++        "\t-b fs_block_size     File system block size in bytes. Need for processing\n"
++        "\t                     natural size of certificate on disk. Default value is\n"
++        "\t                     2048 bytes.\n"
++        "\n"
++        "After running write requests in the next format:\n"
++        "<request code><whitespace><body_len><whitespace><body>\n"
++        "There are two kind of request now:\n"
++        + SslCrtdMessage::code_new_certificate + " " + request_string_size_stream.str() + " " + request_string + "\n" +
++        "\tCreate new private key and selfsigned certificate for \"host.dom\".\n"
++        + SslCrtdMessage::code_new_certificate + " xxx " + request_string + "\n" +
++        "-----BEGIN CERTIFICATE-----\n"
++        "...\n"
++        "-----END CERTIFICATE-----\n"
++        "-----BEGIN RSA PRIVATE KEY-----\n"
++        "...\n"
++        "-----END RSA PRIVATE KEY-----\n"
++        "\tCreate new private key and certificate request for \"host.dom\"\n"
++        "\tSign new request by received certificate and private key.\n"
++        "usage: ssl_crtd -c -s ssl_store_path -n new_serial_number\n"
++        "\t-c                   Init ssl db directories and exit.\n"
++        "\t-n new_serial_number HEX serial number to use when initializing db.\n"
++        "\t                     The default value of serial number is\n"
++        "\t                     the number of seconds since Epoch minus 1200000000\n"
++        "usage: ssl_crtd -g -s ssl_store_path\n"
++        "\t-g                   Show current serial number and exit.";
++    std::cerr << help_string << std::endl;
++}
++
++/// \ingroup ssl_crtd
++/// Proccess new request message.
++static bool proccessNewRequest(SslCrtdMessage const & request_message, std::string const & db_path, size_t max_db_size, size_t fs_block_size)
++{
++    SslCrtdMessage::BodyParams map;
++    std::string body_part;
++    request_message.parseBody(map, body_part);
++
++    SslCrtdMessage::BodyParams::iterator i = map.find(SslCrtdMessage::param_host);
++    if (i == map.end())
++        throw std::runtime_error("Cannot find \"" + SslCrtdMessage::param_host + "\" parameter in request message.");
++    std::string host = i->second;
++
++    SslCertificateDb db(db_path, max_db_size, fs_block_size);
++
++    AutoPtr<X509> cert;
++    AutoPtr<EVP_PKEY> pkey;
++    db.find("/CN=" + host, cert, pkey);
++
++    if (!cert || !pkey) {
++        AutoPtr<X509> certToSign;
++        AutoPtr<EVP_PKEY> pkeyToSign;
++        readCertAndPrivateKeyFromMemory(certToSign, pkeyToSign, body_part.c_str());
++
++        AutoPtr<BIGNUM> serial(db.getCurrentSerialNumber());
++
++        if (!generateSslCertificateAndPrivateKey(host.c_str(), certToSign.get(), pkeyToSign.get(), cert, pkey, serial.get()))
++            throw std::runtime_error("Cannot create ssl certificate or private key.");
++        if (!db.addCertAndPrivateKey(cert, pkey) && db.IsEnabledDiskStore())
++            throw std::runtime_error("Cannot add certificate to db.");
++    }
++
++    std::string bufferToWrite;
++    if (!writeCertAndPrivateKeyToMemory(cert.get(), pkey.get(), bufferToWrite))
++        throw std::runtime_error("Cannot write ssl certificate or/and private key to memory.");
++
++    SslCrtdMessage response_message;
++    response_message.setCode("ok");
++    response_message.setBody(bufferToWrite);
++
++    std::cout << response_message.compose();
++
++    return true;
++}
++
++/// \ingroup ssl_crtd
++/// This is the external ssl_crtd process.
++int main(int argc, char *argv[])
++{
++    try {
++        int serial = (getCurrentTime() -  1200000000);
++        size_t max_db_size = 0;
++        size_t fs_block_size = 2048;
++        char c;
++        bool create_new_db = false;
++        bool show_sn = false;
++        std::string db_path;    
++    // proccess options.
++        while ((c = getopt(argc, argv, "cghvs:M:b:n:")) != -1) {
++            switch(c) {
++            case 'b':
++                if (!parseBytesOptionValue(&fs_block_size, optarg)) {
++                    throw std::runtime_error("Error when parsing -b options value");
++                }
++                break;
++            case 's':
++                db_path = optarg;
++                break;
++            case 'n':
++                {
++                    std::stringstream sn_stream(optarg);
++                    sn_stream >> std::hex >> serial;
++                    break;
++                }
++            case 'M':
++                if (!parseBytesOptionValue(&max_db_size, optarg)) {
++                    throw std::runtime_error("Error when parsing -M options value");
++                }
++                break;
++            case 'v':
++                std::cout << "ssl_crtd version " << VERSION << std::endl;
++                exit(0);
++                break;
++            case 'c':
++                create_new_db = true;
++                break;
++            case 'g':
++                show_sn = true;
++                break;
++            case 'h':
++                usage();
++                exit(0);
++            default:
++                exit(0);
++            }
++        }
++        
++        if (create_new_db) {
++            std::cout << "Initialization SSL db..." << std::endl;
++            SslCertificateDb::cleanDb(db_path, serial);
++            std::cout << "Done" << std::endl;
++            exit(0);
++        }
++
++        if (show_sn) {
++            SslCertificateDb db(db_path, 4096, 0);
++            std::cout << db.getSNString() << std::endl;
++            exit(0);
++        }
++        {
++            SslCertificateDb::checkDb(db_path, max_db_size);
++        }
++        // proccess request.
++        for(;;) {
++            char request[512];
++            size_t const REQ_SZ = sizeof(request);
++            SslCrtdMessage request_message;
++            SslCrtdMessage::ParseResult parse_result = SslCrtdMessage::INCOMPLETE;
++
++            while (parse_result == SslCrtdMessage::INCOMPLETE) {
++                if (fgets(request, REQ_SZ, stdin) == NULL)
++                    return 1;
++                size_t gcount = strlen(request);
++                parse_result = request_message.parse(request, gcount);
++            }
++
++            if (parse_result == SslCrtdMessage::ERROR) {
++                throw std::runtime_error("Cannot parse request message.");
++            } else if (request_message.getCode() == SslCrtdMessage::code_new_certificate) {
++                proccessNewRequest(request_message, db_path, max_db_size, fs_block_size);
++            } else {
++                throw std::runtime_error("Unknown request code: \"" + request_message.getCode() + "\".");
++            }
++            std::cout.flush();
++        }
++    } catch (std::runtime_error & error) {
++        std::cerr << argv[0] << ": " << error.what() << std::endl;
++        return 0;
++    }
++    return 0;
++}
+diff -up squid-3.1.8/src/ssl_crtd_message.cc.phase5_take23 squid-3.1.8/src/ssl_crtd_message.cc
+--- squid-3.1.8/src/ssl_crtd_message.cc.phase5_take23	2010-10-12 12:54:37.091025388 +0200
++++ squid-3.1.8/src/ssl_crtd_message.cc	2010-10-12 12:54:37.091025388 +0200
+@@ -0,0 +1,183 @@
++/*
++ * 2009/01/16
++ */
++
++#include "config.h"
++#include "ssl_crtd_message.h"
++#include <cstdlib>
++#include <cstring>
++
++SslCrtdMessage::SslCrtdMessage()
++:   body_size(0), current_pos(NULL), state(BEFORE_CODE)
++{}
++
++SslCrtdMessage::ParseResult SslCrtdMessage::parse(const char * buffer, size_t len)
++{
++    current_pos = buffer;
++    while (current_pos != buffer + len && state != END)
++    {
++        switch (state)
++        {
++            case BEFORE_CODE:
++            {
++                if (xisspace(*current_pos)) {
++                    current_pos++;
++                    break;
++                }
++                if (xisalpha(*current_pos)) {
++                    state = CODE;
++                    break;
++                }
++                clear();
++                return ERROR;
++            }
++            case CODE:
++            {
++                if (xisalnum(*current_pos) || *current_pos == '_') {
++                    current_block += *current_pos;
++                    current_pos++;
++                    break;
++                }
++                if (xisspace(*current_pos)) {
++                    code = current_block;
++                    current_block.clear();
++                    state = BEFORE_LENGTH;
++                    break;
++                }
++                clear();
++                return ERROR;
++            }
++            case BEFORE_LENGTH:
++            {
++                if (xisspace(*current_pos)) {
++                    current_pos++;
++                    break;
++                }
++                if (xisdigit(*current_pos)) {
++                    state = LENGTH;
++                    break;
++                }
++                clear();
++                return ERROR;
++            }
++            case LENGTH:
++            {
++                if (xisdigit(*current_pos)) {
++                    current_block += *current_pos;
++                    current_pos++;
++                    break;
++                }
++                if (xisspace(*current_pos)) {
++                    body_size = atoi(current_block.c_str());
++                    current_block.clear();
++                    state = BEFORE_BODY;
++                    break;
++                }
++                clear();
++                return ERROR;
++            }
++            case BEFORE_BODY:
++            {
++                if (body_size == 0) {
++                    state = END;
++                    break;
++                }
++                if (xisspace(*current_pos)) {
++                    current_pos++;
++                    break;
++                } else {
++                    state = BODY;
++                    break;
++                }
++            }
++            case BODY:
++            {
++                size_t body_len = (static_cast<size_t>(buffer + len - current_pos) >= body_size - current_block.length())
++                    ? body_size - current_block.length()
++                    : static_cast<size_t>(buffer + len - current_pos);
++                current_block += std::string(current_pos, body_len);
++                current_pos += body_len;
++                if (current_block.length() == body_size) {
++                    body = current_block;
++                    state = END;
++                }
++                if (current_block.length() > body_size) {
++                    clear();
++                    return ERROR;
++                }
++                break;
++            }
++            case END:
++            {
++                return OK;
++            }
++        }
++    }
++    if (state != END) return INCOMPLETE;
++    return OK;
++}
++
++std::string const & SslCrtdMessage::getBody() const { return body; }
++
++std::string const & SslCrtdMessage::getCode() const { return code; }
++
++void SslCrtdMessage::setBody(std::string const & aBody) { body = aBody; }
++
++void SslCrtdMessage::setCode(std::string const & aCode) { code = aCode; }
++
++
++std::string SslCrtdMessage::compose() const
++{
++    if (code.empty()) return std::string();
++    char buffer[10];
++    snprintf(buffer, sizeof(buffer), "%zd", body.length());
++    return code + ' ' + buffer + '\n' + body + '\n';
++}
++
++void SslCrtdMessage::clear()
++{
++    body_size = 0;
++    current_pos = 0;
++    state = BEFORE_CODE;
++    body.clear();
++    code.clear();
++    current_block.clear();
++}
++
++void SslCrtdMessage::parseBody(SslCrtdMessage::BodyParams & map, std::string & other_part) const
++{
++    other_part.clear();
++    // Copy string for using it as temp buffer.
++    std::string temp_body(body.c_str(), body.length());
++    char * buffer = const_cast<char *>(temp_body.c_str());
++    char * token = strtok(buffer, "\r\n");
++    while (token != NULL) {
++        std::string current_string(token);
++        size_t equal_pos = current_string.find('=');
++        if (equal_pos == std::string::npos) {
++            size_t offset_body_part = token - temp_body.c_str();
++            other_part = std::string(body.c_str() + offset_body_part, body.length() - offset_body_part);
++            break;
++        } else {
++            std::string param(current_string.c_str(), current_string.c_str() + equal_pos);
++            std::string value(current_string.c_str() + equal_pos + 1);
++            map.insert(std::make_pair(param, value));
++        }
++        token = strtok(NULL, "\r\n");
++    }
++}
++
++void SslCrtdMessage::composeBody(SslCrtdMessage::BodyParams const & map, std::string const & other_part)
++{
++    body.clear();
++    for (BodyParams::const_iterator i = map.begin(); i != map.end(); i++) {
++        body += i->first + "=" + i->second + "\n";
++    }
++    if (!other_part.empty())
++    {
++        body += other_part;
++    }
++}
++
++const std::string SslCrtdMessage::code_new_certificate("new_certificate");
++const std::string SslCrtdMessage::param_host("host");
+diff -up squid-3.1.8/src/ssl_crtd_message.h.phase5_take23 squid-3.1.8/src/ssl_crtd_message.h
+--- squid-3.1.8/src/ssl_crtd_message.h.phase5_take23	2010-10-12 12:54:37.092024995 +0200
++++ squid-3.1.8/src/ssl_crtd_message.h	2010-10-12 12:54:37.092024995 +0200
+@@ -0,0 +1,82 @@
++/*
++ * 2009/01/16
++ */
++
++#ifndef SQUID_SSL_CRTD_MESSAGE_H
++#define SQUID_SSL_CRTD_MESSAGE_H
++
++#include <string>
++#include <map>
++
++/// This class for serialization and desirealization message for (and from) server. Format of this mesages is the next:
++/// <response/request code> <whitespace> <body length> <whitespace> <body>
++class SslCrtdMessage
++{
++public:
++    typedef std::map<std::string, std::string> BodyParams;
++    /// Parse result enum. It is returned by Parse function.
++    enum ParseResult
++    {
++        OK,
++        INCOMPLETE,
++        ERROR
++    };
++    SslCrtdMessage();
++    /// Parse buffer to class.
++    /// \return OK if parse will be end. INCOMPLETE if buffer hasn't all needed date and ERROR if there is some error.
++    ParseResult parse(const char * buffer, size_t len);
++    /// Existing body getter. If parse won't be finished it method return incomplete body.
++    std::string const & getBody() const;
++    /// Existing response/request code getter. If parse won't be finished it method return incomplete code.
++    std::string const & getCode() const;
++    /// Set new body to compose.
++    void setBody(std::string const & aBody);
++    /// Set new request/reply code to compose.
++    void setCode(std::string const & aCode);
++    /// Compose current class to string.
++    std::string compose() const;
++    /// Clear set all stats on begining position. If you want parse repeatedly you have to clear stats.
++    void clear();
++    /// Parse body looks like:
++    ///     param1=value1
++    ///     param2=value2
++    ///     The other multistring part of body.
++    /// to map contains params with their values and body part (may be empty) without parameters.
++    ///
++    void parseBody(BodyParams & map, std::string & other_part) const;
++    /// Compose params with their values and the other part of body (may be empty) from map to body. Body will look like:
++    ///     param1=value1
++    ///     param2=value2
++    ///     The other multistring part of body.
++    void composeBody(BodyParams const & map, std::string const & other_part);
++    /// Single permissible code for messages now - new_certificate.
++    static const std::string code_new_certificate;
++    /// Single param for new_certificate message is host name.
++    static const std::string param_host;
++private:
++    /// Internal parser state. It shows which block of messages parsing now.
++    enum ParseState
++    {
++        BEFORE_CODE,
++        CODE,
++        BEFORE_LENGTH,
++        LENGTH,
++        BEFORE_BODY,
++        BODY,
++        END
++    };
++    /// body this if it defined. Otherwise 0.
++    size_t body_size;
++    /// Current position in buffer.
++    char const * current_pos;
++    /// Current block of message.
++    ParseState state;
++    /// Existing body.
++    std::string body;
++    /// Existing response/request code.
++    std::string code;
++    /// Current block buffer.
++    std::string current_block;
++};
++
++#endif // SQUID_SSL_CRTD_MESSAGE_H
+diff -up squid-3.1.8/src/ssl_gadgets.cc.phase5_take23 squid-3.1.8/src/ssl_gadgets.cc
+--- squid-3.1.8/src/ssl_gadgets.cc.phase5_take23	2010-10-12 12:54:37.096024630 +0200
++++ squid-3.1.8/src/ssl_gadgets.cc	2010-10-12 12:54:37.096024630 +0200
+@@ -0,0 +1,262 @@
++/*
++ * 2009/01/17
++ */
++
++#include "ssl_gadgets.h"
++
++/// \ingroup ServerProtocolSSLInternal
++/// Add CN to subject in request.
++static bool addCnToRequest(X509_REQ * request, char const * cn)
++{
++    AutoPtr<X509_NAME> name(X509_REQ_get_subject_name(request), X509_NAME_free);
++    if (!name)
++        return false;
++    if (!X509_NAME_add_entry_by_txt(name.get(), "CN", MBSTRING_ASC, (unsigned char *)cn, -1, -1, 0))
++        return false;
++    name.release();
++    return true;
++}
++
++/// \ingroup ServerProtocolSSLInternal
++/// Make request on sign using private key and hostname.
++static bool makeRequest(X509_REQ * request, EVP_PKEY * pkey, char const * host)
++{
++    if (!X509_REQ_set_version(request, 0L))
++        return false;
++
++    if (!addCnToRequest(request, host))
++        return false;
++
++    if (!X509_REQ_set_pubkey(request, pkey))
++        return false;
++    return true;
++}
++
++void BIO_free_wrapper(BIO * bio)
++{
++    BIO_free(bio);
++}
++
++EVP_PKEY * createSslPrivateKey()
++{
++    AutoPtr<EVP_PKEY> pkey(EVP_PKEY_new());
++
++    if (!pkey)
++        return NULL;
++
++    AutoPtr<RSA> rsa(RSA_generate_key(1024, RSA_F4, NULL, NULL), RSA_free);
++
++    if (!rsa)
++        return NULL;
++
++    if(!EVP_PKEY_assign_RSA(pkey.get(), (rsa.get())))
++        return NULL;
++
++    rsa.release();
++    return pkey.release();
++}
++
++X509_REQ * createNewX509Request(EVP_PKEY * pkey, const char * hostname)
++{
++    AutoPtr<X509_REQ> request(X509_REQ_new(), X509_REQ_free);
++
++    if (!request)
++        return NULL;
++
++    if (!makeRequest(request.get(), pkey, hostname))
++        return NULL;
++    return request.release();
++}
++
++/// \ingroup ServerProtocolSSLInternal
++/// Set serial random serial number or set random serial number.
++static bool setSerialNumber(ASN1_INTEGER *ai, BIGNUM * serial)
++{
++    if (!ai)
++        return false;
++    AutoPtr<BIGNUM> bn(BN_new());
++    if (serial) {
++        bn.reset(BN_dup(serial));
++    } else {
++        if (!bn)
++        return false;
++
++        if (!BN_pseudo_rand(bn.get(), 64, 0, 0))
++        return false;
++    }
++
++    if (ai && !BN_to_ASN1_INTEGER(bn.get(), ai))
++        return false;
++    return true;
++}
++
++X509 * signRequest(X509_REQ * request, X509 * x509, EVP_PKEY * pkey, ASN1_TIME * timeNotAfter, BIGNUM * serial)
++{
++    AutoPtr<X509> cert(X509_new());
++    if (!cert)
++        return NULL;
++
++    if (!setSerialNumber(X509_get_serialNumber(cert.get()), serial))
++        return NULL;
++
++    if (!X509_set_issuer_name(cert.get(), x509 ? X509_get_subject_name(x509) : X509_REQ_get_subject_name(request)))
++        return NULL;
++
++    if (!X509_gmtime_adj(X509_get_notBefore(cert.get()), (-2)*24*60*60))
++        return NULL;
++
++    if (timeNotAfter) {
++        if (!X509_set_notAfter(cert.get(), timeNotAfter))
++            return NULL;
++    } else if (!X509_gmtime_adj(X509_get_notAfter(cert.get()), 60*60*24*356*3))
++        return NULL;
++
++    if (!X509_set_subject_name(cert.get(), X509_REQ_get_subject_name(request)))
++        return NULL;
++
++    AutoPtr<EVP_PKEY> tmppkey(X509_REQ_get_pubkey(request));
++
++    if (!tmppkey || !X509_set_pubkey(cert.get(), tmppkey.get()))
++        return NULL;
++
++    if (!X509_sign(cert.get(), pkey, EVP_sha1()))
++        return NULL;
++
++    return cert.release();
++}
++
++bool writeCertAndPrivateKeyToMemory(X509 * cert, EVP_PKEY * pkey, std::string & bufferToWrite)
++{
++    bufferToWrite.clear();
++    if (!pkey || !cert)
++        return false;
++    AutoPtr<BIO> bio(BIO_new(BIO_s_mem()));
++    if (!bio)
++        return false;
++
++    if (!PEM_write_bio_X509(bio.get(), cert))
++        return false;
++
++    if (!PEM_write_bio_PrivateKey(bio.get(), pkey, NULL, NULL, 0, NULL, NULL))
++        return false;
++
++    char *ptr = NULL;
++    long len = BIO_get_mem_data(bio.get(), &ptr);
++    if (!ptr)
++        return false;
++
++    bufferToWrite = std::string(ptr, len);
++    return true;
++}
++
++bool writeCertAndPrivateKeyToFile(X509 * cert, EVP_PKEY * pkey, char const * filename)
++{
++    if (!pkey || !cert)
++        return false;
++
++    AutoPtr<BIO> bio(BIO_new(BIO_s_file_internal()));
++    if (!bio)
++        return false;
++    if (!BIO_write_filename(bio.get(), const_cast<char *>(filename)))
++        return false;
++
++    if (!PEM_write_bio_X509(bio.get(), cert))
++        return false;
++
++    if (!PEM_write_bio_PrivateKey(bio.get(), pkey, NULL, NULL, 0, NULL, NULL))
++        return false;
++
++    return true;
++}
++
++bool readCertAndPrivateKeyFromMemory(AutoPtr<X509> & cert, AutoPtr<EVP_PKEY> & pkey, char const * bufferToRead)
++{
++    AutoPtr<BIO> bio(BIO_new(BIO_s_mem()));
++    BIO_puts(bio.get(), bufferToRead);
++
++    X509 * certPtr = NULL;
++    cert.reset(PEM_read_bio_X509(bio.get(), &certPtr, 0, 0));
++    if (!cert)
++        return false;
++
++    EVP_PKEY * pkeyPtr = NULL;
++    pkey.reset(PEM_read_bio_PrivateKey(bio.get(), &pkeyPtr, 0, 0));
++    if (!pkey)
++        return false;
++
++    return true;
++}
++
++bool generateSslCertificateAndPrivateKey(char const *host, X509 * signedX509, EVP_PKEY * signedPkey, AutoPtr<X509> & cert, AutoPtr<EVP_PKEY> & pkey, BIGNUM * serial)
++{
++    pkey.reset(createSslPrivateKey());
++    if (!pkey)
++        return false;
++
++    AutoPtr<X509_REQ> request(createNewX509Request(pkey.get(), host), X509_REQ_free);
++    if (!request)
++        return false;
++
++    if (signedX509 && signedPkey)
++        cert.reset(signRequest(request.get(), signedX509, signedPkey, X509_get_notAfter(signedX509), serial));
++    else
++        cert.reset(signRequest(request.get(), signedX509, pkey.get(), NULL, serial));
++        
++    if (!cert)
++        return false;
++
++    return true;
++}
++
++/// \ingroup ServerProtocolSSLInternal
++/// Read certificate from file.
++static X509 * readSslX509Certificate(char const * certFilename)
++{
++    if (!certFilename)
++        return NULL;
++    AutoPtr<BIO> bio(BIO_new(BIO_s_file_internal()));
++    if (!bio)
++        return NULL;
++    if (!BIO_read_filename(bio.get(), certFilename))
++        return NULL;
++    X509 *certificate = PEM_read_bio_X509(bio.get(), NULL, NULL, NULL);
++    return certificate;
++}
++
++/// \ingroup ServerProtocolSSLInternal
++/// Read private key from file. Make sure that this is not encrypted file.
++static EVP_PKEY * readSslPrivateKey(char const * keyFilename)
++{
++    if (!keyFilename)
++        return NULL;
++    AutoPtr<BIO> bio(BIO_new(BIO_s_file_internal()));
++    if (!bio)
++        return NULL;
++    if (!BIO_read_filename(bio.get(), keyFilename))
++        return NULL;
++    EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio.get(), NULL, NULL, NULL);
++    return pkey;
++}
++
++void readCertAndPrivateKeyFromFiles(AutoPtr<X509> & cert, AutoPtr<EVP_PKEY> & pkey, char const * certFilename, char const * keyFilename)
++{
++    if (keyFilename == NULL)
++        keyFilename = certFilename;
++    pkey.reset(readSslPrivateKey(keyFilename));
++    cert.reset(readSslX509Certificate(certFilename));
++    if (!pkey || !cert || !X509_check_private_key(cert.get(), pkey.get())) {
++        pkey.reset(NULL);
++        cert.reset(NULL);
++    }
++}
++
++bool sslDateIsInTheFuture(char const * date)
++{
++    ASN1_UTCTIME tm;
++    tm.flags = 0;
++    tm.type = 23;
++    tm.data = (unsigned char *)date;
++    tm.length = strlen(date);
++
++    return (X509_cmp_current_time(&tm) > 0);
++}
+diff -up squid-3.1.8/src/ssl_gadgets.h.phase5_take23 squid-3.1.8/src/ssl_gadgets.h
+--- squid-3.1.8/src/ssl_gadgets.h.phase5_take23	2010-10-12 12:54:37.095024693 +0200
++++ squid-3.1.8/src/ssl_gadgets.h	2010-10-12 12:54:37.095024693 +0200
+@@ -0,0 +1,123 @@
++/*
++ * 2009/01/17
++ */
++
++#ifndef SQUID_SSL_GADGETS_H
++#define SQUID_SSL_GADGETS_H
++
++#include "config.h"
++#if HAVE_OPENSSL_SSL_H
++#include <openssl/ssl.h>
++#endif
++
++#include <string>
++#include "base/auto_ptr.h"
++
++/**
++ \defgroup SslCrtdSslAPI ssl_crtd ssl api.
++ These functions must not depend on Squid runtime code such as debug()
++ because they are used by ssl_crtd.
++ */
++
++/// \ingroup SslCrtdSslAPI
++/// Function for BIO delete for Deleter template.
++void BIO_free_wrapper(BIO * bio);
++
++/// \ingroup SslCrtdSslAPI
++/// Specilization of AutoPtr by X509.
++template <> class AutoPtr<X509> : public BaseAutoPtr<X509>
++{
++public:
++    AutoPtr(X509 * t = NULL)
++    :   BaseAutoPtr<X509>(t, X509_free)
++    {}
++    void reset(X509 * t)
++    {
++        BaseAutoPtr<X509>::reset(t, X509_free);
++    }
++};
++
++/// \ingroup SslCrtdSslAPI
++/// Specilization of AutoPtr by EVP_PKEY.
++template <> class AutoPtr<EVP_PKEY> : public BaseAutoPtr<EVP_PKEY>
++{
++public:
++    AutoPtr(EVP_PKEY * t = NULL)
++    :   BaseAutoPtr<EVP_PKEY>(t, EVP_PKEY_free)
++    {}
++    void reset(EVP_PKEY * t)
++    {
++        BaseAutoPtr<EVP_PKEY>::reset(t, EVP_PKEY_free);
++    }
++};
++
++/// \ingroup SslCrtdSslAPI
++/// Specilization of AutoPtr by BIGNUM.
++template <> class AutoPtr<BIGNUM> : public BaseAutoPtr<BIGNUM>
++{
++public:
++    AutoPtr(BIGNUM * t = NULL)
++    :   BaseAutoPtr<BIGNUM>(t, BN_free)
++    {}
++    void reset(BIGNUM * t)
++    {
++        BaseAutoPtr<BIGNUM>::reset(t, BN_free);
++    }
++};
++
++/// \ingroup SslCrtdSslAPI
++/// Specilization of AutoPtr by BIO.
++template <> class AutoPtr<BIO> : public BaseAutoPtr<BIO>
++{
++public:
++    AutoPtr(BIO * t = NULL)
++    :   BaseAutoPtr<BIO>(t, BIO_free_wrapper)
++    {}
++    void reset(BIO * t)
++    {
++        BaseAutoPtr<BIO>::reset(t, BIO_free_wrapper);
++    }
++};
++
++/// \ingroup SslCrtdSslAPI
++/// Create 1024 bits rsa key.
++EVP_PKEY * createSslPrivateKey();
++
++/// \ingroup SslCrtdSslAPI
++/// Create request on certificate for a host.
++X509_REQ * createNewX509Request(EVP_PKEY * pkey, const char * hostname);
++
++/// \ingroup SslCrtdSslAPI
++/// Write private key and ssl certificate to memory.
++bool writeCertAndPrivateKeyToMemory(X509 * cert, EVP_PKEY * pkey, std::string & bufferToWrite);
++
++/// \ingroup SslCrtdSslAPI
++/// Write private key and ssl certificate to file.
++bool writeCertAndPrivateKeyToFile(X509 * cert, EVP_PKEY * pkey, char const * filename);
++
++/// \ingroup SslCrtdSslAPI
++/// Write private key and ssl certificate to memory.
++bool readCertAndPrivateKeyFromMemory(AutoPtr<X509> & cert, AutoPtr<EVP_PKEY> & pkey, char const * bufferToRead);
++
++/// \ingroup SslCrtdSslAPI
++/// Sign ssl request.
++/// \param x509 if this param equals NULL, returning certificate will be selfsigned.
++/// \return X509 Signed certificate.
++X509 * signRequest(X509_REQ * request, X509 * x509, EVP_PKEY * pkey, ASN1_TIME * timeNotAfter, BIGNUM * serial);
++
++/// \ingroup SslCrtdSslAPI
++/// Decide on the kind of certificate and generate a CA- or self-signed one.
++/// Return generated certificate and private key in resultX509 and resultPkey variables.
++bool generateSslCertificateAndPrivateKey(char const *host, X509 * signedX509, EVP_PKEY * signedPkey, AutoPtr<X509> & cert, AutoPtr<EVP_PKEY> & pkey, BIGNUM * serial);
++
++/// Read certificate and private key from files.
++/// \param certFilename name of file with certificate.
++/// \param keyFilename name of file with private key.
++/// \ingroup SslCrtdSslAPI
++void readCertAndPrivateKeyFromFiles(AutoPtr<X509> & cert, AutoPtr<EVP_PKEY> & pkey, char const * certFilename, char const * keyFilename);
++
++/// Verify date. Date format it ASN1_UTCTIME. if there is out of date error, return false.
++/// \ingroup SslCrtdSslAPI
++bool sslDateIsInTheFuture(char const * date);
++
++#endif // SQUID_SSL_GADGETS_H
+diff -up squid-3.1.8/src/ssl_helper.cc.phase5_take23 squid-3.1.8/src/ssl_helper.cc
+--- squid-3.1.8/src/ssl_helper.cc.phase5_take23	2010-10-12 12:54:37.093025176 +0200
++++ squid-3.1.8/src/ssl_helper.cc	2010-10-12 12:54:37.093025176 +0200
+@@ -0,0 +1,91 @@
++/*
++ * 2008/11/14
++ */
++
++#include "ssl_helper.h"
++#include "SquidTime.h"
++#include "SwapDir.h"
++
++SslHelper * SslHelper::GetInstance()
++{
++    static SslHelper sslHelper;
++    return &sslHelper;
++}
++
++SslHelper::SslHelper()
++{
++    Init();
++}
++
++SslHelper::~SslHelper()
++{
++    Shutdown();
++}
++
++void SslHelper::Init()
++{
++    if (ssl_crtd == NULL)
++        ssl_crtd = helperCreate("ssl_crtd");
++    ssl_crtd->n_to_start = Config.ssl_crtdChildren;
++    ssl_crtd->ipc_type = IPC_STREAM;
++    assert(ssl_crtd->cmdline == NULL);
++    {
++        char *tmp = xstrdup(Config.Program.ssl_crtd);
++        char *tmp_begin = tmp;
++        char * token = NULL;
++        bool db_path_was_found = false;
++        bool block_size_was_found = false;
++        char buffer[20] = "2048";
++        while ((token = strwordtok(NULL, &tmp))) {
++            wordlistAdd(&ssl_crtd->cmdline, token);
++            if (!strcmp(token, "-b"))
++                block_size_was_found = true;
++            if (!strcmp(token, "-s")) {
++                db_path_was_found = true;
++            } else if (db_path_was_found)
++            {
++                db_path_was_found = false;
++                int fs_block_size = 0;
++                storeDirGetBlkSize(token, &fs_block_size);
++                snprintf(buffer, sizeof(buffer), "%i", fs_block_size);
++            }
++        }
++        if (!block_size_was_found) {
++            wordlistAdd(&ssl_crtd->cmdline, "-b");
++            wordlistAdd(&ssl_crtd->cmdline, buffer);
++        }
++        safe_free(tmp_begin);
++    }
++    ssl_crtd->is_return_full_reply = true;
++    helperOpenServers(ssl_crtd);
++}
++
++void SslHelper::Shutdown()
++{
++    if (!ssl_crtd)
++        return;
++    helperShutdown(ssl_crtd);
++    wordlistDestroy(&ssl_crtd->cmdline);
++    if (!shutting_down)
++        return;
++    helperFree(ssl_crtd);
++    ssl_crtd = NULL;
++}
++
++void SslHelper::sslSubmit(SslCrtdMessage const & message, HLPCB * callback, void * data)
++{
++    static time_t first_warn = 0;
++
++    if (ssl_crtd->stats.queue_size >= ssl_crtd->n_running * 2) {
++        if (first_warn == 0)
++            first_warn = squid_curtime;
++        if (squid_curtime - first_warn > 3 * 60)
++            fatal("SSL servers not responding for 3 minutes");
++        debugs(34, 1, HERE << "Queue overload, rejecting");
++        callback(data, (char *)"error 45 Temporary network problem, please retry later");
++        return;
++    }
++
++    first_warn = 0;
++    helperSubmit(ssl_crtd, message.compose().c_str(), callback, data);
++}
+diff -up squid-3.1.8/src/ssl_helper.h.phase5_take23 squid-3.1.8/src/ssl_helper.h
+--- squid-3.1.8/src/ssl_helper.h.phase5_take23	2010-10-12 12:54:37.088024409 +0200
++++ squid-3.1.8/src/ssl_helper.h	2010-10-12 12:54:37.088024409 +0200
+@@ -0,0 +1,31 @@
++/*
++ * 2008/11/14
++ */
++
++#ifndef SQUID_SSL_HELPER_H
++#define SQUID_SSL_HELPER_H
++
++#include "helper.h"
++#include "ssl_crtd_message.h"
++
++/// Set of thread for ssl_crtd. This class is singleton. Use this class only over GetIntance() static method.
++/// This class use helper structure for threads management.
++class SslHelper
++{
++public:
++    /// Instance class.
++    static SslHelper * GetInstance();
++    /// Init helper structure.
++    void Init();
++    /// Shutdown helper structure.
++    void Shutdown();
++    /// Submit ssl message to external ssl server.
++    void sslSubmit(SslCrtdMessage const & message, HLPCB * callback, void *data);
++private:
++    SslHelper();
++    ~SslHelper();
++    /// helper for management of ssl_crtd.
++    helper * ssl_crtd;
++};
++
++#endif // SQUID_SSL_HELPER_H
+diff -up squid-3.1.8/src/ssl_support.cc.phase5_take23 squid-3.1.8/src/ssl_support.cc
+--- squid-3.1.8/src/ssl_support.cc.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/ssl_support.cc	2010-10-12 12:54:37.086025293 +0200
+@@ -42,6 +42,7 @@
+ 
+ #include "fde.h"
+ #include "acl/FilledChecklist.h"
++#include "ssl_gadgets.h"
+ 
+ /**
+  \defgroup ServerProtocolSSLInternal Server-Side SSL Internals
+@@ -1206,4 +1207,58 @@ sslGetUserCertificateChainPEM(SSL *ssl)
+     return str;
+ }
+ 
++/// \ingroup ServerProtocolSSLInternal
++/// Create SSL context and apply ssl certificate and private key to it.
++static SSL_CTX * createSSLContext(X509 * x509, EVP_PKEY * pkey)
++{
++    AutoPtr<SSL_CTX> sslContext(SSL_CTX_new(SSLv23_server_method()), SSL_CTX_free);
++
++    if (!SSL_CTX_use_certificate(sslContext.get(), x509))
++        return NULL;
++
++    if (!SSL_CTX_use_PrivateKey(sslContext.get(), pkey))
++        return NULL;
++    return sslContext.release();
++}
++
++SSL_CTX * generateSslContextUsingPkeyAndCertFromMemory(const char * data)
++{
++    AutoPtr<X509> cert;
++    AutoPtr<EVP_PKEY> pkey;
++    if (!readCertAndPrivateKeyFromMemory(cert, pkey, data))
++        return NULL;
++
++    if (!cert || !pkey)
++        return NULL;
++
++    return createSSLContext(cert.get(), pkey.get());
++}
++
++SSL_CTX * generateSslContext(char const *host, X509 * signedX509, EVP_PKEY * signedPkey)
++{
++    AutoPtr<X509> cert;
++    AutoPtr<EVP_PKEY> pkey;
++    if (!generateSslCertificateAndPrivateKey(host, signedX509, signedPkey, cert, pkey, NULL)) {
++        return NULL;
++    }
++    if (!cert)
++        return NULL;
++
++    if (!pkey)
++        return NULL;
++
++    return createSSLContext(cert.get(), pkey.get());
++}
++
++bool verifySslCertificateDate(SSL_CTX * sslContext)
++{
++    // Temporary ssl for getting X509 certificate from SSL_CTX.
++    AutoPtr<SSL> ssl(SSL_new(sslContext), SSL_free);
++    X509 * cert = SSL_get_certificate(ssl.get());
++    ASN1_TIME * time_notBefore = X509_get_notBefore(cert);
++    ASN1_TIME * time_notAfter = X509_get_notAfter(cert);
++    bool ret = (X509_cmp_current_time(time_notBefore) < 0 && X509_cmp_current_time(time_notAfter) > 0);
++    return ret;
++}
++
+ #endif /* USE_SSL */
+diff -up squid-3.1.8/src/ssl_support.h.phase5_take23 squid-3.1.8/src/ssl_support.h
+--- squid-3.1.8/src/ssl_support.h.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/ssl_support.h	2010-10-12 12:54:37.095024693 +0200
+@@ -92,6 +92,19 @@ typedef int ssl_error_t;
+ ssl_error_t sslParseErrorString(const char *name);
+ const char *sslFindErrorString(ssl_error_t value);
+ 
++/// Decide on the kind of certificate and generate a CA- or self-signed one
++/// \ingroup ServerProtocolSSLAPI
++SSL_CTX *generateSslContext(char const *host, X509 * signedX509, EVP_PKEY * signedPkey);
++
++/// Check date of certificate signature. If there is out of date error fucntion
++/// returns false, true otherwise.
++/// \ingroup ServerProtocolSSLAPI
++bool verifySslCertificateDate(SSL_CTX * sslContext);
++
++/// Read private key and certificate from memory and generate ssl context using their.
++/// \ingroup ServerProtocolSSLAPI
++SSL_CTX * generateSslContextUsingPkeyAndCertFromMemory(const char * data);
++
+ // Custom SSL errors; assumes all official errors are positive
+ #define SQUID_X509_V_ERR_DOMAIN_MISMATCH -1
+ // All SSL errors range: from smallest (negative) custom to largest SSL error
+diff -up squid-3.1.8/src/structs.h.phase5_take23 squid-3.1.8/src/structs.h
+--- squid-3.1.8/src/structs.h.phase5_take23	2010-09-04 05:25:57.000000000 +0200
++++ squid-3.1.8/src/structs.h	2010-10-12 12:54:37.085025390 +0200
+@@ -297,11 +297,21 @@ struct SquidConfig {
+         char *ssl_password;
+ #endif
+ 
++#if USE_SSL_CRTD
++        /// Name of external ssl_crtd application.
++        char *ssl_crtd;
++#endif
++
+     } Program;
+ #if USE_DNSSERVERS
+ 
+     int dnsChildren;
+ #endif
++#if USE_SSL_CRTD
++    /// The number of processes spawn for ssl_crtd.
++    int ssl_crtdChildren;
++#endif
++
+ 
+     int redirectChildren;
+     int redirectConcurrency;

@@ -1,0 +1,19 @@
+--- squid-3.1.8/bootstrap.sh.bootstrap	2010-09-04 05:25:58.000000000 +0200
++++ squid-3.1.8/bootstrap.sh	2010-10-11 21:36:32.000000000 +0200
+@@ -128,12 +128,15 @@ ltversion=`show_version libtool ${ltvers
+ 
+ # Find the libtool path to get the right aclocal includes
+ ltpath=`find_path libtool$ltver`
+-
++ampath=`find_path automake$amver`
++acpath=`find_path autoconf$acver`
+ # Set environment variable to tell automake which autoconf to use.
+ AUTOCONF="autoconf${acver}" ; export AUTOCONF
+ 
+ echo "automake ($amversion) : automake$amver"
++echo "automake path : $ampath"
+ echo "autoconf ($acversion) : autoconf$acver"
++echo "autoconf path : $acpath"
+ echo "libtool  ($ltversion) : libtool$ltver"
+ echo "libtool path : $ltpath"
+ 

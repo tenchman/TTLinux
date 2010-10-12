@@ -8,16 +8,11 @@ include $(TOPDIR)/.config
 include $(TOPDIR)/$(ARCH).config
 
 NAME	     = squid
-VERSION	     = 3.1.0.16
+VERSION	     = 3.1.8
 PATCHLEVEL   = 1
 FORMAT	     = tar.bz2
 PREFIX	     = /usr
-ifneq ($(TTL_KERNELARCH), x86)
-DO_PREPARE   = $(STAMP)-fixlibtool
-endif
-ifeq ($(CONFIG_SQUID_SSL_DYNCERT),y)
 DO_PREPARE  += $(STAMP)-bootstrap
-endif
 DO_PREPARE  += $(STAMP)-myprepare
 CFLAGS	    += -O2 -D_BSD_SOURCE -D_GNU_SOURCE
 # prevent typedef clash
@@ -25,11 +20,10 @@ CFLAGS      += -D_ASM_X86_POSIX_TYPES_32_H
 LDFLAGS      = -static -lcompat -L/opt/diet/lib-$(ARCH)/openldap
 PATCHES     += squid3-adaptation.patch
 PATCHES     += squid3-useragent.patch
-PATCHES     += squid3-no_quote_external_acl_message.patch
+#PATCHES     += squid3-no_quote_external_acl_message.patch
 PATCHES     += squid3-diet.patch
-ifeq ($(CONFIG_SQUID_SSL_DYNCERT),y)
-PATCHES     += squid3-dynssl.patch
-endif
+PATCHES     += squid3-bootstrap.patch
+PATCHES     += squid-phase5_take24.patch
 
 ARGS	     = --sysconfdir=/etc/squid $(HOSTARGS)
 ARGS        += --libexecdir=$(PREFIX)/lib/squid --bindir=$(PREFIX)/sbin
@@ -68,11 +62,7 @@ endif
 ifneq ($(CONFIG_SQUID_SSL),y)
 ARGS        += --disable-ssl --without-openssl
 else
-ARGS        += --enable-ssl
-endif
-
-ifeq ($(CONFIG_SQUID_SSL_DYNCERT),y)
-ARGS        += --enable-ssl-dyncert
+ARGS        += --enable-ssl --enable-ssl-crtd
 endif
 
 ARGS        += CXXFLAGS='$(CFLAGS)' CFLAGS='$(CFLAGS)'
@@ -100,27 +90,26 @@ FILES       += /usr/lib/squid
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-fixinc:
-	sed -i -e "s,/usr/include,/opt/diet/include," $(PACKAGE)/configure
-	sed -i -e "s,/usr/include,/opt/diet/include," $(PACKAGE)/lib/libLtdl/configure
-	sed -i -e "s,/usr/include,/opt/diet/include," $(PACKAGE)/lib/libTrie/configure
+	sed -i -e "s,/usr/include,/opt/diet/include," $(PKGBUILDDIR)/configure
+	sed -i -e "s,/usr/include,/opt/diet/include," $(PKGBUILDDIR)/lib/libTrie/configure
 	touch $@
 
 $(STAMP)-myprepare: $(STAMP)-fixinc $(STAMP)-prepare
-	sed -i -e "s,#define HAVE_RANDOM 1,/* #define HAVE_RANDOM 1 */," $(PACKAGE)/autoconf/include
-	sed -i -e "s,-Werror,," $(PACKAGE)/configure*
-	sed -i -e "s,^CXXLD.*,CXXLD=\$(CXX) -all-static," $(PACKAGE)/src/Makefile*
-	sed -i -e "s,^CCLD.*,CCLD=\$(COMPILER) -all-static," $(PACKAGE)/src/Makefile*
+	# sed -i -e "s,#define HAVE_RANDOM 1,/* #define HAVE_RANDOM 1 */," $(PKGBUILDDIR)/autoconf/include
+	sed -i -e "s,-Werror,," $(PKGBUILDDIR)/configure*
+	sed -i -e "s,^CXXLD.*,CXXLD=\$(CXX) -all-static," $(PKGBUILDDIR)/src/Makefile*
+	sed -i -e "s,^CCLD.*,CCLD=\$(COMPILER) -all-static," $(PKGBUILDDIR)/src/Makefile*
 ifneq ($(TTL_KERNELARCH), x86)
-	sed -i -e "s,\./cf_gen.*,true," $(PACKAGE)/src/Makefile*
+	sed -i -e "s,\./cf_gen.*,true," $(PKGBUILDDIR)/src/Makefile*
 	# use pre-generated header because ./cf_gen will not work with
 	# cross compiling
-	cp cf_parser.h $(PACKAGE)/src
-	cp squid.conf.default $(PACKAGE)/src
+	cp cf_parser.h $(PKGBUILDDIR)/src
+	cp squid.conf.default $(PKGBUILDDIR)/src
 endif
 	touch $(STAMP)-myprepare
 
 $(STAMP)-bootstrap:
-	( cd $(PACKAGE); \
-	  ./bootstrap.sh; \
+	( cd $(PKGBUILDDIR); \
+	  CC='$(CC)' CXX='$(CXX)' ./bootstrap.sh; \
 	);
 	touch $@
