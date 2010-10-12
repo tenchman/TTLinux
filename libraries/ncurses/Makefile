@@ -3,7 +3,7 @@
 include $(TOPDIR)/.config
 include $(TOPDIR)/$(ARCH).config
 
-VERSION	     = 5.6
+VERSION	     = 5.7
 NAME	     = ncurses
 FORMAT	     = tar.gz
 PATCHES	     = ncurses-5.3-diet.patch
