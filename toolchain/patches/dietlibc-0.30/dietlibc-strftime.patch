@@ -1,0 +1,10 @@
+--- dietlibc-0.30/libugly/strftime.c.strftime	2010-10-13 00:02:44.000000000 +0200
++++ dietlibc-0.30/libugly/strftime.c	2010-10-13 00:04:06.000000000 +0200
+@@ -51,6 +51,7 @@ again:
+ 	    case 'c': src = "%b %a %d %k:%M:%S %Z %Y";        	 goto _strf;
+ 	    case 'r': src = "%I:%M:%S %p";                    	 goto _strf;
+ 	    case 'R': src = "%H:%M";      			 goto _strf;
++	    case 'F': src = "%Y-%m-%d";      			 goto _strf;
+ 	    case 'x': src = "%b %a %d";   			 goto _strf;
+ 	    case 'X': src = "%k:%M:%S";   			 goto _strf;
+ 	    case 'D': src = "%m/%d/%y";   			 goto _strf;

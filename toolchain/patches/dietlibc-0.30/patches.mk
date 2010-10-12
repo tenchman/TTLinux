@@ -4,6 +4,8 @@ DIETLIBCPATCHES	    = dietlibc-features.patch
 DIETLIBCPATCHES	   += dietlibc-features_h.patch
 DIETLIBCPATCHES	   += dietlibc-misc.patch
 DIETLIBCPATCHES    += dietlibc-gcc4.patch
+# fix stdarg.h
+DIETLIBCPATCHES    += dietlibc-gcc44.patch
 
 # add get_kernel_syms syscall
 #   needed by sysklogd-1.4.1/ksym_mod.c 
@@ -130,6 +132,9 @@ DIETLIBCPATCHES    += dietlibc-asctime_r.patch
 DIETLIBCPATCHES    += dietlibc-ctime_r.patch
 DIETLIBCPATCHES    += dietlibc-strptime.patch
 DIETLIBCPATCHES    += dietlibc-getaddrinfo.patch
+
+# add %F to strftime
+DIETLIBCPATCHES    += dietlibc-strftime.patch
 
 # * define the symbols data_start and __data_start in start.S (needed at
 #   least by the boehm gc)
