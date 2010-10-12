@@ -3,7 +3,7 @@
 include $(TOPDIR)/.config
 include $(TOPDIR)/$(ARCH).config
 
-VERSION	      = 2.63
+VERSION	      = 2.68
 NAME	      = autoconf
 FORMAT	      = tar.bz2
 PATCHES       = autoconf-diet.patch
