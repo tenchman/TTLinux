@@ -1,10 +1,10 @@
---- rrdtool-1.2.30/configure.ac.silent_rules	2009-06-08 23:02:37.000000000 +0200
-+++ rrdtool-1.2.30/configure.ac	2009-06-08 23:03:17.000000000 +0200
-@@ -18,6 +18,7 @@ NUMVERS=1.2030
- AC_SUBST(NUMVERS)
+--- rrdtool-1.4.3/configure.ac.silent_rules	2010-10-09 20:28:34.000000000 +0200
++++ rrdtool-1.4.3/configure.ac	2010-10-09 20:29:23.000000000 +0200
+@@ -37,6 +37,7 @@ AC_SUBST(LIBVERS)
  AC_CANONICAL_TARGET
+ m4_version_prereq(2.60, [AC_USE_SYSTEM_EXTENSIONS], [#])
  AM_INIT_AUTOMAKE
 +AM_SILENT_RULES([yes])
- AC_CONFIG_HEADERS([rrd_config.h])
- 
- dnl all our local stuff like install scripts and include files
+ AM_MAINTAINER_MODE
+ # Enable silent build rules by default, requires at least
+ # Automake-1.11. Disable by either passing --disable-silent-rules to

@@ -11,6 +11,7 @@ PREFIX      = /opt/diet
 STRIPPIT    = yes
 PATCHES     = rrdtool-noxml.patch
 PATCHES    += rrdtool-round.patch
+PATCHES    += rrdtool-silent_rules.patch
 DO_AUTOCONF = $(STAMP)-autoconf
 DO_PREPARE  = $(STAMP)-prepare
 FILES	    = /
@@ -18,7 +19,6 @@ CPPFLAGS   += -DRRD_TOOL_NOXML
 #LDFLAGS    += -lm
 ARGS        = --disable-perl --disable-python --disable-tcl --disable-ruby --enable-silent-rules
 ARGS       += --quiet $(HOSTARGS)
-MAKEARGS   += V=1
 ifneq ($(ARCH),i386)
   ARGS     += rd_cv_ieee_works=yes
 endif
