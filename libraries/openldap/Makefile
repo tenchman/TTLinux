@@ -12,7 +12,7 @@ DO_PREPARE  = $(STAMP)-fixlibtool
 endif
 DO_PREPARE += $(STAMP)-prepare
 ARGS	    = --enable-slapd=no --enable-slurpd=no --with-tls=no
-ARGS       += --libdir=$(PREFIX)/lib-$(ARCH)/openldap --with-yielding_select=yes
+ARGS       += --libdir=$(PREFIX)/lib-$(ARCH)/openldap --with-yielding_select=yes --with-threads=no
 ARGS       += ac_cv_sizeof_wchar_t=0
 INSTALLARGS = STRIP="" install
 FILES       = $(PREFIX)/bin $(PREFIX)/lib-$(ARCH)/openldap $(PREFIX)/include
