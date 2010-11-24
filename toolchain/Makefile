@@ -9,8 +9,8 @@ PATCHLEVEL = 7
 TOOLSDIR   = $(PREFIX)
 BINUTILS   = binutils-$(BINUTILSVER)
 GCC        = gcc-$(GCCVER)
-DIETLIBC   = dietlibc-$(DIETLIBCVER)
-DIETHEADER = dietlibc-headers-$(DIETLIBCVER)
+DIETLIBC   = pdietlibc-0.33
+DIETHEADER = dietlibc-headers-0.32
 FDLIBM     = fdlibm-$(FDLIBMVER)
 PATCHDIR   = $(TOPDIR)/toolchain/patches
 DISTFILES  = $(TOPDIR)/distfiles
@@ -104,6 +104,7 @@ $(STAMP)-dietlibc-prepare: $(DISTFILES)/$(DIETLIBC).tar.bz2
 	    sed -i -e "s/-Os/$(CFLAGS)/g" arm/Makefile.add; \
 	    rm -f arm/str*.*; \
 	)
+	find $(BUILDDIR)/$(DIETLIBC) -name "*.h"|xargs sed -i -e "s:#ifndef __NO_STAT64:#if __WORDSIZE == 32:"
 	touch $@
 
 $(STAMP)-dietlibc-install-kernelheaders: $(STAMP)-dietlibc-install-headers $(DISTFILES)/$(DIETHEADER).tar.bz2
@@ -211,7 +212,7 @@ $(STAMP)-gplusplus-prepare: $(STAMP)-gcc-prepare $(STAMP)-dietlibc-install
 		$(TARGETARGS) ../configure \
 			--target=$(TARGET) --prefix=$(TOOLSDIR) \
 			--disable-cpp --disable-shared --disable-multilib \
-			--disable-libssp --disable-libmudflap --disable-tls \
+			--disable-libssp --disable-libmudflap \
 			--disable-__cxa_atexit --disable-checking --enable-sjlj-exceptions \
 			--enable-nls=no $(USE_WCHAR) --enable-clocale=no \
 			--with-headers=$(TOOLSDIR)/include --enable-languages="c,c++"; \
