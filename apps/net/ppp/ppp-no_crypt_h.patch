@@ -1,0 +1,10 @@
+--- ppp-2.4.5/pppd/session.c.no_crypt_h	2010-11-17 21:04:48.000000000 +0100
++++ ppp-2.4.5/pppd/session.c	2010-11-17 21:05:03.000000000 +0100
+@@ -72,7 +72,6 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <pwd.h>
+-#include <crypt.h>
+ #ifdef HAS_SHADOW
+ #include <shadow.h>
+ #endif

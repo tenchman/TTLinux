@@ -3,14 +3,15 @@
 include $(TOPDIR)/.config
 include $(TOPDIR)/$(ARCH).config
 
-VERSION	    = 2.4.4
-PATCHLEVEL  = 2
+VERSION	    = 2.4.5
+PATCHLEVEL  = 0
 NAME	    = ppp
 FORMAT	    = tar.gz
 PATCHES	    = ppp-destdir.patch
 PATCHES	   += ppp-diet.patch
 PATCHES    += killaddr-smarter.patch
 PATCHES    += ppp-ip_pre_down.patch
+PATCHES    += ppp-no_crypt_h.patch
 CC	   += -D_BSD_SOURCE -D_GNU_SOURCE -Wno-deprecated-declarations $(CFLAGS)
 DO_PREPARE  = $(STAMP)-myprepare
 DO_INSTALL  = $(STAMP)-myinstall
