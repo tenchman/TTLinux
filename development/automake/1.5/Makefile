@@ -10,7 +10,6 @@ DO_PREPARE    = $(STAMP)-prepare
 CFLAGS        = $(CFLAGS_S)
 PREFIX	      = /opt/diet
 STRIPPIT      = yes
-ARGS          = --program-suffix=-1.5
 
 FILES	      = $(PREFIX)
 
