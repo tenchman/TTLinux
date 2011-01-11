@@ -33,8 +33,8 @@ endif
 include $(TOPDIR)/rules.mk
 
 $(STAMP)-mybuild: $(DO_PREPARE) $(CONFIG)
-	(cd $(PACKAGE); \
-		cp ../$(CONFIG) .config; \
+	cp $(CONFIG) $(PKGBUILDDIR)/.config
+	(cd $(PKGBUILDDIR); \
 		make $(MAKEARGS); \
 	);
 	touch $(STAMP)-mybuild
