@@ -1,0 +1,12 @@
+diff -up dovecot-2.0.8/src/auth/mech-winbind.c.ntlm dovecot-2.0.8/src/auth/mech-winbind.c
+--- dovecot-2.0.8/src/auth/mech-winbind.c.ntlm	2011-01-12 16:02:19.588458082 +0100
++++ dovecot-2.0.8/src/auth/mech-winbind.c	2011-01-12 16:03:05.267583218 +0100
+@@ -335,7 +335,7 @@ const struct mech_module mech_winbind_nt
+ 	.passdb_need = MECH_PASSDB_NEED_NOTHING,
+ 
+ 	mech_winbind_ntlm_auth_new,
+-	mech_generic_auth_initial,
++	mech_winbind_auth_initial,
+ 	mech_winbind_auth_continue,
+ 	mech_generic_auth_free
+ };
