@@ -4,10 +4,11 @@ include $(TOPDIR)/.config
 include $(TOPDIR)/$(ARCH).config
 
 NAME	    = dovecot
-VERSION	    = 1.2.13
+VERSION	    = 2.0.8
 FORMAT	    = tar.gz
 CFLAGS     += -D_BSD_SOURCE
 PATCHES     = dovecot-dontknow.patch
+PATCHES    += dovecot-auth_ntlm.patch
 DO_PREPARE  = $(STAMP)-prepare
 ARGS	    = --with-included-gsl $(HOSTARGS)
 ifneq ($(HOST),i386)
@@ -17,8 +18,7 @@ endif
 STRIPPIT    = yes
 HOSTVER	    =
 
-FILES	= $(PREFIX)/libexec/dovecot $(PREFIX)/lib-$(ARCH)/dovecot
-FILES  += $(PREFIX)/sbin/dovecot* /etc
+FILES	= /
 
 include $(TOPDIR)/rules.mk
 
