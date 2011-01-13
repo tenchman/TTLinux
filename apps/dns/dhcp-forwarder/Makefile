@@ -3,13 +3,13 @@
 include $(TOPDIR)/.config
 
 NAME	    = dhcp-forwarder
-VERSION	    = 0.8
+VERSION	    = 0.9
 FORMAT	    = tar.bz2
-PATCHES	    = dhcp-forwarder-0.7-malloc.patch
 PREFIX	    = /usr
 DO_PREPARE  = $(STAMP)-prepare
 STRIPPIT    = yes
-ARGS	    = --enable-release --disable-logging --enable-dietlibc
+ARGS	    = --enable-release --enable-logging --enable-dietlibc
+MAKEARGS   += LDADD=-static
 CC	    = i386-dietlibc-linux-gcc 
 
 FILES	= ./usr/sbin/dhcp-fwd ./usr/share/man/man1/dhcp-fwd.1*
