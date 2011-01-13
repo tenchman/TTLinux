@@ -68,6 +68,7 @@ SUBDIRS-$(CONFIG_LIBEDIT)	+= libraries/libedit
 SUBDIRS-$(CONFIG_LIBEVENT)	+= libraries/libevent
 #SUBDIRS-$(CONFIG_LIBEVENT)	+= libraries/libevent2
 SUBDIRS-$(CONFIG_LIBEV)		+= libraries/libev
+SUBDIRS-$(CONFIG_LIBDNET)	+= libraries/libdnet
 SUBDIRS-$(CONFIG_LIBELF)	+= libraries/libelf
 SUBDIRS-$(CONFIG_LIBPOPT)	+= libraries/libpopt
 SUBDIRS-$(CONFIG_LIBRIPMIME)	+= libraries/libripmime
@@ -314,6 +315,7 @@ SUBDIRS-$(CONFIG_EZ_IPUPDATE) += apps/dns/ez-ipupdate
 SUBDIRS-$(CONFIG_DJBDNS)      += apps/dns/zinq-djbdns
 SUBDIRS-$(CONFIG_DHCP_FWD)    += apps/dns/dhcp-forwarder
 SUBDIRS-$(CONFIG_DNSMASQ)     += apps/dns/dnsmasq
+SUBDIRS-$(CONFIG_DHCPRELAY)   += apps/net/dhcprelay
 SUBDIRS-$(CONFIG_ISC_DHCP)    += apps/net/isc-dhcp
 
 # =========================================================================
