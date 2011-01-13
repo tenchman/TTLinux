@@ -1,0 +1,22 @@
+diff -up dhcprelay-1.2/dhcprelay.c.udphdr dhcprelay-1.2/dhcprelay.c
+--- dhcprelay-1.2/dhcprelay.c.udphdr	2011-01-12 08:20:58.987846317 +0100
++++ dhcprelay-1.2/dhcprelay.c	2011-01-12 08:22:42.395721527 +0100
+@@ -455,11 +455,17 @@ int process_bootps_server(int msgbuf_len
+     }
+     {
+ 	udp=(struct udphdr *)(packet+packet_offset);
++#ifdef HAVE_DUMB_UDPHDR
++	udp->source=bootps_port;
++	udp->dest=bootpc_port;
++	udp->len=htons(sizeof(struct udphdr)+msgbuf_len);
++	udp->check=0;
++#else
+ 	udp->uh_sport=bootps_port;
+ 	udp->uh_dport=bootpc_port;
+ 	udp->uh_ulen=htons(sizeof(struct udphdr)+msgbuf_len);
+ 	udp->uh_sum=0;
+-
++#endif
+ 	udp_len=sizeof(struct udphdr);
+ 	packet_offset+=udp_len;
+     }
